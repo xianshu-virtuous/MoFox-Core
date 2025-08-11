@@ -13,67 +13,67 @@
 
 <div style="text-align: center">
 <strong>
-<a href="https://github.com/MaiBot-Plus/MaiMbot-Pro-Max">🌟 项目主页</a> | 
-<a href="#-更新和安装">🚀 快速入门</a> | 
-<a href="#-核心优势">✨ 核心优势</a> | 
-<a href="#-讨论">💬 讨论</a> | 
-<a href="#-贡献和致谢">🙋 贡献指南</a>
+<a href="https://github.com/MaiBot-Plus/MaiMbot-Pro-Max">项目主页</a> | 
+<a href="#-更新和安装">快速入门</a> | 
+<a href="#-核心优势">核心优势</a> | 
+<a href="#-讨论">讨论</a> | 
+<a href="#-贡献和致谢">贡献指南</a>
 </strong>
 </div>
 
-## 🎉 介绍
+## 介绍
 
-**🍔MaiMbot-Pro-Max 是基于 MaiCore 的增强版智能体，提供更完善的功能和更好的使用体验**
+**MaiMbot-Pro-Max 是基于 MaiCore 的增强版智能体，提供更完善的功能和更好的使用体验**
 
-### 🌟 核心优势
+### 核心优势
 
 相比官方版本，MaiMbot-Pro-Max 拥有更完善的功能：
 
-- 🤖 **多模型支持**：完美适配 Gemini、Claude、GPT-4 等主流大语言模型
-- 🎨 **增强插件**：额外提供 10+ 实用插件，涵盖更多使用场景
-- 🔧 **便捷配置**：一键式配置向导，5分钟完成部署
-- 📊 **数据分析**：内置数据统计和分析功能，更好了解麦麦状态
-- 🛡️ **稳定性提升**：修复官方版本已知问题，提供更稳定的运行体验
+- **多模型支持**：适配 Gemini、Claude、GPT-4 等主流大语言模型
+- **增强插件**：额外提供 一些 实用插件，涵盖更多使用场景
+- **稳定性提升**：修复官方版本的一些已知问题，提供更稳定的运行体验
 
-### 💡 原版功能（全部保留）
+### 原版功能（全部保留）
 
-- 💭 **智能对话系统**：基于 LLM 的自然语言交互，支持normal和focus统一化处理
-- 🔌 **强大插件系统**：全面重构的插件架构，支持完整的管理API和权限控制
-- 🤔 **实时思维系统**：模拟人类思考过程
-- 🧠 **表达学习功能**：学习群友的说话风格和表达方式
-- 💝 **情感表达系统**：情绪系统和表情包系统
-- 🧠 **持久记忆系统**：基于图的长期记忆存储
-- 🔄 **动态人格系统**：自适应的性格特征和表达方式
+- **智能对话系统**：基于 LLM 的自然语言交互，支持normal和focus统一化处理
+- **强大插件系统**：全面重构的插件架构，支持完整的管理API和权限控制
+- **实时思维系统**：模拟人类思考过程
+- **表达学习功能**：学习群友的说话风格和表达方式
+- **情感表达系统**：情绪系统和表情包系统
+- **持久记忆系统**：基于图的长期记忆存储
+- **动态人格系统**：自适应的性格特征和表达方式
+- **数据分析**：内置数据统计和分析功能，更好了解麦麦状态
 
-## 🔥 更新和安装
+## 更新和安装
 
 **最新版本: v1.0.0-ProMax** ([更新日志](changelogs/changelog.md))
 
 可前往 [Release](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/releases/) 页面下载最新版本
 
 **GitHub 分支说明：**
-- `main`: 稳定发布版本(推荐)
+- `master`: 稳定发布版本(推荐)
 - `dev`: 开发测试版本(新功能预览)
-- `experimental`: 实验性功能分支
+
+--main暂时没用()
 
 > [!TIP]
 > - Pro-Max 版本完全兼容官方版本的配置文件
 > - 提供自动迁移工具，可从官方版本无缝升级
 > - 内置 Gemini API 配置模板，开箱即用
 
-## 💬 讨论
+## 讨论
 
-**官方交流群：**
+**交流群：**
 - [Pro-Max 交流群](https://qm.qq.com/q/169850076) - 群号：169850076
 
 **其他资源：**
 - [问题反馈](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/issues)
 - [功能建议](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/discussions)
 
-## 📚 文档
+## 文档
 
-- [📚 Pro-Max Wiki](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/wiki) - Pro-Max 版本专属文档
-- [📖 官方文档](https://docs.mai-mai.org) - 核心功能参考文档
+- [Pro-Max Wiki](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/wiki) - Pro-Max 版本专属文档
+- [官方文档](https://docs.mai-mai.org) - 核心功能参考文档
 
 ### 独有功能文档
 
@@ -82,7 +82,7 @@
 - [高级插件开发](docs/advanced-plugins.md)
 - [性能优化指南](docs/performance.md)
 
-## 🙋 贡献和致谢
+## 贡献和致谢
 
 MaiMbot-Pro-Max 是一个开源项目，欢迎所有人参与贡献！
 
@@ -101,7 +101,7 @@ MaiMbot-Pro-Max 是一个开源项目，欢迎所有人参与贡献！
 - [NapCat](https://github.com/NapNeko/NapCatQQ): 现代化的基于 NTQQ 的 Bot 协议端实现
 - **Pro-Max 社区**: 感谢所有提供建议和反馈的用户
 
-## 📌 注意事项
+## 注意事项
 
 > [!WARNING]
 > 使用本项目前必须阅读和同意[用户协议](EULA.md)和[隐私协议](PRIVACY.md)。  
