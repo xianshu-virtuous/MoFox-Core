@@ -2,14 +2,14 @@
 
 # 麦麦Plus！MaiMbot-Pro-Max
 
-![Python Version](https://img.shields.io/badge/Python-3.10+-blue)
-![License](https://img.shields.io/github/license/MaiBot-Plus/MaiMbot-Pro-Max?label=协议)
-![Status](https://img.shields.io/badge/状态-活跃开发-green)
-![Contributors](https://img.shields.io/github/contributors/MaiBot-Plus/MaiMbot-Pro-Max.svg?style=flat&label=贡献者)
-![forks](https://img.shields.io/github/forks/MaiBot-Plus/MaiMbot-Pro-Max.svg?style=flat&label=分支数)
-![stars](https://img.shields.io/github/stars/MaiBot-Plus/MaiMbot-Pro-Max?style=flat&label=星标数)
-![issues](https://img.shields.io/github/issues/MaiBot-Plus/MaiMbot-Pro-Max)
-[![Enhanced](https://img.shields.io/badge/Enhanced-Pro_Max-purple)](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&style=for-the-badge)]
+[![License](https://img.shields.io/badge/License-GPLv3-blue?logo=gnu&style=for-the-badge)]
+[![Status](https://img.shields.io/badge/%E7%8A%B6%E6%80%81-%E6%B4%BB%E8%B7%83%E5%BC%80%E5%8F%91-brightgreen?style=for-the-badge)]
+[![Contributors](https://img.shields.io/github/contributors/MaiBot-Plus/MaiMbot-Pro-Max.svg?style=for-the-badge&label=贡献者)]
+[![Forks](https://img.shields.io/github/forks/MaiBot-Plus/MaiMbot-Pro-Max.svg?style=for-the-badge&label=分支数)]
+[![Stars](https://img.shields.io/github/stars/MaiBot-Plus/MaiMbot-Pro-Max?style=for-the-badge&label=星标数)]
+[![Issues](https://img.shields.io/github/issues/MaiBot-Plus/MaiMbot-Pro-Max?style=for-the-badge&label=问题)]
+[![Enhanced](https://img.shields.io/badge/Enhanced-MaiMbot_Pro_Max-purple?style=for-the-badge&logo=github)](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max)
 
 <div style="text-align: center">
 <strong>
@@ -46,9 +46,9 @@
 
 ## 更新和安装
 
-**最新版本: v1.0.0-ProMax** ([更新日志](changelogs/changelog.md))
+**最新版本: v1.0.0-maibotProMax** 
 
-可前往 [Release](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/releases/) 页面下载最新版本
+可前往 [Release](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/) 页面下载最新版本
 
 **GitHub 分支说明：**
 - `master`: 稳定发布版本(推荐)
@@ -57,14 +57,18 @@
 --main暂时没用()
 
 > [!TIP]
-> - Pro-Max 版本完全兼容官方版本的配置文件
-> - 提供自动迁移工具，可从官方版本无缝升级
-> - 内置 Gemini API 配置模板，开箱即用
+> - 可从官方版本无缝升级
+> - 内置 Gemini API 适配，开箱即用
 
 ## 讨论
 
+<<<<<<< HEAD
+**官方交流群：**
+- [maibot-Pro-Max 交流群] - 群号：169850076
+=======
 **交流群：**
 - [Pro-Max 交流群](https://qm.qq.com/q/169850076) - 群号：169850076
+>>>>>>> 84dbeb6d8dfe53cf32f9e32a56d5dda437e2f350
 
 **其他资源：**
 - [问题反馈](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/issues)
@@ -72,6 +76,11 @@
 
 ## 文档
 
+<<<<<<< HEAD
+- [📖 官方文档](https://docs.mai-mai.org) - 核心功能参考文档
+
+## 🙋 贡献和致谢
+=======
 - [Pro-Max Wiki](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/wiki) - Pro-Max 版本专属文档
 - [官方文档](https://docs.mai-mai.org) - 核心功能参考文档
 
@@ -83,6 +92,7 @@
 - [性能优化指南](docs/performance.md)
 
 ## 贡献和致谢
+>>>>>>> 84dbeb6d8dfe53cf32f9e32a56d5dda437e2f350
 
 MaiMbot-Pro-Max 是一个开源项目，欢迎所有人参与贡献！
 
@@ -90,9 +100,6 @@ MaiMbot-Pro-Max 是一个开源项目，欢迎所有人参与贡献！
 
 感谢所有为 Pro-Max 版本做出贡献的开发者！
 
-<a href="https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/graphs/contributors">
-  <img alt="contributors" src="https://contrib.rocks/image?repo=MaiBot-Plus/MaiMbot-Pro-Max" />
-</a>
 
 ### 致谢
 
@@ -106,14 +113,6 @@ MaiMbot-Pro-Max 是一个开源项目，欢迎所有人参与贡献！
 > [!WARNING]
 > 使用本项目前必须阅读和同意[用户协议](EULA.md)和[隐私协议](PRIVACY.md)。  
 > 本应用生成内容来自人工智能模型，由 AI 生成，请仔细甄别，请勿用于违反法律的用途，AI 生成内容不代表本项目团队的观点和立场。
-
-## 项目状态
-
-![Alt](https://repobeats.axiom.co/api/embed/maibot-pro-max-stats.svg "MaiMbot-Pro-Max 仓库状态")
-
-### Star 趋势
-
-[![Star 趋势](https://starchart.cc/MaiBot-Plus/MaiMbot-Pro-Max.svg?variant=adaptive)](https://starchart.cc/MaiBot-Plus/MaiMbot-Pro-Max)
 
 ## License
 
