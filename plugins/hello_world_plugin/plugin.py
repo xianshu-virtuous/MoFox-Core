@@ -8,9 +8,6 @@ from src.plugin_system import (
     ComponentInfo,
     ActionActivationType,
     ConfigField,
-    BaseEventHandler,
-    EventType,
-    MaiMessages,
     ToolParamType
 )
 
@@ -126,22 +123,23 @@ class TimeCommand(BaseCommand):
         message = f"⏰ 当前时间：{time_str}"
         await self.send_text(message)
 
-        return True, f"显示了当前时间: {time_str}", True
+        return True, f"显示了当前x时间: {time_str}", True
 
 
-class PrintMessage(BaseEventHandler):
-    """打印消息事件处理器 - 处理打印消息事件"""
-
-    event_type = EventType.ON_MESSAGE
-    handler_name = "print_message_handler"
-    handler_description = "打印接收到的消息"
-
-    async def execute(self, message: MaiMessages) -> Tuple[bool, bool, str | None]:
-        """执行打印消息事件处理"""
-        # 打印接收到的消息
-        if self.get_config("print_message.enabled", False):
-            print(f"接收到消息: {message.raw_message}")
-        return True, True, "消息已打印"
+# class PrintMessage(BaseEventHandler):
+#     """打印消息事件处理器 - 处理打印消息事件"""
+#
+#     event_type = EventType.ON_MESSAGE
+#     handler_name = "print_message_handler"
+#     handler_description = "打印接收到的消息"
+#
+#     async def execute(self, message: MaiMessages) -> Tuple[bool, bool, str | None]:
+#         """执行打印消息事件处理"""
+#         # 打印接收到的消息
+#
+#         if self.get_config("print_message.enabled", False):
+#             print(f"接收到消息: {message.raw_message}")
+#         return True, True, "消息已打印1"
 
 
 # ===== 插件注册 =====
@@ -184,7 +182,7 @@ class HelloWorldPlugin(BasePlugin):
             (CompareNumbersTool.get_tool_info(), CompareNumbersTool),  # 添加比较数字工具
             (ByeAction.get_action_info(), ByeAction),  # 添加告别Action
             (TimeCommand.get_command_info(), TimeCommand),
-            (PrintMessage.get_handler_info(), PrintMessage),
+            # (PrintMessage.get_handler_info(), PrintMessage),
         ]
 
 

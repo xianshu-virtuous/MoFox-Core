@@ -13,6 +13,7 @@ from typing import List, Optional
 from src.common.logger import get_logger
 from src.config.config_base import ConfigBase
 from src.config.official_configs import (
+    DatabaseConfig,
     BotConfig,
     PersonalityConfig,
     ExpressionConfig,
@@ -340,6 +341,7 @@ class Config(ConfigBase):
 
     MMC_VERSION: str = field(default=MMC_VERSION, repr=False, init=False)  # 硬编码的版本信息
 
+    database: DatabaseConfig
     bot: BotConfig
     personality: PersonalityConfig
     relationship: RelationshipConfig
@@ -466,4 +468,25 @@ update_model_config()
 logger.info("正在品鉴配置文件...")
 global_config = load_config(config_path=os.path.join(CONFIG_DIR, "bot_config.toml"))
 model_config = api_ada_load_config(config_path=os.path.join(CONFIG_DIR, "model_config.toml"))
+
+# 初始化数据库连接
+logger.info("正在初始化数据库连接...")
+from src.common.database.database import initialize_sql_database
+try:
+    initialize_sql_database(global_config.database)
+    logger.info(f"数据库连接初始化成功，使用 {global_config.database.database_type} 数据库")
+except Exception as e:
+    logger.error(f"数据库连接初始化失败: {e}")
+    raise e
+
+# 初始化数据库表结构
+logger.info("正在初始化数据库表结构...")
+from src.common.database.sqlalchemy_models import initialize_database as init_db
+try:
+    init_db()
+    logger.info("数据库表结构初始化完成")
+except Exception as e:
+    logger.error(f"数据库表结构初始化失败: {e}")
+    raise e
+
 logger.info("非常的新鲜，非常的美味！")

@@ -1,3 +1,4 @@
+sqlalchemy
 APScheduler
 Pillow
 aiohttp
@@ -47,3 +48,4 @@ reportportal-client
 scikit-learn
 seaborn
 structlog
+watchdog

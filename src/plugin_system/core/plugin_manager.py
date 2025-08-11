@@ -1,5 +1,6 @@
 import os
 import traceback
+import sys
 
 from typing import Dict, List, Optional, Tuple, Type, Any
 from importlib.util import spec_from_file_location, module_from_spec
@@ -487,6 +488,105 @@ class PluginManager:
             )
         else:
             logger.info(f"✅ 插件加载成功: {plugin_name}")
+
+    # === 插件卸载和重载管理 ===
+
+    def unload_plugin(self, plugin_name: str) -> bool:
+        """卸载指定插件
+
+        Args:
+            plugin_name: 插件名称
+
+        Returns:
+            bool: 卸载是否成功
+        """
+        if plugin_name not in self.loaded_plugins:
+            logger.warning(f"插件 {plugin_name} 未加载，无需卸载")
+            return False
+
+        try:
+            # 获取插件实例
+            plugin_instance = self.loaded_plugins[plugin_name]
+
+            # 调用插件的清理方法（如果有的话）
+            if hasattr(plugin_instance, 'on_unload'):
+                plugin_instance.on_unload()
+
+            # 从组件注册表中移除插件的所有组件
+            component_registry.unregister_plugin(plugin_name)
+
+            # 从已加载插件中移除
+            del self.loaded_plugins[plugin_name]
+
+            # 从失败列表中移除（如果存在）
+            if plugin_name in self.failed_plugins:
+                del self.failed_plugins[plugin_name]
+
+            logger.info(f"✅ 插件卸载成功: {plugin_name}")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ 插件卸载失败: {plugin_name} - {str(e)}")
+            return False
+
+    def reload_plugin(self, plugin_name: str) -> bool:
+        """重载指定插件
+
+        Args:
+            plugin_name: 插件名称
+
+        Returns:
+            bool: 重载是否成功
+        """
+        try:
+            # 先卸载插件
+            if plugin_name in self.loaded_plugins:
+                self.unload_plugin(plugin_name)
+
+            # 清除Python模块缓存
+            plugin_path = self.plugin_paths.get(plugin_name)
+            if plugin_path:
+                plugin_file = os.path.join(plugin_path, "plugin.py")
+                if os.path.exists(plugin_file):
+                    # 从sys.modules中移除相关模块
+                    modules_to_remove = []
+                    plugin_module_prefix = ".".join(Path(plugin_file).parent.parts)
+
+                    for module_name in sys.modules:
+                        if module_name.startswith(plugin_module_prefix):
+                            modules_to_remove.append(module_name)
+
+                    for module_name in modules_to_remove:
+                        del sys.modules[module_name]
+
+                    # 从插件类注册表中移除
+                    if plugin_name in self.plugin_classes:
+                        del self.plugin_classes[plugin_name]
+
+                    # 重新加载插件模块
+                    if self._load_plugin_module_file(plugin_file):
+                        # 重新加载插件实例
+                        success, _ = self.load_registered_plugin_classes(plugin_name)
+                        if success:
+                            logger.info(f"🔄 插件重载成功: {plugin_name}")
+                            return True
+                        else:
+                            logger.error(f"❌ 插件重载失败: {plugin_name} - 实例化失败")
+                            return False
+                    else:
+                        logger.error(f"❌ 插件重载失败: {plugin_name} - 模块加载失败")
+                        return False
+                else:
+                    logger.error(f"❌ 插件重载失败: {plugin_name} - 插件文件不存在")
+                    return False
+            else:
+                logger.error(f"❌ 插件重载失败: {plugin_name} - 插件路径未知")
+                return False
+
+        except Exception as e:
+            logger.error(f"❌ 插件重载失败: {plugin_name} - {str(e)}")
+            logger.debug("详细错误信息: ", exc_info=True)
+            return False
 
 
 # 全局插件管理器实例

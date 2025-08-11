@@ -7,7 +7,9 @@ from datetime import datetime
 from typing import List, Dict, Optional, Any, Tuple
 
 from src.common.logger import get_logger
-from src.common.database.database_model import Expression
+from src.common.database.sqlalchemy_database_api import get_session
+from sqlalchemy import select
+from src.common.database.sqlalchemy_models import Expression
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config, global_config
 from src.chat.utils.chat_message_builder import get_raw_msg_by_timestamp_with_chat_inclusive, build_anonymous_messages
@@ -20,7 +22,7 @@ DECAY_DAYS = 30  # 30天衰减到0.01
 DECAY_MIN = 0.01  # 最小衰减值
 
 logger = get_logger("expressor")
-
+session = get_session()
 
 def format_create_date(timestamp: float) -> str:
     """
@@ -168,30 +170,50 @@ class ExpressionLearner:
             logger.error(f"为聊天流 {self.chat_name} 触发学习失败: {e}")
             return False
 
-    # def get_expression_by_chat_id(self) -> Tuple[List[Dict[str, float]], List[Dict[str, float]]]:
-    #     """
-    #     获取指定chat_id的style表达方式（已禁用grammar的获取）
-    #     返回的每个表达方式字典中都包含了source_id, 用于后续的更新操作
-    #     """
-    #     learnt_style_expressions = []
+    def get_expression_by_chat_id(self) -> Tuple[List[Dict[str, float]], List[Dict[str, float]]]:
+        """
+        获取指定chat_id的style和grammar表达方式
+        返回的每个表达方式字典中都包含了source_id, 用于后续的更新操作
+        """
+        learnt_style_expressions = []
+        learnt_grammar_expressions = []
 
-    #     # 直接从数据库查询
-    #     style_query = Expression.select().where((Expression.chat_id == self.chat_id) & (Expression.type == "style"))
-    #     for expr in style_query:
-    #         # 确保create_date存在，如果不存在则使用last_active_time
-    #         create_date = expr.create_date if expr.create_date is not None else expr.last_active_time
-    #         learnt_style_expressions.append(
-    #             {
-    #                 "situation": expr.situation,
-    #                 "style": expr.style,
-    #                 "count": expr.count,
-    #                 "last_active_time": expr.last_active_time,
-    #                 "source_id": self.chat_id,
-    #                 "type": "style",
-    #                 "create_date": create_date,
-    #             }
-    #         )
-    #     return learnt_style_expressions
+        # 直接从数据库查询
+        style_query = session.execute(select(Expression).where((Expression.chat_id == self.chat_id) & (Expression.type == "style")))
+        for expr in style_query.scalars():
+            # 确保create_date存在，如果不存在则使用last_active_time
+            create_date = expr.create_date if expr.create_date is not None else expr.last_active_time
+            learnt_style_expressions.append(
+                {
+                    "situation": expr.situation,
+                    "style": expr.style,
+                    "count": expr.count,
+                    "last_active_time": expr.last_active_time,
+                    "source_id": self.chat_id,
+                    "type": "style",
+                    "create_date": create_date,
+                }
+            )
+        grammar_query = session.execute(select(Expression).where((Expression.chat_id == self.chat_id) & (Expression.type == "grammar")))
+        for expr in grammar_query.scalars():
+            # 确保create_date存在，如果不存在则使用last_active_time
+            create_date = expr.create_date if expr.create_date is not None else expr.last_active_time
+            learnt_grammar_expressions.append(
+                {
+                    "situation": expr.situation,
+                    "style": expr.style,
+                    "count": expr.count,
+                    "last_active_time": expr.last_active_time,
+                    "source_id": self.chat_id,
+                    "type": "grammar",
+                    "create_date": create_date,
+                }
+            )
+        return learnt_style_expressions, learnt_grammar_expressions
+
+
+
+
 
 
 
@@ -201,7 +223,7 @@ class ExpressionLearner:
         """
         try:
             # 获取所有表达方式
-            all_expressions = Expression.select()
+            all_expressions = session.execute(select(Expression)).scalars()
 
             updated_count = 0
             deleted_count = 0
@@ -217,18 +239,20 @@ class ExpressionLearner:
 
                 if new_count <= 0.01:
                     # 如果count太小，删除这个表达方式
-                    expr.delete_instance()
+                    session.delete(expr)
                     deleted_count += 1
                 else:
                     # 更新count
                     expr.count = new_count
-                    expr.save()
                     updated_count += 1
+
+            session.commit()
 
             if updated_count > 0 or deleted_count > 0:
                 logger.info(f"全局衰减完成：更新了 {updated_count} 个表达方式，删除了 {deleted_count} 个表达方式")
 
         except Exception as e:
+            session.rollback()
             logger.error(f"数据库全局衰减失败: {e}")
 
     def calculate_decay_factor(self, time_diff_days: float) -> float:
@@ -297,23 +321,22 @@ class ExpressionLearner:
         for chat_id, expr_list in chat_dict.items():
             for new_expr in expr_list:
                 # 查找是否已存在相似表达方式
-                query = Expression.select().where(
+                query = session.execute(select(Expression).where(
                     (Expression.chat_id == chat_id)
                     & (Expression.type == "style")
                     & (Expression.situation == new_expr["situation"])
                     & (Expression.style == new_expr["style"])
-                )
-                if query.exists():
-                    expr_obj = query.get()
+                )).scalar()
+                if query:
+                    expr_obj = query
                     # 50%概率替换内容
                     if random.random() < 0.5:
                         expr_obj.situation = new_expr["situation"]
                         expr_obj.style = new_expr["style"]
                     expr_obj.count = expr_obj.count + 1
                     expr_obj.last_active_time = current_time
-                    expr_obj.save()
                 else:
-                    Expression.create(
+                    new_expression = Expression(
                         situation=new_expr["situation"],
                         style=new_expr["style"],
                         count=1,
@@ -322,16 +345,18 @@ class ExpressionLearner:
                         type="style",
                         create_date=current_time,  # 手动设置创建日期
                     )
+                    session.add(new_expression)
             # 限制最大数量
             exprs = list(
-                Expression.select()
-                .where((Expression.chat_id == chat_id) & (Expression.type == "style"))
-                .order_by(Expression.count.asc())
+                session.execute(select(Expression)
+                .where((Expression.chat_id == chat_id) & (Expression.type == type))
+                .order_by(Expression.count.asc())).scalars()
             )
             if len(exprs) > MAX_EXPRESSION_COUNT:
                 # 删除count最小的多余表达方式
                 for expr in exprs[: len(exprs) - MAX_EXPRESSION_COUNT]:
-                    expr.delete_instance()
+                    session.delete(expr)
+            session.commit()
         return learnt_expressions
 
     async def learn_expression(self, num: int = 10) -> Optional[Tuple[List[Tuple[str, str, str]], str]]:
@@ -509,54 +534,35 @@ class ExpressionLearnerManager:
                                 logger.warning(f"表达方式缺少必要字段，跳过: {expr}")
                                 continue
 
-                            # 查重：同chat_id+type+situation+style
-                            from src.common.database.database_model import Expression
+                        # 查重：同chat_id+type+situation+style
 
-                            query = Expression.select().where(
-                                (Expression.chat_id == chat_id)
-                                & (Expression.type == type_str)
-                                & (Expression.situation == situation)
-                                & (Expression.style == style_val)
+                        query = session.execute(select(Expression).where(
+                            (Expression.chat_id == chat_id)
+                            & (Expression.type == type_str)
+                            & (Expression.situation == situation)
+                            & (Expression.style == style_val)
+                        )).scalar()
+                        if query:
+                            expr_obj = query
+                            expr_obj.count = max(expr_obj.count, count)
+                            expr_obj.last_active_time = max(expr_obj.last_active_time, last_active_time)
+                        else:
+                            new_expression = Expression(
+                                situation=situation,
+                                style=style_val,
+                                count=count,
+                                last_active_time=last_active_time,
+                                chat_id=chat_id,
+                                type=type_str,
+                                create_date=last_active_time,  # 迁移时使用last_active_time作为创建时间
                             )
-                            if query.exists():
-                                expr_obj = query.get()
-                                expr_obj.count = max(expr_obj.count, count)
-                                expr_obj.last_active_time = max(expr_obj.last_active_time, last_active_time)
-                                expr_obj.save()
-                            else:
-                                Expression.create(
-                                    situation=situation,
-                                    style=style_val,
-                                    count=count,
-                                    last_active_time=last_active_time,
-                                    chat_id=chat_id,
-                                    type=type_str,
-                                    create_date=last_active_time,  # 迁移时使用last_active_time作为创建时间
-                                )
-                                migrated_count += 1
-                        logger.info(f"已迁移 {expr_file} 到数据库，包含 {len(expressions)} 个表达方式")
-                    except json.JSONDecodeError as e:
-                        logger.error(f"JSON解析失败 {expr_file}: {e}")
-                    except Exception as e:
-                        logger.error(f"迁移表达方式 {expr_file} 失败: {e}")
-
-            # 标记迁移完成
-            try:
-                # 确保done.done文件的父目录存在
-                done_parent_dir = os.path.dirname(done_flag)
-                if not os.path.exists(done_parent_dir):
-                    os.makedirs(done_parent_dir, exist_ok=True)
-                    logger.debug(f"为done.done创建父目录: {done_parent_dir}")
-
-                with open(done_flag, "w", encoding="utf-8") as f:
-                    f.write("done\n")
-                logger.info(f"表达方式JSON迁移已完成，共迁移 {migrated_count} 个表达方式，已写入done.done标记文件")
-            except PermissionError as e:
-                logger.error(f"权限不足，无法写入done.done标记文件: {e}")
-            except OSError as e:
-                logger.error(f"文件系统错误，无法写入done.done标记文件: {e}")
-            except Exception as e:
-                logger.error(f"写入done.done标记文件失败: {e}")
+                            session.add(new_expression)
+                            migrated_count += 1
+                    logger.info(f"已迁移 {expr_file} 到数据库，包含 {len(expressions)} 个表达方式")
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON解析失败 {expr_file}: {e}")
+                except Exception as e:
+                    logger.error(f"迁移表达方式 {expr_file} 失败: {e}")
 
         # 检查并处理grammar表达删除
         if not os.path.exists(done_flag2):
@@ -581,18 +587,20 @@ class ExpressionLearnerManager:
         """
         try:
             # 查找所有create_date为空的表达方式
-            old_expressions = Expression.select().where(Expression.create_date.is_null())
+            old_expressions = session.execute(select(Expression).where(Expression.create_date.is_(None))).scalars()
             updated_count = 0
 
             for expr in old_expressions:
                 # 使用last_active_time作为create_date
                 expr.create_date = expr.last_active_time
-                expr.save()
                 updated_count += 1
+
+            session.commit()
 
             if updated_count > 0:
                 logger.info(f"已为 {updated_count} 个老的表达方式设置创建日期")
         except Exception as e:
+            session.rollback()
             logger.error(f"迁移老数据创建日期失败: {e}")
 
     def delete_all_grammar_expressions(self) -> int:

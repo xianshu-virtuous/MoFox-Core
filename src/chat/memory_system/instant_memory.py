@@ -10,12 +10,13 @@ from datetime import datetime, timedelta
 
 from src.llm_models.utils_model import LLMRequest
 from src.common.logger import get_logger
-from src.common.database.database_model import Memory  # Peewee Models导入
+from src.common.database.sqlalchemy_models import Memory  # SQLAlchemy Models导入
+from src.common.database.sqlalchemy_database_api import get_session
 from src.config.config import model_config
 
-
+from sqlalchemy import select
 logger = get_logger(__name__)
-
+session = get_session()
 
 class MemoryItem:
     def __init__(self, memory_id: str, chat_id: str, memory_text: str, keywords: list[str]):
@@ -120,7 +121,8 @@ class InstantMemory:
             create_time=memory_item.create_time,
             last_view_time=memory_item.last_view_time,
         )
-        memory.save()
+        session.add(memory)
+        session.commit()
 
     async def get_memory(self, target: str):
         from json_repair import repair_json
@@ -166,13 +168,13 @@ class InstantMemory:
                 if start_time and end_time:
                     start_ts = start_time.timestamp()
                     end_ts = end_time.timestamp()
-                    query = Memory.select().where(
+                    query = session.execute(select(Memory).where(
                         (Memory.chat_id == self.chat_id)
-                        & (Memory.create_time >= start_ts)  # type: ignore
-                        & (Memory.create_time < end_ts)  # type: ignore
-                    )
+                        & (Memory.create_time >= start_ts)
+                        & (Memory.create_time < end_ts)
+                    )).scalars()
                 else:
-                    query = Memory.select().where(Memory.chat_id == self.chat_id)
+                    query = session.execute(select(Memory).where(Memory.chat_id == self.chat_id)).scalars()
 
                 for mem in query:
                     # 对每条记忆

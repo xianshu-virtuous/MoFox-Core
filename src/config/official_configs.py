@@ -13,6 +13,65 @@ from src.config.config_base import ConfigBase
 4. 对于新增的字段，若为可选项，则应在其后添加field()并设置default_factory或default
 """
 
+@dataclass
+class DatabaseConfig(ConfigBase):
+    """数据库配置类"""
+
+    database_type: Literal["sqlite", "mysql"] = "sqlite"
+    """数据库类型，支持 sqlite 或 mysql"""
+
+    # SQLite 配置
+    sqlite_path: str = "data/MaiBot.db"
+    """SQLite数据库文件路径"""
+
+    # MySQL 配置
+    mysql_host: str = "localhost"
+    """MySQL服务器地址"""
+
+    mysql_port: int = 3306
+    """MySQL服务器端口"""
+
+    mysql_database: str = "maibot"
+    """MySQL数据库名"""
+
+    mysql_user: str = "root"
+    """MySQL用户名"""
+
+    mysql_password: str = ""
+    """MySQL密码"""
+
+    mysql_charset: str = "utf8mb4"
+    """MySQL字符集"""
+
+    mysql_unix_socket: str = ""
+    """MySQL Unix套接字路径（可选，用于本地连接，优先于host/port）"""
+
+    # MySQL SSL 配置
+    mysql_ssl_mode: str = "DISABLED"
+    """SSL模式: DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY"""
+
+    mysql_ssl_ca: str = ""
+    """SSL CA证书路径"""
+
+    mysql_ssl_cert: str = ""
+    """SSL客户端证书路径"""
+
+    mysql_ssl_key: str = ""
+    """SSL客户端密钥路径"""
+
+    # MySQL 高级配置
+    mysql_autocommit: bool = True
+    """自动提交事务"""
+
+    mysql_sql_mode: str = "TRADITIONAL"
+    """SQL模式"""
+
+    # 连接池配置
+    connection_pool_size: int = 10
+    """连接池大小（仅MySQL有效）"""
+
+    connection_timeout: int = 10
+    """连接超时时间（秒）"""
 
 @dataclass
 class BotConfig(ConfigBase):
@@ -72,6 +131,19 @@ class ChatConfig(ConfigBase):
     max_context_size: int = 18
     """上下文长度"""
 
+
+    replyer_random_probability: float = 0.5
+    """
+    发言时选择推理模型的概率（0-1之间）
+    选择普通模型的概率为 1 - reasoning_normal_model_probability
+    """
+
+    thinking_timeout: int = 40
+    """麦麦最长思考规划时间，超过这个时间的思考会放弃（往往是api反应太慢）"""
+
+    talk_frequency: float = 1
+    """回复频率阈值"""
+
     mentioned_bot_inevitable_reply: bool = False
     """提及 bot 必然回复"""
 
@@ -93,17 +165,17 @@ class ChatConfig(ConfigBase):
     """
     统一的活跃度和专注度配置
     格式：[["platform:chat_id:type", "HH:MM,frequency", "HH:MM,frequency", ...], ...]
-    
+
     全局配置示例：
     [["", "8:00,1", "12:00,2", "18:00,1.5", "00:00,0.5"]]
-    
+
     特定聊天流配置示例：
     [
         ["", "8:00,1", "12:00,1.2", "18:00,1.5", "01:00,0.6"],  # 全局默认配置
         ["qq:1026294844:group", "12:20,1", "16:10,2", "20:10,1", "00:10,0.3"],  # 特定群聊配置
         ["qq:729957033:private", "8:20,1", "12:10,2", "20:10,1.5", "00:10,0.2"]  # 特定私聊配置
     ]
-    
+
     说明：
     - 当第一个元素为空字符串""时，表示全局默认配置
     - 当第一个元素为"platform:id:type"格式时，表示特定聊天流配置
@@ -155,72 +227,11 @@ class ChatConfig(ConfigBase):
 
         # 检查全局时段配置（第一个元素为空字符串的配置）
         global_frequency = self._get_global_frequency()
-        return self.talk_frequency if global_frequency is None else global_frequency
-    
-    def _get_global_focus_value(self) -> Optional[float]:
-        """
-        获取全局默认专注度配置
+        if global_frequency is not None:
+            return global_frequency
 
-        Returns:
-            float: 专注度值，如果没有配置则返回 None
-        """
-        for config_item in self.focus_value_adjust:
-            if not config_item or len(config_item) < 2:
-                continue
-
-            # 检查是否为全局默认配置（第一个元素为空字符串）
-            if config_item[0] == "":
-                return self._get_time_based_focus_value(config_item[1:])
-
-        return None
-
-    def _get_time_based_focus_value(self, time_focus_list: list[str]) -> Optional[float]:
-        """
-        根据时间配置列表获取当前时段的专注度
-
-        Args:
-            time_focus_list: 时间专注度配置列表，格式为 ["HH:MM,focus_value", ...]
-
-        Returns:
-            float: 专注度值，如果没有配置则返回 None
-        """
-        from datetime import datetime
-
-        current_time = datetime.now().strftime("%H:%M")
-        current_hour, current_minute = map(int, current_time.split(":"))
-        current_minutes = current_hour * 60 + current_minute
-
-        # 解析时间专注度配置
-        time_focus_pairs = []
-        for time_focus_str in time_focus_list:
-            try:
-                time_str, focus_str = time_focus_str.split(",")
-                hour, minute = map(int, time_str.split(":"))
-                focus_value = float(focus_str)
-                minutes = hour * 60 + minute
-                time_focus_pairs.append((minutes, focus_value))
-            except (ValueError, IndexError):
-                continue
-
-        if not time_focus_pairs:
-            return None
-
-        # 按时间排序
-        time_focus_pairs.sort(key=lambda x: x[0])
-
-        # 查找当前时间对应的专注度
-        current_focus_value = None
-        for minutes, focus_value in time_focus_pairs:
-            if current_minutes >= minutes:
-                current_focus_value = focus_value
-            else:
-                break
-
-        # 如果当前时间在所有配置时间之前，使用最后一个时间段的专注度（跨天逻辑）
-        if current_focus_value is None and time_focus_pairs:
-            current_focus_value = time_focus_pairs[-1][1]
-
-        return current_focus_value
+        # 如果都没有匹配，返回默认值
+        return self.talk_frequency
 
     def _get_time_based_frequency(self, time_freq_list: list[str]) -> Optional[float]:
         """
@@ -395,6 +406,14 @@ class MessageReceiveConfig(ConfigBase):
     ban_msgs_regex: set[str] = field(default_factory=lambda: set())
     """过滤正则表达式列表"""
 
+
+@dataclass
+class NormalChatConfig(ConfigBase):
+    """普通聊天配置类"""
+
+    willing_mode: str = "classical"
+    """意愿模式"""
+
 @dataclass
 class ExpressionConfig(ConfigBase):
     """表达配置类"""
@@ -403,14 +422,14 @@ class ExpressionConfig(ConfigBase):
     """
     表达学习配置列表，支持按聊天流配置
     格式: [["chat_stream_id", "use_expression", "enable_learning", learning_intensity], ...]
-    
+
     示例:
     [
         ["", "enable", "enable", 1.0],  # 全局配置：使用表达，启用学习，学习强度1.0
         ["qq:1919810:private", "enable", "enable", 1.5],  # 特定私聊配置：使用表达，启用学习，学习强度1.5
         ["qq:114514:private", "enable", "disable", 0.5],  # 特定私聊配置：使用表达，禁用学习，学习强度0.5
     ]
-    
+
     说明:
     - 第一位: chat_stream_id，空字符串表示全局配置
     - 第二位: 是否使用学到的表达 ("enable"/"disable")
@@ -475,14 +494,14 @@ class ExpressionConfig(ConfigBase):
 
         # 优先检查聊天流特定的配置
         if chat_stream_id:
-            specific_expression_config = self._get_stream_specific_config(chat_stream_id)
-            if specific_expression_config is not None:
-                return specific_expression_config
+            specific_config = self._get_stream_specific_config(chat_stream_id)
+            if specific_config is not None:
+                return specific_config
 
         # 检查全局配置（第一个元素为空字符串的配置）
-        global_expression_config = self._get_global_config()
-        if global_expression_config is not None:
-            return global_expression_config
+        global_config = self._get_global_config()
+        if global_config is not None:
+            return global_config
 
         # 如果都没有匹配，返回默认值
         return True, True, 300
@@ -518,10 +537,10 @@ class ExpressionConfig(ConfigBase):
 
             # 解析配置
             try:
-                use_expression: bool = config_item[1].lower() == "enable"
-                enable_learning: bool = config_item[2].lower() == "enable"
-                learning_intensity: float = float(config_item[3])
-                return use_expression, enable_learning, learning_intensity  # type: ignore
+                use_expression = config_item[1].lower() == "enable"
+                enable_learning = config_item[2].lower() == "enable"
+                learning_intensity = float(config_item[3])
+                return use_expression, enable_learning, learning_intensity
             except (ValueError, IndexError):
                 continue
 
@@ -541,10 +560,10 @@ class ExpressionConfig(ConfigBase):
             # 检查是否为全局配置（第一个元素为空字符串）
             if config_item[0] == "":
                 try:
-                    use_expression: bool = config_item[1].lower() == "enable"
-                    enable_learning: bool = config_item[2].lower() == "enable"
+                    use_expression = config_item[1].lower() == "enable"
+                    enable_learning = config_item[2].lower() == "enable"
                     learning_intensity = float(config_item[3])
-                    return use_expression, enable_learning, learning_intensity  # type: ignore
+                    return use_expression, enable_learning, learning_intensity
                 except (ValueError, IndexError):
                     continue
 
@@ -557,7 +576,6 @@ class ToolConfig(ConfigBase):
 
     enable_tool: bool = False
     """是否在聊天中启用工具"""
-
 
 @dataclass
 class VoiceConfig(ConfigBase):
@@ -702,7 +720,6 @@ class KeywordReactionConfig(ConfigBase):
         for rule in self.keyword_rules + self.regex_rules:
             if not isinstance(rule, KeywordRuleConfig):
                 raise ValueError(f"规则必须是KeywordRuleConfig类型，而不是{type(rule).__name__}")
-
 
 @dataclass
 class CustomPromptConfig(ConfigBase):
@@ -852,3 +869,4 @@ class LPMMKnowledgeConfig(ConfigBase):
 
     embedding_dimension: int = 1024
     """嵌入向量维度，应该与模型的输出维度一致"""
+

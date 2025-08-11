@@ -1,5 +1,5 @@
 [inner]
-version = "6.4.0"
+version = "6.2.3"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -11,8 +11,38 @@ version = "6.4.0"
 #     修订号：配置文件内容小更新
 #----以上是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 
+[database]
+# 数据库配置
+database_type = "sqlite" # 数据库类型，支持 "sqlite" 或 "mysql"
+
+# SQLite 配置（当 database_type = "sqlite" 时使用）
+sqlite_path = "data/MaiBot.db" # SQLite数据库文件路径
+
+# MySQL 配置（当 database_type = "mysql" 时使用）
+mysql_host = "localhost" # MySQL服务器地址
+mysql_port = 3306 # MySQL服务器端口
+mysql_database = "maibot" # MySQL数据库名
+mysql_user = "root" # MySQL用户名
+mysql_password = "" # MySQL密码
+mysql_charset = "utf8mb4" # MySQL字符集
+mysql_unix_socket = "" # MySQL Unix套接字路径（可选，用于本地连接，优先于host/port）
+
+# MySQL SSL 配置
+mysql_ssl_mode = "DISABLED" # SSL模式: DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY
+mysql_ssl_ca = "" # SSL CA证书路径
+mysql_ssl_cert = "" # SSL客户端证书路径
+mysql_ssl_key = "" # SSL客户端密钥路径
+
+# MySQL 高级配置
+mysql_autocommit = true # 自动提交事务
+mysql_sql_mode = "TRADITIONAL" # SQL模式
+
+# 连接池配置
+connection_pool_size = 10 # 连接池大小（仅MySQL有效）
+connection_timeout = 10 # 连接超时时间（秒）
+
 [bot]
-platform = "qq" 
+platform = "qq"
 qq_account = 1145141919810 # 麦麦的QQ账号
 nickname = "麦麦" # 麦麦的昵称
 alias_names = ["麦叠", "牢麦"] # 麦麦的别名
@@ -53,11 +83,11 @@ expression_groups = [
 ]
 
 
-[chat] #麦麦的聊天设置
-talk_frequency = 0.5
-# 麦麦活跃度，越高，麦麦回复越多，范围0-1
-focus_value = 0.5 
-# 麦麦的专注度，越高越容易持续连续对话，可能消耗更多token, 范围0-1
+
+[chat] #麦麦的聊天通用设置
+focus_value = 1 
+# 麦麦的专注思考能力，越高越容易专注，可能消耗更多token
+# 专注时能更好把握发言时机，能够进行持久的连续对话
 
 max_context_size = 20 # 上下文长度
 
@@ -120,6 +150,7 @@ mood_update_threshold = 1 # 情绪更新阈值,越高，更新越慢
 
 [emoji]
 emoji_chance = 0.6 # 麦麦激活表情包动作的概率
+emoji_activate_type = "llm" # 表情包激活类型，可选：random，llm ; random下，表情包动作随机启用，llm下，表情包动作根据llm判断是否启用
 
 max_reg_num = 60 # 表情包最大注册数量
 do_replace = true # 开启则在达到最大数量时删除（替换）表情包，关闭则达到最大数量时不会继续收集表情包

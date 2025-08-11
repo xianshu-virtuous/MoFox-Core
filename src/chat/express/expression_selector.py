@@ -9,8 +9,11 @@ from json_repair import repair_json
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import global_config, model_config
 from src.common.logger import get_logger
-from src.common.database.database_model import Expression
+from sqlalchemy import select
+from src.common.database.sqlalchemy_models import Expression
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
+from src.common.database.sqlalchemy_database_api import get_session
+session = get_session()
 
 logger = get_logger("expression_selector")
 
@@ -131,9 +134,12 @@ class ExpressionSelector:
         related_chat_ids = self.get_related_chat_ids(chat_id)
 
         # 优化：一次性查询所有相关chat_id的表达方式
-        style_query = Expression.select().where(
+        style_query = session.execute(select(Expression).where(
             (Expression.chat_id.in_(related_chat_ids)) & (Expression.type == "style")
-        )
+        ))
+        grammar_query = session.execute(select(Expression).where(
+            (Expression.chat_id.in_(related_chat_ids)) & (Expression.type == "grammar")
+        ))
 
         style_exprs = [
             {
@@ -146,9 +152,24 @@ class ExpressionSelector:
                 "type": "style",
                 "create_date": expr.create_date if expr.create_date is not None else expr.last_active_time,
             }
-            for expr in style_query
+            for expr in style_query.scalars()
         ]
 
+        grammar_exprs = [
+            {
+                "situation": expr.situation,
+                "style": expr.style,
+                "count": expr.count,
+                "last_active_time": expr.last_active_time,
+                "source_id": expr.chat_id,
+                "type": "grammar",
+                "create_date": expr.create_date if expr.create_date is not None else expr.last_active_time,
+            }
+            for expr in grammar_query.scalars()
+        ]
+
+        style_num = int(total_num * style_percentage)
+        grammar_num = int(total_num * grammar_percentage)
         # 按权重抽样（使用count作为权重）
         if style_exprs:
             style_weights = [expr.get("count", 1) for expr in style_exprs]
@@ -174,19 +195,19 @@ class ExpressionSelector:
             if key not in updates_by_key:
                 updates_by_key[key] = expr
         for chat_id, expr_type, situation, style in updates_by_key:
-            query = Expression.select().where(
+            query = session.execute(select(Expression).where(
                 (Expression.chat_id == chat_id)
                 & (Expression.type == expr_type)
                 & (Expression.situation == situation)
                 & (Expression.style == style)
-            )
-            if query.exists():
-                expr_obj = query.get()
+            )).scalar()
+            if query:
+                expr_obj = query
                 current_count = expr_obj.count
                 new_count = min(current_count + increment, 5.0)
                 expr_obj.count = new_count
                 expr_obj.last_active_time = time.time()
-                expr_obj.save()
+                session.commit()
                 logger.debug(
                     f"表达方式激活: 原count={current_count:.3f}, 增量={increment}, 新count={new_count:.3f} in db"
                 )

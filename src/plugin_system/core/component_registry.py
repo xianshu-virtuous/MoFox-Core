@@ -237,35 +237,55 @@ class ComponentRegistry:
             logger.warning(f"组件 {component_name} 未注册，无法移除")
             return False
         try:
+            # 根据组件类型进行特定的清理操作
             match component_type:
                 case ComponentType.ACTION:
-                    self._action_registry.pop(component_name)
-                    self._default_actions.pop(component_name)
+                    # 移除Action注册
+                    self._action_registry.pop(component_name, None)
+                    self._default_actions.pop(component_name, None)
+                    logger.debug(f"已移除Action组件: {component_name}")
+
                 case ComponentType.COMMAND:
-                    self._command_registry.pop(component_name)
+                    # 移除Command注册和模式
+                    self._command_registry.pop(component_name, None)
                     keys_to_remove = [k for k, v in self._command_patterns.items() if v == component_name]
                     for key in keys_to_remove:
-                        self._command_patterns.pop(key)
+                        self._command_patterns.pop(key, None)
+                    logger.debug(f"已移除Command组件: {component_name} (清理了 {len(keys_to_remove)} 个模式)")
+
                 case ComponentType.TOOL:
-                    self._tool_registry.pop(component_name)
-                    self._llm_available_tools.pop(component_name)
+                    # 移除Tool注册
+                    self._tool_registry.pop(component_name, None)
+                    self._llm_available_tools.pop(component_name, None)
+                    logger.debug(f"已移除Tool组件: {component_name}")
+
                 case ComponentType.EVENT_HANDLER:
+                    # 移除EventHandler注册和事件订阅
                     from .events_manager import events_manager  # 延迟导入防止循环导入问题
 
-                    self._event_handler_registry.pop(component_name)
-                    self._enabled_event_handlers.pop(component_name)
-                    await events_manager.unregister_event_subscriber(component_name)
+                    self._event_handler_registry.pop(component_name, None)
+                    self._enabled_event_handlers.pop(component_name, None)
+                    try:
+                        await events_manager.unregister_event_subscriber(component_name)
+                        logger.debug(f"已移除EventHandler组件: {component_name}")
+                    except Exception as e:
+                        logger.warning(f"移除EventHandler事件订阅时出错: {e}")
+
+                case _:
+                    logger.warning(f"未知的组件类型: {component_type}")
+                    return False
+
+            # 移除通用注册信息
             namespaced_name = f"{component_type}.{component_name}"
-            self._components.pop(namespaced_name)
-            self._components_by_type[component_type].pop(component_name)
-            self._components_classes.pop(namespaced_name)
-            logger.info(f"组件 {component_name} 已移除")
+            self._components.pop(namespaced_name, None)
+            self._components_by_type[component_type].pop(component_name, None)
+            self._components_classes.pop(namespaced_name, None)
+
+            logger.info(f"组件 {component_name} ({component_type}) 已完全移除")
             return True
-        except KeyError as e:
-            logger.warning(f"移除组件时未找到组件: {component_name}, 发生错误: {e}")
-            return False
+
         except Exception as e:
-            logger.error(f"移除组件 {component_name} 时发生错误: {e}")
+            logger.error(f"移除组件 {component_name} ({component_type}) 时发生错误: {e}")
             return False
 
     def remove_plugin_registry(self, plugin_name: str) -> bool:
@@ -615,5 +635,54 @@ class ComponentRegistry:
             "enabled_plugins": len([p for p in self._plugins.values() if p.enabled]),
         }
 
+    # === 组件移除相关 ===
 
+    async def unregister_plugin(self, plugin_name: str) -> bool:
+        """卸载插件及其所有组件
+
+        Args:
+            plugin_name: 插件名称
+
+        Returns:
+            bool: 是否成功卸载
+        """
+        plugin_info = self.get_plugin_info(plugin_name)
+        if not plugin_info:
+            logger.warning(f"插件 {plugin_name} 未注册，无法卸载")
+            return False
+
+        logger.info(f"开始卸载插件: {plugin_name}")
+
+        # 记录卸载失败的组件
+        failed_components = []
+
+        # 逐个移除插件的所有组件
+        for component_info in plugin_info.components:
+            try:
+                success = await self.remove_component(
+                    component_info.name,
+                    component_info.component_type,
+                    plugin_name,
+                )
+                if not success:
+                    failed_components.append(f"{component_info.component_type}.{component_info.name}")
+            except Exception as e:
+                logger.error(f"移除组件 {component_info.name} 时发生异常: {e}")
+                failed_components.append(f"{component_info.component_type}.{component_info.name}")
+
+        # 移除插件注册信息
+        plugin_removed = self.remove_plugin_registry(plugin_name)
+
+        if failed_components:
+            logger.warning(f"插件 {plugin_name} 部分组件卸载失败: {failed_components}")
+            return False
+        elif not plugin_removed:
+            logger.error(f"插件 {plugin_name} 注册信息移除失败")
+            return False
+        else:
+            logger.info(f"插件 {plugin_name} 卸载成功")
+            return True
+
+
+# 创建全局组件注册中心实例
 component_registry = ComponentRegistry()

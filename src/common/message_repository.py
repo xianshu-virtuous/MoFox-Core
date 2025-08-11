@@ -1,20 +1,26 @@
 import traceback
 
-from typing import List, Any, Optional
-from peewee import Model  # 添加 Peewee Model 导入
+from typing import List, Optional, Any, Dict
+from sqlalchemy import not_, select, func
+
+from sqlalchemy.orm import DeclarativeBase
 from src.config.config import global_config
 
-from src.common.database.database_model import Messages
+# from src.common.database.database_model import Messages
+from src.common.database.sqlalchemy_models import Messages
+from src.common.database.sqlalchemy_database_api import get_session
 from src.common.logger import get_logger
 
 logger = get_logger(__name__)
 
+class Base(DeclarativeBase):
+    pass
 
-def _model_to_dict(model_instance: Model) -> dict[str, Any]:
+def _model_to_dict(instance: Base) -> Dict[str, Any]:
     """
-    将 Peewee 模型实例转换为字典。
+    将 SQLAlchemy 模型实例转换为字典。
     """
-    return model_instance.__data__
+    return {col.name: getattr(instance, col.name) for col in instance.__table__.columns}
 
 
 def find_messages(
@@ -38,7 +44,8 @@ def find_messages(
         消息字典列表，如果出错则返回空列表。
     """
     try:
-        query = Messages.select()
+        session = get_session()
+        query = select(Messages)
 
         # 应用过滤器
         if message_filter:
@@ -77,42 +84,57 @@ def find_messages(
             query = query.where(Messages.user_id != global_config.bot.qq_account)
 
         if filter_command:
-            query = query.where(not Messages.is_command)
+            query = query.where(not_(Messages.is_command))
 
         if limit > 0:
+            # 确保limit是正整数
+            limit = max(1, int(limit))
+
             if limit_mode == "earliest":
                 # 获取时间最早的 limit 条记录，已经是正序
                 query = query.order_by(Messages.time.asc()).limit(limit)
-                peewee_results = list(query)
+                try:
+                    results = session.execute(query).scalars().all()
+                except Exception as e:
+                    logger.error(f"执行earliest查询失败: {e}")
+                    results = []
             else:  # 默认为 'latest'
                 # 获取时间最晚的 limit 条记录
                 query = query.order_by(Messages.time.desc()).limit(limit)
-                latest_results_peewee = list(query)
-                # 将结果按时间正序排列
-                peewee_results = sorted(latest_results_peewee, key=lambda msg: msg.time)
+                try:
+                    latest_results = session.execute(query).scalars().all()
+                    # 将结果按时间正序排列
+                    results = sorted(latest_results, key=lambda msg: msg.time)
+                except Exception as e:
+                    logger.error(f"执行latest查询失败: {e}")
+                    results = []
         else:
             # limit 为 0 时，应用传入的 sort 参数
             if sort:
-                peewee_sort_terms = []
+                sort_terms = []
                 for field_name, direction in sort:
                     if hasattr(Messages, field_name):
                         field = getattr(Messages, field_name)
                         if direction == 1:  # ASC
-                            peewee_sort_terms.append(field.asc())
+                            sort_terms.append(field.asc())
                         elif direction == -1:  # DESC
-                            peewee_sort_terms.append(field.desc())
+                            sort_terms.append(field.desc())
                         else:
                             logger.warning(f"字段 '{field_name}' 的排序方向 '{direction}' 无效。将跳过此排序条件。")
                     else:
                         logger.warning(f"排序字段 '{field_name}' 在 Messages 模型中未找到。将跳过此排序条件。")
-                if peewee_sort_terms:
-                    query = query.order_by(*peewee_sort_terms)
-            peewee_results = list(query)
+                if sort_terms:
+                    query = query.order_by(*sort_terms)
+            try:
+                results = session.execute(query).scalars().all()
+            except Exception as e:
+                logger.error(f"执行无限制查询失败: {e}")
+                results = []
 
-        return [_model_to_dict(msg) for msg in peewee_results]
+        return [_model_to_dict(msg) for msg in results]
     except Exception as e:
         log_message = (
-            f"使用 Peewee 查找消息失败 (filter={message_filter}, sort={sort}, limit={limit}, limit_mode={limit_mode}): {e}\n"
+            f"使用 SQLAlchemy 查找消息失败 (filter={message_filter}, sort={sort}, limit={limit}, limit_mode={limit_mode}): {e}\n"
             + traceback.format_exc()
         )
         logger.error(log_message)
@@ -130,7 +152,8 @@ def count_messages(message_filter: dict[str, Any]) -> int:
         符合条件的消息数量，如果出错则返回 0。
     """
     try:
-        query = Messages.select()
+        session = get_session()
+        query = select(func.count(Messages.id))
 
         # 应用过滤器
         if message_filter:
@@ -167,14 +190,14 @@ def count_messages(message_filter: dict[str, Any]) -> int:
             if conditions:
                 query = query.where(*conditions)
 
-        count = query.count()
-        return count
+        count = session.execute(query).scalar()
+        return count or 0
     except Exception as e:
-        log_message = f"使用 Peewee 计数消息失败 (message_filter={message_filter}): {e}\n{traceback.format_exc()}"
+        log_message = f"使用 SQLAlchemy 计数消息失败 (message_filter={message_filter}): {e}\n{traceback.format_exc()}"
         logger.error(log_message)
         return 0
 
 
 # 你可以在这里添加更多与 messages 集合相关的数据库操作函数，例如 find_one_message, insert_message 等。
-# 注意：对于 Peewee，插入操作通常是 Messages.create(...) 或 instance.save()。
-# 查找单个消息可以是 Messages.get_or_none(...) 或 query.first()。
+# 注意：对于 SQLAlchemy，插入操作通常是使用 session.add() 和 session.commit()。
+# 查找单个消息可以使用 session.execute(select(Messages).where(...)).scalar_one_or_none()。

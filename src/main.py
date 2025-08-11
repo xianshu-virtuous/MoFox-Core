@@ -1,5 +1,7 @@
 import asyncio
 import time
+import signal
+import sys
 from maim_message import MessageServer
 
 from src.common.remote import TelemetryHeartBeatTask
@@ -17,8 +19,9 @@ from rich.traceback import install
 from src.migrate_helper.migrate import check_and_run_migrations
 # from src.api.main import start_api_server
 
-# 导入新的插件管理器
+# 导入新的插件管理器和热重载管理器
 from src.plugin_system.core.plugin_manager import plugin_manager
+from src.plugin_system.core.plugin_hot_reload import hot_reload_manager
 
 # 导入消息API和traceback模块
 from src.common.message import get_global_api
@@ -48,6 +51,28 @@ class MainSystem:
         self.app: MessageServer = get_global_api()
         self.server: Server = get_global_server()
 
+        # 设置信号处理器用于优雅退出
+        self._setup_signal_handlers()
+
+    def _setup_signal_handlers(self):
+        """设置信号处理器"""
+        def signal_handler(signum, frame):
+            logger.info("收到退出信号，正在优雅关闭系统...")
+            self._cleanup()
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+    def _cleanup(self):
+        """清理资源"""
+        try:
+            # 停止插件热重载系统
+            hot_reload_manager.stop()
+            logger.info("🛑 插件热重载系统已停止")
+        except Exception as e:
+            logger.error(f"停止热重载系统时出错: {e}")
+
     async def initialize(self):
         """初始化系统组件"""
         logger.info(f"正在唤醒{global_config.bot.nickname}......")
@@ -58,14 +83,7 @@ class MainSystem:
         logger.info(f"""
 --------------------------------
 全部系统初始化完成，{global_config.bot.nickname}已成功唤醒
---------------------------------
-如果想要自定义{global_config.bot.nickname}的功能,请查阅：https://docs.mai-mai.org/manual/usage/
-或者遇到了问题，请访问我们的文档:https://docs.mai-mai.org/
---------------------------------
-如果你想要编写或了解插件相关内容，请访问开发文档https://docs.mai-mai.org/develop/
---------------------------------
-如果你需要查阅模型的消耗以及麦麦的统计数据，请访问根目录的maibot_statistics.html文件
-""")
+--------------------------------""")
 
     async def _init_components(self):
         """初始化其他组件"""
@@ -86,6 +104,10 @@ class MainSystem:
 
         # 加载所有actions，包括默认的和插件的
         plugin_manager.load_all_plugins()
+
+        # 启动插件热重载系统
+
+        hot_reload_manager.start()
 
         # 初始化表情管理器
         get_emoji_manager().initialize()

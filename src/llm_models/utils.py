@@ -5,8 +5,7 @@ from PIL import Image
 from datetime import datetime
 
 from src.common.logger import get_logger
-from src.common.database.database import db  # 确保 db 被导入用于 create_tables
-from src.common.database.database_model import LLMUsage
+from src.common.database.sqlalchemy_models import LLMUsage, get_session
 from src.config.api_ada_configs import ModelInfo
 from .payload_content.message import Message, MessageBuilder
 from .model_client.base_client import UsageRecord
@@ -143,16 +142,9 @@ def compress_messages(messages: list[Message], img_target_size: int = 1 * 1024 *
 
 class LLMUsageRecorder:
     """
-    LLM使用情况记录器
+    LLM使用情况记录器（SQLAlchemy版本）
     """
 
-    def __init__(self):
-        try:
-            # 使用 Peewee 创建表，safe=True 表示如果表已存在则不会抛出错误
-            db.create_tables([LLMUsage], safe=True)
-            # logger.debug("LLMUsage 表已初始化/确保存在。")
-        except Exception as e:
-            logger.error(f"创建 LLMUsage 表失败: {str(e)}")
 
     def record_usage_to_database(
         self, model_info: ModelInfo, model_usage: UsageRecord, user_id: str, request_type: str, endpoint: str, time_cost: float = 0.0
@@ -160,9 +152,13 @@ class LLMUsageRecorder:
         input_cost = (model_usage.prompt_tokens / 1000000) * model_info.price_in
         output_cost = (model_usage.completion_tokens / 1000000) * model_info.price_out
         total_cost = round(input_cost + output_cost, 6)
+        
+        session = None
         try:
-            # 使用 Peewee 模型创建记录
-            LLMUsage.create(
+            # 使用 SQLAlchemy 会话创建记录
+            session = get_session()
+            
+            usage_record = LLMUsage(
                 model_name=model_info.model_identifier,
                 model_assign_name=model_info.name,
                 model_api_provider=model_info.api_provider,
@@ -175,8 +171,12 @@ class LLMUsageRecorder:
                 cost=total_cost or 0.0,
                 time_cost = round(time_cost or 0.0, 3),
                 status="success",
-                timestamp=datetime.now(),  # Peewee 会处理 DateTimeField
+                timestamp=datetime.now(),  # SQLAlchemy 会处理 DateTime 字段
             )
+            
+            session.add(usage_record)
+            session.commit()
+            
             logger.debug(
                 f"Token使用情况 - 模型: {model_usage.model_name}, "
                 f"用户: {user_id}, 类型: {request_type}, "
@@ -184,6 +184,11 @@ class LLMUsageRecorder:
                 f"总计: {model_usage.total_tokens}"
             )
         except Exception as e:
+            if session:
+                session.rollback()
             logger.error(f"记录token使用情况失败: {str(e)}")
+        finally:
+            if session:
+                session.close()
 
 llm_usage_recorder = LLMUsageRecorder()

@@ -16,8 +16,10 @@ from rich.traceback import install
 
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import global_config, model_config
-from src.common.database.database_model import Messages, GraphNodes, GraphEdges  # Peewee Models导入
+from sqlalchemy import select,insert,update,text,delete
+from src.common.database.sqlalchemy_models import Messages, GraphNodes, GraphEdges  # SQLAlchemy Models导入
 from src.common.logger import get_logger
+from src.common.database.sqlalchemy_database_api import get_session
 from src.chat.memory_system.sample_distribution import MemoryBuildScheduler  # 分布生成器
 from src.chat.utils.chat_message_builder import (
     get_raw_msg_by_timestamp,
@@ -37,7 +39,7 @@ def cosine_similarity(v1, v2):
 
 
 install(extra_lines=3)
-
+session = get_session()
 
 def calculate_information_content(text):
     """计算文本的信息量（熵）"""
@@ -731,13 +733,14 @@ class Hippocampus:
             memory_items = node_data.get("memory_items", "")
             # 直接使用完整的记忆内容
             if memory_items:
-                logger.debug("节点包含完整记忆")
-                # 计算记忆与关键词的相似度
-                memory_words = set(jieba.cut(memory_items))
-                text_words = set(keywords)
-                all_words = memory_words | text_words
-                if all_words:
-                    # 计算相似度（虽然这里没有使用，但保持逻辑一致性）
+                logger.debug(f"节点包含 {len(memory_items)} 条记忆")
+                # 计算每条记忆与输入文本的相似度
+                memory_similarities = []
+                for memory in memory_items:
+                    # 计算与输入文本的相似度
+                    memory_words = set(jieba.cut(memory))
+                    text_words = set(jieba.cut(text))
+                    all_words = memory_words | text_words
                     v1 = [1 if word in memory_words else 0 for word in all_words]
                     v2 = [1 if word in text_words else 0 for word in all_words]
                     _ = cosine_similarity(v1, v2)  # 计算但不使用，用_表示
@@ -844,11 +847,6 @@ class Hippocampus:
                     else:
                         activate_map[node] = activation_value
 
-        # 输出激活映射
-        # logger.info("激活映射统计:")
-        # for node, total_activation in sorted(activate_map.items(), key=lambda x: x[1], reverse=True):
-        #     logger.info(f"节点 '{node}': 累计激活值 = {total_activation:.2f}")
-
         # 计算激活节点数与总节点数的比值
         total_activation = sum(activate_map.values())
         # logger.debug(f"总激活值: {total_activation:.2f}")
@@ -942,10 +940,13 @@ class EntorhinalCortex:
                         for message in messages:
                             # 确保在更新前获取最新的 memorized_times
                             current_memorized_times = message.get("memorized_times", 0)
-                            # 使用 Peewee 更新记录
-                            Messages.update(memorized_times=current_memorized_times + 1).where(
-                                Messages.message_id == message["message_id"]
-                            ).execute()
+                            # 使用 SQLAlchemy 2.0 更新记录
+                            session.execute(
+                                update(Messages)
+                                .where(Messages.message_id == message["message_id"])
+                                .values(memorized_times=current_memorized_times + 1)
+                            )
+                            session.commit()
                         return messages  # 直接返回原始的消息列表
 
             target_timestamp -= 120  # 如果第一次尝试失败，稍微向前调整时间戳再试
@@ -959,7 +960,7 @@ class EntorhinalCortex:
         current_time = datetime.datetime.now().timestamp()
 
         # 获取数据库中所有节点和内存中所有节点
-        db_nodes = {node.concept: node for node in GraphNodes.select()}
+        db_nodes = {node.concept: node for node in session.execute(select(GraphNodes)).scalars()}
         memory_nodes = list(self.memory_graph.G.nodes(data=True))
 
         # 批量准备节点数据
@@ -1025,22 +1026,27 @@ class EntorhinalCortex:
             batch_size = 100
             for i in range(0, len(nodes_to_create), batch_size):
                 batch = nodes_to_create[i : i + batch_size]
-                GraphNodes.insert_many(batch).execute()
+                session.execute(insert(GraphNodes), batch)
+                session.commit()
 
         if nodes_to_update:
             batch_size = 100
             for i in range(0, len(nodes_to_update), batch_size):
                 batch = nodes_to_update[i : i + batch_size]
                 for node_data in batch:
-                    GraphNodes.update(**{k: v for k, v in node_data.items() if k != "concept"}).where(
-                        GraphNodes.concept == node_data["concept"]
-                    ).execute()
+                    session.execute(
+                        update(GraphNodes)
+                        .where(GraphNodes.concept == node_data["concept"])
+                        .values(**{k: v for k, v in node_data.items() if k != "concept"})
+                    )
+                session.commit()
 
         if nodes_to_delete:
-            GraphNodes.delete().where(GraphNodes.concept.in_(nodes_to_delete)).execute()  # type: ignore
+            session.execute(delete(GraphNodes).where(GraphNodes.concept.in_(nodes_to_delete)))
+            session.commit()
 
         # 处理边的信息
-        db_edges = list(GraphEdges.select())
+        db_edges = list(session.execute(select(GraphEdges)).scalars())
         memory_edges = list(self.memory_graph.G.edges(data=True))
 
         # 创建边的哈希值字典
@@ -1092,20 +1098,29 @@ class EntorhinalCortex:
             batch_size = 100
             for i in range(0, len(edges_to_create), batch_size):
                 batch = edges_to_create[i : i + batch_size]
-                GraphEdges.insert_many(batch).execute()
+                session.execute(insert(GraphEdges), batch)
+                session.commit()
 
         if edges_to_update:
             batch_size = 100
             for i in range(0, len(edges_to_update), batch_size):
                 batch = edges_to_update[i : i + batch_size]
                 for edge_data in batch:
-                    GraphEdges.update(**{k: v for k, v in edge_data.items() if k not in ["source", "target"]}).where(
-                        (GraphEdges.source == edge_data["source"]) & (GraphEdges.target == edge_data["target"])
-                    ).execute()
+                    session.execute(
+                        update(GraphEdges)
+                        .where(
+                            (GraphEdges.source == edge_data["source"]) & (GraphEdges.target == edge_data["target"])
+                        )
+                        .values(**{k: v for k, v in edge_data.items() if k not in ["source", "target"]})
+                    )
+                session.commit()
 
         if edges_to_delete:
             for source, target in edges_to_delete:
-                GraphEdges.delete().where((GraphEdges.source == source) & (GraphEdges.target == target)).execute()
+                session.execute(
+                    delete(GraphEdges).where((GraphEdges.source == source) & (GraphEdges.target == target))
+                )
+                session.commit()
 
         end_time = time.time()
         logger.info(f"[数据库] 同步完成，总耗时: {end_time - start_time:.2f}秒")
@@ -1118,8 +1133,9 @@ class EntorhinalCortex:
 
         # 清空数据库
         clear_start = time.time()
-        GraphNodes.delete().execute()
-        GraphEdges.delete().execute()
+        session.execute(delete(GraphNodes))
+        session.execute(delete(GraphEdges))
+        session.commit()
         clear_end = time.time()
         logger.info(f"[数据库] 清空数据库耗时: {clear_end - clear_start:.2f}秒")
 
@@ -1186,12 +1202,27 @@ class EntorhinalCortex:
                 logger.error(f"准备边 {source}-{target} 数据时发生错误: {e}")
                 continue
 
-        # 批量插入边
+        # 批量写入节点
+        node_start = time.time()
+        if nodes_data:
+            batch_size = 500  # 增加批量大小
+            for i in range(0, len(nodes_data), batch_size):
+                batch = nodes_data[i : i + batch_size]
+                session.execute(insert(GraphNodes), batch)
+                session.commit()
+        node_end = time.time()
+        logger.info(f"[数据库] 写入 {len(nodes_data)} 个节点耗时: {node_end - node_start:.2f}秒")
+
+        # 批量写入边
+        edge_start = time.time()
         if edges_data:
-            batch_size = 100
+            batch_size = 500  # 增加批量大小
             for i in range(0, len(edges_data), batch_size):
                 batch = edges_data[i : i + batch_size]
-                GraphEdges.insert_many(batch).execute()
+                session.execute(insert(GraphEdges), batch)
+                session.commit()
+        edge_end = time.time()
+        logger.info(f"[数据库] 写入 {len(edges_data)} 条边耗时: {edge_end - edge_start:.2f}秒")
 
         end_time = time.time()
         logger.info(f"[数据库] 重新同步完成，总耗时: {end_time - start_time:.2f}秒")
@@ -1211,9 +1242,7 @@ class EntorhinalCortex:
         skipped_nodes = 0
 
         # 从数据库加载所有节点
-        nodes = list(GraphNodes.select())
-        total_nodes = len(nodes)
-        
+        nodes = list(session.execute(select(GraphNodes)).scalars())
         for node in nodes:
             concept = node.concept
             try:
@@ -1235,8 +1264,10 @@ class EntorhinalCortex:
                     if not node.last_modified:
                         update_data["last_modified"] = current_time
 
-                    if update_data:
-                        GraphNodes.update(**update_data).where(GraphNodes.concept == concept).execute()
+                    session.execute(
+                        update(GraphNodes).where(GraphNodes.concept == concept).values(**update_data)
+                    )
+                    session.commit()
 
                 # 获取时间信息(如果不存在则使用当前时间)
                 created_time = node.created_time or current_time
@@ -1256,7 +1287,7 @@ class EntorhinalCortex:
                 continue
 
         # 从数据库加载所有边
-        edges = list(GraphEdges.select())
+        edges = list(session.execute(select(GraphEdges)).scalars())
         for edge in edges:
             source = edge.source
             target = edge.target
@@ -1272,9 +1303,12 @@ class EntorhinalCortex:
                 if not edge.last_modified:
                     update_data["last_modified"] = current_time
 
-                GraphEdges.update(**update_data).where(
-                    (GraphEdges.source == source) & (GraphEdges.target == target)
-                ).execute()
+                session.execute(
+                    update(GraphEdges)
+                    .where((GraphEdges.source == source) & (GraphEdges.target == target))
+                    .values(**update_data)
+                )
+                session.commit()
 
             # 获取时间信息(如果不存在则使用当前时间)
             created_time = edge.created_time or current_time
@@ -1398,7 +1432,6 @@ class ParahippocampalGyrus:
                     all_words = topic_words | existing_words
                     v1 = [1 if word in topic_words else 0 for word in all_words]
                     v2 = [1 if word in existing_words else 0 for word in all_words]
-
                     similarity = cosine_similarity(v1, v2)
 
                     if similarity >= 0.7:
@@ -1502,7 +1535,7 @@ class ParahippocampalGyrus:
         check_nodes_count = max(1, min(len(all_nodes), int(len(all_nodes) * percentage)))
         check_edges_count = max(1, min(len(all_edges), int(len(all_edges) * percentage)))
 
-        # 只有在有足够的节点和边时才进行采样
+        # 只有在有足够的节点和边时进行采样
         if len(all_nodes) >= check_nodes_count and len(all_edges) >= check_edges_count:
             try:
                 nodes_to_check = random.sample(all_nodes, check_nodes_count)
@@ -1548,6 +1581,11 @@ class ParahippocampalGyrus:
 
         logger.info("[遗忘] 开始检查节点...")
         node_check_start = time.time()
+
+        # 初始化整合相关变量
+        merged_count = 0
+        nodes_modified = set()
+
         for node in nodes_to_check:
             # 检查节点是否存在，以防在迭代中被移除（例如边移除导致）
             if node not in self.memory_graph.G:
@@ -1567,64 +1605,91 @@ class ParahippocampalGyrus:
                     logger.warning(f"[遗忘] 移除空节点 {node} 时发生错误（可能已被移除）: {e}")
                 continue  # 处理下一个节点
 
-            # --- 如果节点不为空，则执行原来的不活跃检查和随机移除逻辑 ---
+            # 检查节点的最后修改时间，如果太旧则尝试遗忘
             last_modified = node_data.get("last_modified", current_time)
-            node_weight = node_data.get("weight", 1.0)
-            
-            # 条件1：检查是否长时间未修改 (使用配置的遗忘时间)
-            time_threshold = 3600 * global_config.memory.memory_forget_time
-            
-            # 基于权重调整遗忘阈值：权重越高，需要更长时间才能被遗忘
-            # 权重为1时使用默认阈值，权重越高阈值越大（越难遗忘）
-            adjusted_threshold = time_threshold * node_weight
-            
-            if current_time - last_modified > adjusted_threshold and memory_items:
-                # 既然每个节点现在是完整记忆，直接删除整个节点
-                try:
-                    self.memory_graph.G.remove_node(node)
-                    node_changes["removed"].append(f"{node}(长时间未修改,权重{node_weight:.1f})")
-                    logger.debug(f"[遗忘] 移除了长时间未修改的节点: {node} (权重: {node_weight:.1f})")
-                except nx.NetworkXError as e:
-                    logger.warning(f"[遗忘] 移除节点 {node} 时发生错误（可能已被移除）: {e}")
-                    continue
+            if current_time - last_modified > 3600 * global_config.memory.memory_forget_time:
+                # 随机遗忘一条记忆
+                if len(memory_items) > 1:
+                    removed_item = self.memory_graph.forget_topic(node)
+                    if removed_item:
+                        node_changes["reduced"].append(f"{node} (移除: {removed_item[:50]}...)")
+                elif len(memory_items) == 1:
+                    # 如果只有一条记忆，检查是否应该完全移除节点
+                    try:
+                        self.memory_graph.G.remove_node(node)
+                        node_changes["removed"].append(f"{node} (最后记忆)")
+                    except nx.NetworkXError as e:
+                        logger.warning(f"[遗忘] 移除节点 {node} 时发生错误: {e}")
+
+            # 检查节点内是否有相似的记忆项需要整合
+            if len(memory_items) > 1:
+                merged_in_this_node = False
+                items_to_remove = []
+
+                for i in range(len(memory_items)):
+                    for j in range(i + 1, len(memory_items)):
+                        similarity = self._calculate_item_similarity(memory_items[i], memory_items[j])
+                        if similarity > 0.8:  # 相似度阈值
+                            # 合并相似记忆项
+                            longer_item = memory_items[i] if len(memory_items[i]) > len(memory_items[j]) else memory_items[j]
+                            shorter_item = memory_items[j] if len(memory_items[i]) > len(memory_items[j]) else memory_items[i]
+
+                            # 保留更长的记忆项，标记短的用于删除
+                            if shorter_item not in items_to_remove:
+                                items_to_remove.append(shorter_item)
+                                merged_count += 1
+                                merged_in_this_node = True
+                                logger.debug(f"[整合] 在节点 {node} 中合并相似记忆: {shorter_item[:30]}... -> {longer_item[:30]}...")
+
+                # 移除被合并的记忆项
+                if items_to_remove:
+                    for item in items_to_remove:
+                        if item in memory_items:
+                            memory_items.remove(item)
+                    nodes_modified.add(node)
+                    # 更新节点的记忆项
+                    self.memory_graph.G.nodes[node]["memory_items"] = memory_items
+                    self.memory_graph.G.nodes[node]["last_modified"] = current_time
+
         node_check_end = time.time()
         logger.info(f"[遗忘] 节点检查耗时: {node_check_end - node_check_start:.2f}秒")
 
-        if any(edge_changes.values()) or any(node_changes.values()):
+        # 输出变化统计
+        if edge_changes["weakened"]:
+            logger.info(f"[遗忘] 减弱了 {len(edge_changes['weakened'])} 个连接")
+        if edge_changes["removed"]:
+            logger.info(f"[遗忘] 移除了 {len(edge_changes['removed'])} 个连接")
+        if node_changes["reduced"]:
+            logger.info(f"[遗忘] 减少了 {len(node_changes['reduced'])} 个节点的记忆")
+        if node_changes["removed"]:
+            logger.info(f"[遗忘] 移除了 {len(node_changes['removed'])} 个节点")
+
+        # 检查是否有变化需要同步到数据库
+        has_changes = (
+            edge_changes["weakened"] or
+            edge_changes["removed"] or
+            node_changes["reduced"] or
+            node_changes["removed"] or
+            merged_count > 0
+        )
+
+        if has_changes:
+            logger.info("[遗忘] 开始将变更同步到数据库...")
             sync_start = time.time()
-
-            await self.hippocampus.entorhinal_cortex.resync_memory_to_db()
-
+            await self.hippocampus.entorhinal_cortex.sync_memory_to_db()
             sync_end = time.time()
             logger.info(f"[遗忘] 数据库同步耗时: {sync_end - sync_start:.2f}秒")
 
-            # 汇总输出所有变化
-            logger.info("[遗忘] 遗忘操作统计:")
-            if edge_changes["weakened"]:
-                logger.info(
-                    f"[遗忘] 减弱的连接 ({len(edge_changes['weakened'])}个): {', '.join(edge_changes['weakened'])}"
-                )
-
-            if edge_changes["removed"]:
-                logger.info(
-                    f"[遗忘] 移除的连接 ({len(edge_changes['removed'])}个): {', '.join(edge_changes['removed'])}"
-                )
-
-            if node_changes["reduced"]:
-                logger.info(
-                    f"[遗忘] 减少记忆的节点 ({len(node_changes['reduced'])}个): {', '.join(node_changes['reduced'])}"
-                )
-
-            if node_changes["removed"]:
-                logger.info(
-                    f"[遗忘] 移除的节点 ({len(node_changes['removed'])}个): {', '.join(node_changes['removed'])}"
-                )
+        if merged_count > 0:
+            logger.info(f"[整合] 共合并了 {merged_count} 对相似记忆项，分布在 {len(nodes_modified)} 个节点中。")
+            sync_start = time.time()
+            logger.info("[整合] 开始将变更同步到数据库...")
+            # 使用 resync 更安全地处理删除和添加
+            await self.hippocampus.entorhinal_cortex.resync_memory_to_db()
+            sync_end = time.time()
+            logger.info(f"[整合] 数据库同步耗时: {sync_end - sync_start:.2f}秒")
         else:
-            logger.info("[遗忘] 本次检查没有节点或连接满足遗忘条件")
-
-        end_time = time.time()
-        logger.info(f"[遗忘] 总耗时: {end_time - start_time:.2f}秒")
-
+            logger.info("[整合] 本次检查未发现需要合并的记忆项。")
 
 
 
@@ -1734,10 +1799,7 @@ class HippocampusManager:
         """获取所有节点名称的公共接口"""
         if not self._initialized:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
-        return self._hippocampus.get_all_node_names()
-
 
 # 创建全局实例
 hippocampus_manager = HippocampusManager()
-
 

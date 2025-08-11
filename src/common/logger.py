@@ -373,6 +373,7 @@ MODULE_COLORS = {
     "base_command": "\033[38;5;208m",  # 橙色
     "component_registry": "\033[38;5;214m",  # 橙黄色
     "stream_api": "\033[38;5;220m",  # 黄色
+    "plugin_hot_reload": "\033[38;5;226m", #品红色
     "config_api": "\033[38;5;226m",  # 亮黄色
     "heartflow_api": "\033[38;5;154m",  # 黄绿色
     "action_apis": "\033[38;5;118m",  # 绿色
@@ -406,6 +407,7 @@ MODULE_COLORS = {
     "base_action": "\033[38;5;250m",  # 浅灰色
     # 数据库和消息
     "database_model": "\033[38;5;94m",  # 橙褐色
+    "database": "\033[38;5;46m",  # 橙褐色
     "maim_message": "\033[38;5;140m",  # 紫褐色
     # 日志系统
     "logger": "\033[38;5;8m",  # 深灰色
@@ -430,6 +432,8 @@ MODULE_ALIASES = {
     "memory_activator": "记忆",
     "tool_use": "工具",
     "expressor": "表达方式",
+    "plugin_hot_reload": "热重载",
+    "database": "数据库",
     "database_model": "数据库",
     "mood": "情绪",
     "memory": "记忆",

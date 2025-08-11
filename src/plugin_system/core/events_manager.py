@@ -33,7 +33,7 @@ class EventsManager:
 
         if handler_name in self._handler_mapping:
             logger.warning(f"事件处理器 {handler_name} 已存在，跳过注册")
-            return False
+            return True
 
         if not issubclass(handler_class, BaseEventHandler):
             logger.error(f"类 {handler_class.__name__} 不是 BaseEventHandler 的子类")
