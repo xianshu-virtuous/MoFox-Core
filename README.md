@@ -62,13 +62,8 @@
 
 ## 讨论
 
-<<<<<<< HEAD
 **官方交流群：**
 - [maibot-Pro-Max 交流群] - 群号：169850076
-=======
-**交流群：**
-- [Pro-Max 交流群](https://qm.qq.com/q/169850076) - 群号：169850076
->>>>>>> 84dbeb6d8dfe53cf32f9e32a56d5dda437e2f350
 
 **其他资源：**
 - [问题反馈](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/issues)
@@ -76,23 +71,9 @@
 
 ## 文档
 
-<<<<<<< HEAD
 - [📖 官方文档](https://docs.mai-mai.org) - 核心功能参考文档
 
 ## 🙋 贡献和致谢
-=======
-- [Pro-Max Wiki](https://github.com/MaiBot-Plus/MaiMbot-Pro-Max/wiki) - Pro-Max 版本专属文档
-- [官方文档](https://docs.mai-mai.org) - 核心功能参考文档
-
-### 独有功能文档
-
-- [Gemini 模型配置指南](docs/gemini-setup.md)
-- [多模型切换教程](docs/multi-model.md)
-- [高级插件开发](docs/advanced-plugins.md)
-- [性能优化指南](docs/performance.md)
-
-## 贡献和致谢
->>>>>>> 84dbeb6d8dfe53cf32f9e32a56d5dda437e2f350
 
 MaiMbot-Pro-Max 是一个开源项目，欢迎所有人参与贡献！
 
