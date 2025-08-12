@@ -37,13 +37,13 @@ class WebSurfingTool(BaseTool):
     available_for_llm: bool = True
     parameters = [
         ("query", ToolParamType.STRING, "要搜索的关键词或问题。", True, None),
-        ("num_results", ToolParamType.INTEGER, "期望每个搜索引擎返回的搜索结果数量，默认为5。", False, "5"),
-        ("time_range", ToolParamType.STRING, "指定搜索的时间范围，可以是 'any', 'week', 'month'。默认为 'any'。", False, "any")       
+        ("num_results", ToolParamType.INTEGER, "期望每个搜索引擎返回的搜索结果数量，默认为5。", False, None),
+        ("time_range", ToolParamType.STRING, "指定搜索的时间范围，可以是 'any', 'week', 'month'。默认为 'any'。", False, ["any", "week", "month"])       
     ] # type: ignore
 
-    def __init__(self):
+    def __init__(self, plugin_config=None):
+        super().__init__(plugin_config)
         EXA_API_KEY = self.get_config("exa.api_key", None)
-        super().__init__()
         self.exa = Exa(api_key=EXA_API_KEY) if EXA_API_KEY else None
 
         if not self.exa:
@@ -174,8 +174,8 @@ class URLParserTool(BaseTool):
     parameters = [
         ("urls", ToolParamType.STRING, "要理解的网站", True, None),
     ]
-    def __init__(self):
-        super().__init__()
+    def __init__(self, plugin_config=None):
+        super().__init__(plugin_config)
         EXA_API_KEY = self.get_config("exa.api_key", None)
         if not EXA_API_KEY or EXA_API_KEY == "YOUR_API_KEY_HERE":
             self.exa = None
