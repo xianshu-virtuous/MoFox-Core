@@ -106,68 +106,8 @@ class MaiZoneConfigLoader:
         self.config_file_path = self.plugin_dir / config_filename
         self.config_data: Dict[str, Any] = {}
         self.config_specs: Dict[str, ConfigSectionSpec] = {}
-        self.config_version = "2.0.0"
+        self.config_version = "2.1.0"
         
-        # 初始化配置规格
-        self._init_config_specs()
-    
-    def _init_config_specs(self):
-        """初始化配置规格定义"""
-        # 插件基础配置节
-        plugin_section = ConfigSectionSpec("plugin", "插件基础配置")
-        plugin_section.add_field(ConfigFieldSpec("enable", bool, True, "是否启用插件"))
-        plugin_section.add_field(ConfigFieldSpec("config_version", str, "2.0.0", "配置文件版本"))
-        plugin_section.add_field(ConfigFieldSpec("http_port", str, "3000", "NapCat HTTP服务器端口号"))
-        plugin_section.add_field(ConfigFieldSpec("http_host", str, "127.0.0.1", "NapCat HTTP服务器地址"))
-        self.config_specs["plugin"] = plugin_section
-        
-        # 模型相关配置节
-        models_section = ConfigSectionSpec("models", "模型相关配置")
-        models_section.add_field(ConfigFieldSpec("text_model", str, "replyer_1", "生成文本的模型名称"))
-        models_section.add_field(ConfigFieldSpec("siliconflow_apikey", str, "", "硅基流动AI生图API密钥"))
-        self.config_specs["models"] = models_section
-        
-        # 发送说说配置节
-        send_section = ConfigSectionSpec("send", "发送说说配置")
-        send_section.add_field(ConfigFieldSpec("permission", list, ["2488036428"], "发送权限QQ号列表"))
-        send_section.add_field(ConfigFieldSpec("permission_type", str, "whitelist", "权限类型", 
-                                              choices=["whitelist", "blacklist"]))
-        send_section.add_field(ConfigFieldSpec("enable_image", bool, False, "是否启用说说配图"))
-        send_section.add_field(ConfigFieldSpec("enable_ai_image", bool, False, "是否启用AI生成配图"))
-        send_section.add_field(ConfigFieldSpec("enable_reply", bool, True, "生成完成时是否发出回复"))
-        send_section.add_field(ConfigFieldSpec("ai_image_number", int, 1, "AI生成图片数量", 
-                                              min_value=1, max_value=4))
-        send_section.add_field(ConfigFieldSpec("image_directory", str, "./plugins/built_in/Maizone/images", 
-                                              "图片存储目录"))
-        self.config_specs["send"] = send_section
-        
-        # 阅读说说配置节
-        read_section = ConfigSectionSpec("read", "阅读说说配置")
-        read_section.add_field(ConfigFieldSpec("permission", list, [], "阅读权限QQ号列表"))
-        read_section.add_field(ConfigFieldSpec("permission_type", str, "blacklist", "权限类型",
-                                              choices=["whitelist", "blacklist"]))
-        read_section.add_field(ConfigFieldSpec("read_number", int, 5, "一次读取的说说数量", 
-                                              min_value=1, max_value=20))
-        read_section.add_field(ConfigFieldSpec("like_possibility", float, 1.0, "点赞概率", 
-                                              min_value=0.0, max_value=1.0))
-        read_section.add_field(ConfigFieldSpec("comment_possibility", float, 0.3, "评论概率", 
-                                              min_value=0.0, max_value=1.0))
-        self.config_specs["read"] = read_section
-        
-        # 自动监控配置节
-        monitor_section = ConfigSectionSpec("monitor", "自动监控配置")
-        monitor_section.add_field(ConfigFieldSpec("enable_auto_monitor", bool, False, "是否启用自动监控好友说说"))
-        monitor_section.add_field(ConfigFieldSpec("interval_minutes", int, 10, "监控间隔时间(分钟)", 
-                                                 min_value=1, max_value=1440))
-        self.config_specs["monitor"] = monitor_section
-        
-        # 定时发送配置节
-        schedule_section = ConfigSectionSpec("schedule", "定时发送配置")
-        schedule_section.add_field(ConfigFieldSpec("enable_schedule", bool, False, "是否启用定时发送说说"))
-        schedule_section.add_field(ConfigFieldSpec("schedules", dict,
-            {"08:00": "早安", "22:00": "晚安"},
-            "定时发送任务列表, 格式为 {\"时间\": \"主题\"}"))
-        self.config_specs["schedule"] = schedule_section
     
     def load_config(self) -> bool:
         """

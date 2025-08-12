@@ -233,14 +233,12 @@ class ScheduleManager:
         """发送定时说说"""
         try:
             # 获取配置
-            port = str(self.plugin.get_config("plugin.http_port", "3000"))
-            host = self.plugin.get_config("plugin.http_host", "127.0.0.1")
             qq_account = config_api.get_global_config("bot.qq_account", "")
             enable_image = self.plugin.get_config("send.enable_image", False)
             image_dir = str(self.plugin.get_config("send.image_directory", "./plugins/Maizone/images"))
 
-            # 创建QZone管理器并发送
-            qzone_manager = QZoneManager(port, host)
+            # 创建QZone管理器并发送 (定时任务不需要stream_id)
+            qzone_manager = QZoneManager()
             success = await qzone_manager.send_feed(story, image_dir, qq_account, enable_image)
             
             if success:

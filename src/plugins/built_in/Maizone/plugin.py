@@ -200,14 +200,15 @@ class SendFeedCommand(BaseCommand):
         """发送说说到QQ空间"""
         try:
             # 获取配置
-            port = str(self.get_config("plugin.http_port", "3000"))
-            host = str(self.get_config("plugin.http_host", "127.0.0.1"))
             qq_account = config_api.get_global_config("bot.qq_account", "")
             enable_image = bool(self.get_config("send.enable_image", False))
             image_dir = str(self.get_config("send.image_directory", "./plugins/Maizone/images"))
 
+            # 获取聊天流ID
+            stream_id = self.message.chat_stream.stream_id if self.message and self.message.chat_stream else None
+
             # 创建QZone管理器并发送
-            qzone_manager = QZoneManager(port, host)
+            qzone_manager = QZoneManager(stream_id)
             success = await qzone_manager.send_feed(story, image_dir, qq_account, enable_image)
             
             return success
@@ -407,14 +408,15 @@ class SendFeedAction(BaseAction):
         """发送说说到QQ空间"""
         try:
             # 获取配置
-            port = str(self.get_config("plugin.http_port", "3000"))
-            host = str(self.get_config("plugin.http_host", "127.0.0.1"))
             qq_account = config_api.get_global_config("bot.qq_account", "")
             enable_image = bool(self.get_config("send.enable_image", False))
             image_dir = str(self.get_config("send.image_directory", "./plugins/Maizone/images"))
 
+            # 获取聊天流ID
+            stream_id = self.chat_stream.stream_id if self.chat_stream else None
+
             # 创建QZone管理器并发送
-            qzone_manager = QZoneManager(port, host)
+            qzone_manager = QZoneManager(stream_id)
             success = await qzone_manager.send_feed(story, image_dir, qq_account, enable_image)
             
             return success
@@ -540,8 +542,6 @@ class ReadFeedAction(BaseAction):
         """读取并处理说说"""
         try:
             # 获取配置
-            port = str(self.get_config("plugin.http_port", "3000"))
-            host = str(self.get_config("plugin.http_host", "127.0.0.1"))
             qq_account = config_api.get_global_config("bot.qq_account", "")
             num_raw = self.get_config("read.read_number", 5)
             num = int(num_raw if num_raw is not None else 5)
@@ -550,8 +550,11 @@ class ReadFeedAction(BaseAction):
             comment_raw = self.get_config("read.comment_possibility", 1.0)
             comment_possibility = float(comment_raw if comment_raw is not None else 1.0)
 
+            # 获取聊天流ID
+            stream_id = self.chat_stream.stream_id if self.chat_stream else None
+
             # 创建QZone管理器并读取说说
-            qzone_manager = QZoneManager(port, host)
+            qzone_manager = QZoneManager(stream_id)
             feeds_list = await qzone_manager.read_feed(qq_account, target_qq, num)
             
             # 处理错误情况
@@ -709,9 +712,7 @@ class MaiZonePlugin(BasePlugin):
     config_schema: dict = {
         "plugin": {
             "enable": ConfigField(type=bool, default=True, description="是否启用插件"),
-            "config_version": ConfigField(type=str, default="2.0.0", description="配置文件版本"),
-            "http_port": ConfigField(type=str, default='3000', description="NapCat HTTP服务器端口号"),
-            "http_host": ConfigField(type=str, default='127.0.0.1', description="NapCat HTTP服务器地址"),
+            "config_version": ConfigField(type=str, default="2.1.0", description="配置文件版本"),
         },
         "models": {
             "text_model": ConfigField(type=str, default="replyer_1", description="生成文本的模型名称"),

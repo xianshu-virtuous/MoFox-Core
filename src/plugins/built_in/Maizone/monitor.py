@@ -83,14 +83,12 @@ class MonitorManager:
         try:
             # 获取配置
             qq_account = config_api.get_global_config("bot.qq_account", "")
-            port = str(self.plugin.get_config("plugin.http_port", "3000"))
-            host = str(self.plugin.get_config("plugin.http_host", "127.0.0.1"))
             read_num = 10  # 监控时读取较少的说说数量
             
             logger.info("监控任务: 开始检查好友说说")
             
-            # 创建QZone管理器
-            qzone_manager = QZoneManager(port, host)
+            # 创建QZone管理器 (监控模式不需要stream_id)
+            qzone_manager = QZoneManager()
             
             # 获取监控说说列表
             feeds_list = await qzone_manager.monitor_read_feed(qq_account, read_num)

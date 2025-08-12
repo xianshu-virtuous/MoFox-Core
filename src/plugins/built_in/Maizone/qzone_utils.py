@@ -16,7 +16,7 @@ import json5
 
 from src.chat.utils.utils_image import get_image_manager
 from src.common.logger import get_logger
-from src.plugin_system.apis import llm_api, config_api, emoji_api
+from src.plugin_system.apis import llm_api, config_api, emoji_api, send_api
 
 # 获取日志记录器
 logger = get_logger('MaiZone-Utils')
@@ -62,45 +62,43 @@ class CookieManager:
         raise ValueError("无法从Cookie字符串中提取UIN")
 
     @staticmethod
-    async def fetch_cookies(domain: str, port: str, host: str) -> Dict[str, Any]:
-        """从NapCat获取Cookie"""
-        url = f"http://{host}:{port}/get_cookies?domain={domain}"
-        logger.info(f"正在从NapCat获取Cookie，URL: {url}")
+    async def fetch_cookies(domain: str, stream_id: Optional[str] = None) -> Dict[str, Any]:
+        """通过适配器API从NapCat获取Cookie"""
+        logger.info(f"正在通过适配器API获取Cookie，域名: {domain}")
         
         try:
-            async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
-                logger.debug(f"发送GET请求到: {url}")
-                resp = await client.get(url)
-                logger.debug(f"响应状态码: {resp.status_code}")
+            # 使用适配器命令API获取cookie
+            response = await send_api.adapter_command_to_stream(
+                action="get_cookies",
+                params={"domain": domain},
+                stream_id=stream_id,
+                timeout=40.0,
+                storage_message=False
+            )
+            
+            logger.info(f"适配器响应: {response}")
+            
+            if response.get("status") == "ok":
+                data = response.get("data", {})
+                if "cookies" in data:
+                    logger.info("成功通过适配器API获取Cookie")
+                    return data
+                else:
+                    raise RuntimeError(f"适配器返回的数据中缺少cookies字段: {data}")
+            else:
+                error_msg = response.get("message", "未知错误")
+                raise RuntimeError(f"适配器API获取Cookie失败: {error_msg}")
                 
-                resp.raise_for_status()
-                data = resp.json()
-                logger.info(f"响应数据: {data}")
-                
-                if data.get("status") != "ok" or "cookies" not in data.get("data", {}):
-                    raise RuntimeError(f"获取Cookie失败: {data}")
-                    
-                logger.info("成功从NapCat获取Cookie")
-                return data["data"]
-        except httpx.ConnectError as e:
-            logger.error(f"无法连接到NapCat服务器 {host}:{port} - 请检查NapCat是否运行: {str(e)}")
-            raise
-        except httpx.TimeoutException as e:
-            logger.error(f"连接NapCat超时: {str(e)}")
-            raise
-        except httpx.HTTPStatusError as e:
-            logger.error(f"NapCat返回错误状态码 {e.response.status_code}: {e.response.text}")
-            raise
         except Exception as e:
-            logger.error(f"从NapCat获取Cookie失败: {str(e)}")
+            logger.error(f"通过适配器API获取Cookie失败: {str(e)}")
             raise
 
     @staticmethod
-    async def renew_cookies(port: str, host: str) -> bool:
+    async def renew_cookies(stream_id: Optional[str] = None) -> bool:
         """更新Cookie文件"""
         try:
             domain = "user.qzone.qq.com"
-            cookie_data = await CookieManager.fetch_cookies(domain, port, host)
+            cookie_data = await CookieManager.fetch_cookies(domain, stream_id)
             cookie_str = cookie_data["cookies"]
             parsed_cookies = CookieManager.parse_cookie_string(cookie_str)
             uin = CookieManager.extract_uin_from_cookie(cookie_str)
@@ -755,17 +753,16 @@ class QZoneAPI:
 class QZoneManager:
     """QQ空间管理器 - 高级封装类"""
     
-    def __init__(self, port: str, host: str):
+    def __init__(self, stream_id: Optional[str] = None):
         """初始化QZone管理器"""
-        self.port = port
-        self.host = host
+        self.stream_id = stream_id
         self.cookie_manager = CookieManager()
 
     async def _get_qzone_api(self, qq_account: str) -> Optional[QZoneAPI]:
         """获取QZone API实例"""
         try:
             # 更新Cookie
-            await self.cookie_manager.renew_cookies(self.port, self.host)
+            await self.cookie_manager.renew_cookies(self.stream_id)
             
             # 加载Cookie
             cookies = self.cookie_manager.load_cookies(qq_account)
