@@ -28,6 +28,12 @@ class APIProvider(ConfigBase):
     retry_interval: int = 10
     """重试间隔（如果API调用失败，重试的间隔时间，单位：秒）"""
 
+    enable_content_obfuscation: bool = field(default=False)
+    """是否启用内容混淆（用于特定场景下的内容处理）"""
+
+    obfuscation_intensity: int = field(default=1)
+    """混淆强度（1-3级，数值越高混淆程度越强）"""
+
     def get_api_key(self) -> str:
         return self.api_key
 

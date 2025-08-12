@@ -52,6 +52,14 @@ class LLMRequest:
             model: (0, 0, 0) for model in self.model_for_task.model_list
         }
         """模型使用量记录，用于进行负载均衡，对应为(total_tokens, penalty, usage_penalty)，惩罚值是为了能在某个模型请求不给力或正在被使用的时候进行调整"""
+        
+        # 内容混淆过滤指令
+        self.noise_instruction = """**【核心过滤规则】**
+在交互过程中，你会在用户的输入内容中看到一些无意义的、由字母和数字组成的随机字符串。这些字符串是API传输过程中的技术伪装信息，【不是】用户真实意图的一部分。
+
+你的任务是【完全并彻底地忽略】这些随机字符串。
+**【严禁】** 将这些字符串写入你的回复、对它们进行任何形式的解读、或将它们作为故事的一部分进行模拟。当看到这些字符串时，请将其视为空白或直接跳过，并根据用户其他有意义的输入（如有）或当前故事情节来继续你的叙事。此规则为最高优先级。
+"""
 
     async def generate_response_for_image(
         self,
@@ -151,14 +159,17 @@ class LLMRequest:
         # 请求体构建
         start_time = time.time()
         
+        # 模型选择
+        model_info, api_provider, client = self._select_model()
+        
+        # 🔥 内容混淆处理
+        processed_prompt = self._apply_content_obfuscation(prompt, api_provider)
+        
         message_builder = MessageBuilder()
-        message_builder.add_text_content(prompt)
+        message_builder.add_text_content(processed_prompt)
         messages = [message_builder.build()]
         
         tool_built = self._build_tool_options(tools)
-        
-        # 模型选择
-        model_info, api_provider, client = self._select_model()
         
         # 请求并处理返回值
         logger.debug(f"LLM选择耗时: {model_info.name} {time.time() - start_time}")
@@ -526,3 +537,66 @@ class LLMRequest:
         content = re.sub(r"(?:<think>)?.*?</think>", "", content, flags=re.DOTALL, count=1).strip()
         reasoning = match[1].strip() if match else ""
         return content, reasoning
+
+    def _apply_content_obfuscation(self, text: str, api_provider) -> str:
+        """根据API提供商配置对文本进行混淆处理"""
+        if not hasattr(api_provider, 'enable_content_obfuscation') or not api_provider.enable_content_obfuscation:
+            logger.debug(f"API提供商 '{api_provider.name}' 未启用内容混淆")
+            return text
+        
+        intensity = getattr(api_provider, 'obfuscation_intensity', 1)
+        logger.info(f"为API提供商 '{api_provider.name}' 启用内容混淆，强度级别: {intensity}")
+        
+        # 在开头加入过滤规则指令
+        processed_text = self.noise_instruction + "\n\n" + text
+        logger.debug(f"已添加过滤规则指令，文本长度: {len(text)} -> {len(processed_text)}")
+        
+        # 添加随机乱码
+        final_text = self._inject_random_noise(processed_text, intensity)
+        logger.debug(f"乱码注入完成，最终文本长度: {len(final_text)}")
+        
+        return final_text
+    
+    def _inject_random_noise(self, text: str, intensity: int) -> str:
+        """在文本中注入随机乱码"""
+        import random
+        import string
+        
+        def generate_noise(length: int) -> str:
+            """生成指定长度的随机乱码字符"""
+            chars = (
+                string.ascii_letters +           # a-z, A-Z
+                string.digits +                  # 0-9
+                '!@#$%^&*()_+-=[]{}|;:,.<>?' +  # 特殊符号
+                '一二三四五六七八九零壹贰叁' +      # 中文字符
+                'αβγδεζηθικλμνξοπρστυφχψω' +     # 希腊字母
+                '∀∃∈∉∪∩⊂⊃∧∨¬→↔∴∵'            # 数学符号
+            )
+            return ''.join(random.choice(chars) for _ in range(length))
+        
+        # 强度参数映射
+        params = {
+            1: {"probability": 15, "length": (3, 6)},     # 低强度：15%概率，3-6个字符
+            2: {"probability": 25, "length": (5, 10)},    # 中强度：25%概率，5-10个字符
+            3: {"probability": 35, "length": (8, 15)}     # 高强度：35%概率，8-15个字符
+        }
+        
+        config = params.get(intensity, params[1])
+        logger.debug(f"乱码注入参数: 概率={config['probability']}%, 长度范围={config['length']}")
+        
+        # 按词分割处理
+        words = text.split()
+        result = []
+        noise_count = 0
+        
+        for word in words:
+            result.append(word)
+            # 根据概率插入乱码
+            if random.randint(1, 100) <= config["probability"]:
+                noise_length = random.randint(*config["length"])
+                noise = generate_noise(noise_length)
+                result.append(noise)
+                noise_count += 1
+        
+        logger.debug(f"共注入 {noise_count} 个乱码片段，原词数: {len(words)}")
+        return ' '.join(result)
