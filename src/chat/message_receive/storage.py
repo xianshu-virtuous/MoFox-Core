@@ -151,7 +151,8 @@ class MessageStorage:
             elif message.message_segment.type == "reply":
                 qq_message_id = message.message_segment.data.get("id")
                 logger.info(f"更新消息ID完成,消息ID为{qq_message_id}")
-
+            elif message.message_segment.type == "adapter_response":
+                logger.debug("适配器响应消息，不需要更新ID")
             else:
                 logger.info(f"更新消息ID错误，seg类型为{message.message_segment.type}")
                 return

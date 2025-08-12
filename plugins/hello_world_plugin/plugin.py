@@ -12,6 +12,55 @@ from src.plugin_system import (
 )
 
 
+from src.plugin_system.base.base_command import BaseCommand
+from src.plugin_system.apis import send_api
+from typing import Tuple
+
+class GetGroupListCommand(BaseCommand):
+    """获取群列表命令"""
+    
+    command_name = "get_groups"
+    command_description = "获取机器人加入的群列表"
+    command_pattern = r"^/get_groups$"
+    command_help = "获取机器人加入的群列表"
+    command_examples = ["/get_groups"]
+    intercept_message = True
+    
+    async def execute(self) -> Tuple[bool, str, bool]:
+        try:
+            # 获取聊天流ID
+            stream_id = self.message.chat_stream.stream_id
+            
+            # 调用适配器命令API
+            response = await send_api.adapter_command_to_stream(
+                action="get_group_list",
+                params={},
+                stream_id=stream_id
+            )
+            
+            if response["status"] == "ok":
+                group_list = response.get("data", [])
+                
+                if group_list:
+                    # 格式化群列表信息
+                    group_info = "\\n".join([
+                        f"群号: {group['group_id']}, 群名: {group['group_name']}"
+                        for group in group_list
+                    ])
+                    await self.send_text(f"机器人加入的群列表:\\n{group_info}")
+                else:
+                    await self.send_text("机器人未加入任何群")
+                
+                return True, "获取群列表成功", True
+            else:
+                await self.send_text(f"获取群列表失败: {response['message']}")
+                return False, "获取群列表失败", True
+                
+        except Exception as e:
+            logger.error(f"执行获取群列表命令时出错: {e}")
+            await self.send_text("命令执行失败")
+            return False, "命令执行失败", True
+
 class CompareNumbersTool(BaseTool):
     """比较两个数大小的工具"""
 
@@ -182,6 +231,7 @@ class HelloWorldPlugin(BasePlugin):
             (CompareNumbersTool.get_tool_info(), CompareNumbersTool),  # 添加比较数字工具
             (ByeAction.get_action_info(), ByeAction),  # 添加告别Action
             (TimeCommand.get_command_info(), TimeCommand),
+            (GetGroupListCommand.get_command_info(), GetGroupListCommand),  # 添加获取群列表命令
             # (PrintMessage.get_handler_info(), PrintMessage),
         ]
 
