@@ -38,6 +38,7 @@ urllib3
 uvicorn
 websockets
 strawberry-graphql[fastapi]
+httpx[socks]
 packaging
 rich
 psutil
