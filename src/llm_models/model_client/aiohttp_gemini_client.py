@@ -20,6 +20,29 @@ from ..payload_content.tool_option import ToolOption, ToolParam, ToolCall
 logger = get_logger("AioHTTP-Gemini客户端")
 
 
+def _format_to_mime_type(image_format: str) -> str:
+    """
+    将图片格式转换为正确的MIME类型
+    
+    Args:
+        image_format (str): 图片格式 (如 'jpg', 'png' 等)
+        
+    Returns:
+        str: 对应的MIME类型
+    """
+    format_mapping = {
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg", 
+        "png": "image/png",
+        "webp": "image/webp",
+        "gif": "image/gif",
+        "heic": "image/heic",
+        "heif": "image/heif"
+    }
+    
+    return format_mapping.get(image_format.lower(), f"image/{image_format.lower()}")
+
+
 def _convert_messages(messages: list[Message]) -> tuple[list[dict], list[str] | None]:
     """
     转换消息格式 - 将消息转换为Gemini REST API所需的格式
@@ -46,7 +69,7 @@ def _convert_messages(messages: list[Message]) -> tuple[list[dict], list[str] | 
                 if isinstance(item, tuple):  # (format, base64_data)
                     parts.append({
                         "inline_data": {
-                            "mime_type": f"image/{item[0].lower()}",
+                            "mime_type": _format_to_mime_type(item[0]),
                             "data": item[1]
                         }
                     })

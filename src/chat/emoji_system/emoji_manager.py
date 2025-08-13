@@ -957,7 +957,7 @@ class EmojiManager:
                         raise RuntimeError("GIF表情包转换失败")
                     prompt = "这是一个动态图表情包，每一张图代表了动态图的某一帧，黑色背景代表透明，描述一下表情包表达的情感和内容，描述细节，从互联网梗,meme的角度去分析"
                     description, _ = await self.vlm.generate_response_for_image(
-                        prompt, image_base64, "jpg", temperature=0.3, max_tokens=1000
+                        prompt, image_base64, "jpeg", temperature=0.3, max_tokens=1000
                     )
                 else:
                     prompt = (

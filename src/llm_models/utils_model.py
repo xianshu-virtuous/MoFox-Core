@@ -33,6 +33,38 @@ error_code_mapping = {
 }
 
 
+def _normalize_image_format(image_format: str) -> str:
+    """
+    标准化图片格式名称，确保与各种API的兼容性
+    
+    Args:
+        image_format (str): 原始图片格式
+        
+    Returns:
+        str: 标准化后的图片格式
+    """
+    format_mapping = {
+        "jpg": "jpeg",
+        "JPG": "jpeg", 
+        "JPEG": "jpeg",
+        "jpeg": "jpeg",
+        "png": "png",
+        "PNG": "png",
+        "webp": "webp",
+        "WEBP": "webp",
+        "gif": "gif",
+        "GIF": "gif",
+        "heic": "heic",
+        "HEIC": "heic",
+        "heif": "heif",
+        "HEIF": "heif"
+    }
+    
+    normalized = format_mapping.get(image_format, image_format.lower())
+    logger.debug(f"图片格式标准化: {image_format} -> {normalized}")
+    return normalized
+
+
 class RequestType(Enum):
     """请求类型枚举"""
 
@@ -78,6 +110,9 @@ class LLMRequest:
         Returns:
             (Tuple[str, str, str, Optional[List[ToolCall]]]): 响应内容、推理内容、模型名称、工具调用列表
         """
+        # 标准化图片格式以确保API兼容性
+        normalized_format = _normalize_image_format(image_format)
+        
         # 模型选择
         start_time = time.time()
         model_info, api_provider, client = self._select_model()
@@ -86,7 +121,7 @@ class LLMRequest:
         message_builder = MessageBuilder()
         message_builder.add_text_content(prompt)
         message_builder.add_image_content(
-            image_base64=image_base64, image_format=image_format, support_formats=client.get_support_image_formats()
+            image_base64=image_base64, image_format=normalized_format, support_formats=client.get_support_image_formats()
         )
         messages = [message_builder.build()]
 
