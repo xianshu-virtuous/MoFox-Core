@@ -1,8 +1,7 @@
 import asyncio
 import random
 import time
-import traceback
-from typing import List, Tuple, Type, Union, Any, Optional
+from typing import List, Tuple, Type
 
 from src.common.logger import get_logger
 from src.plugin_system import (
@@ -88,7 +87,7 @@ class SendFeedCommand(BaseCommand):
             # 权限检查
             if not user_id or not self.check_permission(user_id):
                 logger.info(f"用户 {user_id} 权限不足")
-                await self.send_text(f"权限不足，无法使用此命令")
+                await self.send_text("权限不足，无法使用此命令")
                 return False, "权限不足", True
 
             # 获取主题
@@ -791,7 +790,7 @@ class MaiZonePlugin(BasePlugin):
 
             # 初始化定时管理器
             if self.config_loader.get_config("schedule.enable_schedule", False):
-                logger.info(f"定时任务启用状态: true")
+                logger.info("定时任务启用状态: true")
                 self.schedule_manager = ScheduleManager(self)
                 asyncio.create_task(self._start_scheduler_delayed())
                 

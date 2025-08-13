@@ -16,7 +16,7 @@ from rich.traceback import install
 
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import global_config, model_config
-from sqlalchemy import select,insert,update,text,delete
+from sqlalchemy import select,insert,update,delete
 from src.common.database.sqlalchemy_models import Messages, GraphNodes, GraphEdges  # SQLAlchemy Models导入
 from src.common.logger import get_logger
 from src.common.database.sqlalchemy_database_api import get_session

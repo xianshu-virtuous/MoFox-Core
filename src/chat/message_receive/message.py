@@ -11,7 +11,7 @@ from maim_message import Seg, UserInfo, BaseMessageInfo, MessageBase
 from src.common.logger import get_logger
 from src.chat.utils.utils_image import get_image_manager
 from src.chat.utils.utils_voice import get_voice_text
-from src.multimodal.video_analyzer import get_video_analyzer
+from src.chat.utils.utils_video import get_video
 from .chat_stream import ChatStream
 
 install(extra_lines=3)
@@ -373,7 +373,7 @@ class MessageRecvS4U(MessageRecv):
                             logger.info(f"解码后视频大小: {len(video_bytes)} 字节")
                             
                             # 使用video analyzer分析视频
-                            video_analyzer = get_video_analyzer()
+                            video_analyzer = get_video()
                             result = await video_analyzer.analyze_video_from_bytes(
                                 video_bytes, 
                                 filename,

@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple, Type, Any
+from typing import List, Tuple, Type, Any
 from src.plugin_system import (
     BasePlugin,
     register_plugin,
@@ -14,7 +14,6 @@ from src.plugin_system import (
 
 from src.plugin_system.base.base_command import BaseCommand
 from src.plugin_system.apis import send_api
-from typing import Tuple
 from src.common.logger import get_logger
 
 logger = get_logger(__name__)

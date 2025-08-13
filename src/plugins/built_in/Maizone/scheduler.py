@@ -3,15 +3,13 @@ import datetime
 import time
 import traceback
 import os
-import json
-from typing import Dict, List, Any
+from typing import Dict, Any
 
 from src.common.logger import get_logger
 from src.plugin_system.apis import llm_api, config_api
 
 # 导入工具模块
 import sys
-import os
 sys.path.append(os.path.dirname(__file__))
 
 from qzone_utils import QZoneManager, get_send_history

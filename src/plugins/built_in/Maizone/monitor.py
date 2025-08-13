@@ -2,7 +2,7 @@ import asyncio
 import random
 import time
 import traceback
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 from src.common.logger import get_logger
 from src.plugin_system.apis import llm_api, config_api

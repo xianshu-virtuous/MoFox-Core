@@ -1,10 +1,8 @@
 import asyncio
 import json
 import io
-import base64
-from typing import Callable, Any, Coroutine, Optional, List, AsyncIterator
+from typing import Callable, Any, Coroutine, Optional
 import aiohttp
-from json_repair import repair_json
 
 from src.config.api_ada_configs import ModelInfo, APIProvider
 from src.common.logger import get_logger
@@ -289,7 +287,7 @@ def _default_normal_response_parser(
             if "functionCall" in candidate:
                 func_call = candidate["functionCall"]
                 api_response.tool_calls = [ToolCall(
-                    f"gemini_call_0",
+                    "gemini_call_0",
                     func_call.get("name", ""),
                     func_call.get("args", {})
                 )]

@@ -10,7 +10,7 @@ from typing import Dict, List, Any, Union, Type, Optional
 from contextlib import contextmanager
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError, DisconnectionError, OperationalError
-from sqlalchemy import desc, asc, func, and_, or_
+from sqlalchemy import desc, asc, func, and_
 from src.common.logger import get_logger
 from src.common.database.sqlalchemy_models import (
     Base, get_db_session, Messages, ActionRecords, PersonInfo, ChatStreams,
@@ -61,7 +61,7 @@ def get_db_session():
                 time.sleep(retry_delay * (attempt + 1))
             else:
                 raise
-        except Exception as e:
+        except Exception:
             if session:
                 session.rollback()
             raise

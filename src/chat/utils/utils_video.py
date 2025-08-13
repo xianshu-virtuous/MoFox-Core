@@ -12,7 +12,7 @@ import asyncio
 import base64
 from PIL import Image
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Dict
 import io
 
 from src.llm_models.utils_model import LLMRequest
@@ -30,21 +30,20 @@ class VideoAnalyzer:
         # 使用专用的视频分析配置
         try:
             self.video_llm = LLMRequest(
-                model_set=model_config.model_task_config.video_analysis,
-                request_type="video_analysis"
+                model_set=model_config.model_task_config.utils_video,
+                request_type="utils_video"
             )
-            logger.info("✅ 使用video_analysis模型配置")
         except (AttributeError, KeyError) as e:
-            # 如果video_analysis不存在，使用vlm配置
+            # 如果utils_video不存在，使用vlm配置
             self.video_llm = LLMRequest(
                 model_set=model_config.model_task_config.vlm,
                 request_type="vlm"
             )
-            logger.warning(f"video_analysis配置不可用({e})，回退使用vlm配置")
+            logger.warning(f"utils_video配置不可用({e})，回退使用vlm配置")
         
         # 从配置文件读取参数，如果配置不存在则使用默认值
         try:
-            config = global_config.video_analysis
+            config = global_config.utils_video
             self.max_frames = config.max_frames
             self.frame_quality = config.frame_quality
             self.max_image_size = config.max_image_size
@@ -67,11 +66,11 @@ class VideoAnalyzer:
             self.frame_interval = 1.0  # 抽帧时间间隔（秒）
             self.batch_size = 3  # 批处理时每批处理的帧数
             self.timeout = 60.0  # 分析超时时间（秒）
-            logger.info(f"✅ 从配置文件读取视频分析参数")
+            logger.info("✅ 从配置文件读取视频分析参数")
             
         except AttributeError as e:
             # 如果配置不存在，使用代码中的默认值
-            logger.warning(f"配置文件中缺少video_analysis配置({e})，使用默认值")
+            logger.warning(f"配置文件中缺少utils_video配置({e})，使用默认值")
             self.max_frames = 6
             self.frame_quality = 85
             self.max_image_size = 600
@@ -345,8 +344,8 @@ class VideoAnalyzer:
 # 全局实例
 _video_analyzer = None
 
-def get_video_analyzer() -> VideoAnalyzer:
-    """获取视频分析器实例（单例模式）"""
+def get_video() -> VideoAnalyzer:
+    """获取视频分析器实例"""
     global _video_analyzer
     if _video_analyzer is None:
         _video_analyzer = VideoAnalyzer()

@@ -5,7 +5,6 @@ MaiZone插件独立配置文件加载系统
 它支持TOML格式的配置文件，具有配置验证、默认值处理、类型转换等功能。
 """
 
-import os
 import toml
 import shutil
 import datetime
@@ -165,8 +164,8 @@ class MaiZoneConfigLoader:
     
     def _save_config_to_file(self, config_data: Dict[str, Any]):
         """保存配置到文件（带注释）"""
-        toml_content = f"# MaiZone插件配置文件\n"
-        toml_content += f"# 让你的麦麦发QQ空间说说、评论、点赞，支持AI配图、定时发送和自动监控功能\n"
+        toml_content = "# MaiZone插件配置文件\n"
+        toml_content += "# 让你的麦麦发QQ空间说说、评论、点赞，支持AI配图、定时发送和自动监控功能\n"
         toml_content += f"# 配置版本: {self.config_version}\n\n"
         
         for section_name, section_spec in self.config_specs.items():
@@ -187,7 +186,7 @@ class MaiZoneConfigLoader:
                 if field_spec.choices:
                     toml_content += f"# 可选值: {', '.join(map(str, field_spec.choices))}\n"
                 if field_spec.min_value is not None or field_spec.max_value is not None:
-                    range_str = f"# 范围: "
+                    range_str = "# 范围: "
                     if field_spec.min_value is not None:
                         range_str += f"最小值 {field_spec.min_value}"
                     if field_spec.max_value is not None:

@@ -1,5 +1,4 @@
 import json
-import asyncio
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -93,13 +92,13 @@ class ScheduleManager:
                 existing_schedule = session.query(Schedule).filter(Schedule.date == today_str).first()
                 if existing_schedule:
                     # 更新现有日程 - 通过setattr或直接赋值
-                    setattr(existing_schedule, 'schedule_data', json.dumps(schedule_data))
-                    setattr(existing_schedule, 'updated_at', datetime.now())
+                    existing_schedule.schedule_data = json.dumps(schedule_data)
+                    existing_schedule.updated_at = datetime.now()
                 else:
                     # 创建新日程
                     new_schedule = Schedule()
-                    setattr(new_schedule, 'date', today_str)
-                    setattr(new_schedule, 'schedule_data', json.dumps(schedule_data))
+                    new_schedule.date = today_str
+                    new_schedule.schedule_data = json.dumps(schedule_data)
                     session.add(new_schedule)
             
             # 美化输出

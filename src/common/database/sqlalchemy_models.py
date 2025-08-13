@@ -68,7 +68,7 @@ class SessionProxy:
                             # commit后不要清除session，只是刷新状态
                             pass  # 保持session活跃
                         return result
-                    except Exception as e:
+                    except Exception:
                         try:
                             if session and hasattr(session, 'rollback'):
                                 session.rollback()
@@ -555,7 +555,7 @@ def get_db_session():
         session = SessionLocal()
         yield session
         session.commit()
-    except Exception as e:
+    except Exception:
         if session:
             session.rollback()
         raise

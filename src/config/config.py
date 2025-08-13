@@ -366,7 +366,7 @@ class Config(ConfigBase):
     custom_prompt: CustomPromptConfig
     voice: VoiceConfig
     schedule: ScheduleConfig
-    video_analysis: VideoAnalysisConfig = field(default_factory=lambda: VideoAnalysisConfig())
+    utils_video: VideoAnalysisConfig = field(default_factory=lambda: VideoAnalysisConfig())
 
 
 @dataclass

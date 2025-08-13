@@ -32,16 +32,18 @@ import traceback
 import time
 import difflib
 import asyncio
-from typing import Optional, Union, Dict, Any
+from typing import Optional, Union, Dict
 from src.common.logger import get_logger
 
 # 导入依赖
 from src.chat.message_receive.chat_stream import get_chat_manager
-from maim_message import UserInfo, GroupInfo
+from maim_message import UserInfo
 from src.chat.message_receive.chat_stream import ChatStream
 from src.chat.message_receive.uni_message_sender import HeartFCSender
 from src.chat.message_receive.message import MessageSending, MessageRecv
-from maim_message import Seg, UserInfo
+from src.chat.utils.chat_message_builder import get_raw_msg_before_timestamp_with_chat, replace_user_references_async
+from src.person_info.person_info import get_person_info_manager
+from maim_message import Seg
 from src.config.config import global_config
 
 logger = get_logger("send_api")
@@ -473,7 +475,7 @@ async def adapter_command_to_stream(
             logger.error("[SendAPI] 发送适配器命令失败")
             return {"status": "error", "message": "发送适配器命令失败"}
 
-        logger.debug(f"[SendAPI] 已发送适配器命令，等待响应...")
+        logger.debug("[SendAPI] 已发送适配器命令，等待响应...")
 
         # 等待适配器响应
         response = await wait_adapter_response(message_id, timeout)

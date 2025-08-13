@@ -7,7 +7,7 @@ from typing import Any, Dict, Tuple, List
 
 from src.common.logger import get_logger
 from src.common.database.sqlalchemy_models import OnlineTime, LLMUsage, Messages
-from src.common.database.sqlalchemy_database_api import get_db_session, db_query, db_save, db_get
+from src.common.database.sqlalchemy_database_api import db_query, db_save, db_get
 from src.manager.async_task_manager import AsyncTask
 from src.manager.local_store_manager import local_storage
 
