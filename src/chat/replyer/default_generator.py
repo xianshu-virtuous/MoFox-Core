@@ -119,6 +119,50 @@ If you need to use the search tool, please directly call the function "lpmm_sear
         name="lpmm_get_knowledge_prompt",
     )
 
+    # normal 版 prompt 模板（0.9之前的简化模式）
+    logger.info("[Prompt模式调试] 正在注册normal_style_prompt模板")
+    Prompt(
+        """
+【NORMAL模式已启用 - 这是0.9之前的简化提示词】
+你正在一个QQ群里聊天，你需要理解整个群的聊天动态和话题走向，并做出自然的回应。
+{expression_habits_block}
+{tool_info_block}
+{knowledge_prompt}
+{memory_block}
+{relation_info_block}
+{extra_info_block}
+
+{identity}
+如果有人说你是人机，你可以用一种阴阳怪气的口吻来回应
+{schedule_block}
+
+{action_descriptions}
+
+下面是群里最近的聊天内容：
+--------------------------------
+{time_block}
+{chat_info}
+--------------------------------
+
+{reply_target_block}
+
+你现在的心情是：{mood_state}
+{config_expression_style}
+注意不要复读你说过的话
+{keywords_reaction_prompt}
+请注意不要输出多余内容(包括前后缀，冒号和引号，at或 @等 )。只输出回复内容。
+{moderation_prompt}
+你的核心任务是针对 {reply_target_block} 中提到的内容，生成一段紧密相关且能推动对话的回复。你的回复应该：
+1.  明确回应目标消息，而不是宽泛地评论。
+2.  可以分享你的看法、提出相关问题，或者开个合适的玩笑。
+3.  目的是让对话更有趣、更深入。
+最终请输出一条简短、完整且口语化的回复。
+现在，你说：
+""",
+        "normal_style_prompt",
+    )
+    logger.info("[Prompt模式调试] normal_style_prompt模板注册完成")
+
 
 class DefaultReplyer:
     def __init__(
@@ -818,31 +862,106 @@ class DefaultReplyer:
             message_list_before_now_long, user_id, sender
         )
 
-        # 使用 s4u 风格的模板
-        template_name = "s4u_style_prompt"
-
-        return await global_prompt_manager.format_prompt(
-            template_name,
-            expression_habits_block=expression_habits_block,
-            tool_info_block=tool_info,
-            knowledge_prompt=prompt_info,
-            memory_block=memory_block,
-            relation_info_block=relation_info,
-            extra_info_block=extra_info_block,
-            identity=identity_block,
-            schedule_block=schedule_block,
-            action_descriptions=action_descriptions,
-            sender_name=sender,
-            mood_state=mood_prompt,
-            background_dialogue_prompt=background_dialogue_prompt,
-            time_block=time_block,
-            core_dialogue_prompt=core_dialogue_prompt,
-            reply_target_block=reply_target_block,
-            message_txt=target,
-            reply_style=global_config.personality.reply_style,
-            keywords_reaction_prompt=keywords_reaction_prompt,
-            moderation_prompt=moderation_prompt_block,
-        )
+        # 根据配置选择模板
+        current_prompt_mode = global_config.personality.prompt_mode
+        logger.info(f"[Prompt模式调试] 当前配置的prompt_mode: {current_prompt_mode}")
+        
+        if current_prompt_mode == "normal":
+            template_name = "normal_style_prompt"
+            logger.info(f"[Prompt模式调试] 选择使用normal模式模板: {template_name}")
+            # normal模式使用统一的聊天历史，不分离核心对话和背景对话
+            config_expression_style = global_config.personality.reply_style
+            
+            # 获取统一的聊天历史（不分离）
+            unified_message_list = get_raw_msg_before_timestamp_with_chat(
+                chat_id=self.chat_stream.stream_id,
+                timestamp=time.time(),
+                limit=int(global_config.chat.max_context_size * 1.5),
+            )
+            unified_chat_history = build_readable_messages(
+                unified_message_list,
+                replace_bot_name=True,
+                merge_messages=False,
+                timestamp_mode="normal_no_YMD",
+                read_mark=0.0,
+                truncate=True,
+                show_actions=True,
+            )
+            
+            # 为normal模式构建简化的chat_info（不包含时间，因为time_block单独传递）
+            chat_info = f"""群里的聊天内容：
+{unified_chat_history}"""
+            logger.info(f"[Prompt模式调试] normal模式使用统一聊天历史，不分离对话")
+            
+            logger.info(f"[Prompt模式调试] normal模式参数准备完成，开始调用format_prompt")
+            logger.info(f"[Prompt模式调试] normal模式传递的参数: template_name={template_name}")
+            logger.info(f"[Prompt模式调试] 检查global_prompt_manager是否有该模板...")
+            
+            # 检查模板是否存在
+            try:
+                test_prompt = await global_prompt_manager.get_prompt_async(template_name)
+                logger.info(f"[Prompt模式调试] 找到模板 {template_name}, 内容预览: {test_prompt[:100]}...")
+            except Exception as e:
+                logger.error(f"[Prompt模式调试] 模板 {template_name} 不存在或获取失败: {e}")
+            
+            result = await global_prompt_manager.format_prompt(
+                template_name,
+                expression_habits_block=expression_habits_block,
+                tool_info_block=tool_info,
+                knowledge_prompt=prompt_info,
+                memory_block=memory_block,
+                relation_info_block=relation_info,
+                extra_info_block=extra_info_block,
+                identity=identity_block,
+                schedule_block=schedule_block,
+                action_descriptions=action_descriptions,
+                time_block=time_block,  # 保留time_block参数
+                chat_info=chat_info,
+                reply_target_block=reply_target_block,
+                mood_state=mood_prompt,
+                config_expression_style=config_expression_style,
+                keywords_reaction_prompt=keywords_reaction_prompt,
+                moderation_prompt=moderation_prompt_block,
+            )
+            return result
+        else:
+            # 使用 s4u 风格的模板
+            template_name = "s4u_style_prompt"
+            logger.info(f"[Prompt模式调试] 选择使用s4u模式模板: {template_name} (prompt_mode={current_prompt_mode})")
+            
+            logger.info(f"[Prompt模式调试] s4u模式参数准备完成，开始调用format_prompt")
+            
+            # 检查s4u模板是否存在
+            try:
+                test_prompt = await global_prompt_manager.get_prompt_async(template_name)
+                logger.info(f"[Prompt模式调试] 找到s4u模板 {template_name}, 内容预览: {test_prompt[:100]}...")
+            except Exception as e:
+                logger.error(f"[Prompt模式调试] s4u模板 {template_name} 不存在或获取失败: {e}")
+            
+            result = await global_prompt_manager.format_prompt(
+                template_name,
+                expression_habits_block=expression_habits_block,
+                tool_info_block=tool_info,
+                knowledge_prompt=prompt_info,
+                memory_block=memory_block,
+                relation_info_block=relation_info,
+                extra_info_block=extra_info_block,
+                identity=identity_block,
+                schedule_block=schedule_block,
+                action_descriptions=action_descriptions,
+                sender_name=sender,
+                mood_state=mood_prompt,
+                background_dialogue_prompt=background_dialogue_prompt,
+                time_block=time_block,
+                core_dialogue_prompt=core_dialogue_prompt,
+                reply_target_block=reply_target_block,
+                message_txt=target,
+                reply_style=global_config.personality.reply_style,
+                keywords_reaction_prompt=keywords_reaction_prompt,
+                moderation_prompt=moderation_prompt_block,
+            )
+            logger.info(f"[Prompt模式调试] s4u format_prompt调用完成，结果预览: {result[:200]}...")
+            return result
 
     async def build_prompt_rewrite_context(
         self,
