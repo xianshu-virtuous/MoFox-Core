@@ -512,7 +512,7 @@ class ExpressionConfig(ConfigBase):
         # 如果都没有匹配，返回默认值
         return True, True, 300
 
-    def _get_stream_specific_config(self, chat_stream_id: str) -> Optional[tuple[bool, bool, int]]:
+    def _get_stream_specific_config(self, chat_stream_id: str) -> Optional[tuple[bool, bool, float]]:
         """
         获取特定聊天流的表达配置
 
@@ -552,7 +552,7 @@ class ExpressionConfig(ConfigBase):
 
         return None
 
-    def _get_global_config(self) -> Optional[tuple[bool, bool, int]]:
+    def _get_global_config(self) -> Optional[tuple[bool, bool, float]]:
         """
         获取全局表达配置
 
@@ -922,3 +922,35 @@ class VideoAnalysisConfig(ConfigBase):
     
     enable_frame_timing: bool = True
     """是否在分析中包含帧的时间信息"""
+
+
+@dataclass
+class DependencyManagementConfig(ConfigBase):
+    """插件Python依赖管理配置类"""
+    
+    auto_install: bool = True
+    """是否启用自动安装Python依赖包"""
+    
+    auto_install_timeout: int = 300
+    """安装超时时间（秒）"""
+    
+    use_proxy: bool = False
+    """是否使用代理进行包安装"""
+    
+    proxy_url: str = ""
+    """代理URL，如: "http://proxy.example.com:8080" 或 "socks5://proxy.example.com:1080" """
+    
+    pip_options: list[str] = field(default_factory=lambda: [
+        "--no-warn-script-location",
+        "--disable-pip-version-check"
+    ])
+    """pip安装选项"""
+    
+    allowed_auto_install: bool = True
+    """是否允许自动安装（主开关），关闭后所有插件都不会自动安装依赖"""
+    
+    prompt_before_install: bool = False
+    """安装前是否提示用户（暂未实现）"""
+    
+    install_log_level: str = "INFO"
+    """依赖安装日志级别"""

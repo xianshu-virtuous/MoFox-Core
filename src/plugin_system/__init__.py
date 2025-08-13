@@ -35,6 +35,10 @@ from .utils import (
     # generate_plugin_manifest,
 )
 
+# 导入依赖管理模块
+from .utils.dependency_manager import get_dependency_manager, configure_dependency_manager
+from .utils.dependency_config import get_dependency_config, configure_dependency_settings
+
 from .apis import (
     chat_api,
     tool_api,  

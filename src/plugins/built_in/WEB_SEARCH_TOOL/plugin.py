@@ -14,7 +14,8 @@ from src.plugin_system import (
     ComponentInfo,
     ConfigField,
     llm_api,
-    ToolParamType
+    ToolParamType,
+    PythonDependency
 )
 import httpx
 from bs4 import BeautifulSoup
@@ -398,7 +399,30 @@ class WEBSEARCHPLUGIN(BasePlugin):
     plugin_name: str = "web_search_tool"  # 内部标识符
     enable_plugin: bool = True
     dependencies: List[str] = []  # 插件依赖列表
-    python_dependencies: List[str] = ["asyncddgs","exa_py","httpx[socks]"]  # Python包依赖列表
+    # Python包依赖列表 - 支持两种格式：
+    # 方式1: 简单字符串列表（向后兼容）
+    # python_dependencies: List[str] = ["asyncddgs", "exa_py", "httpx[socks]"]
+    
+    # 方式2: 详细的PythonDependency对象（推荐）
+    python_dependencies: List[PythonDependency] = [
+        PythonDependency(
+            package_name="asyncddgs",
+            description="异步DuckDuckGo搜索库",
+            optional=False
+        ),
+        PythonDependency(
+            package_name="exa_py", 
+            description="Exa搜索API客户端库",
+            optional=True  # 如果没有API密钥，这个是可选的
+        ),
+        PythonDependency(
+            package_name="httpx",
+            version=">=0.20.0",
+            install_name="httpx[socks]",  # 安装时使用这个名称（包含可选依赖）
+            description="支持SOCKS代理的HTTP客户端库",
+            optional=False
+        )
+    ]
     config_file_name: str = "config.toml"  # 配置文件名
 
     # 配置节描述
