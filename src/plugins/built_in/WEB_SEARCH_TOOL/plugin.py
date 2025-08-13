@@ -190,16 +190,21 @@ class URLParserTool(BaseTool):
             proxies = None
             
             if enable_proxy:
+                socks5_proxy = self.get_config("proxy.socks5_proxy", None)
                 http_proxy = self.get_config("proxy.http_proxy", None)
                 https_proxy = self.get_config("proxy.https_proxy", None)
                 
-                if http_proxy or https_proxy:
+                # 优先使用SOCKS5代理（全协议代理）
+                if socks5_proxy:
+                    proxies = socks5_proxy
+                    logger.info(f"使用SOCKS5代理: {socks5_proxy}")
+                elif http_proxy or https_proxy:
                     proxies = {}
                     if http_proxy:
                         proxies["http://"] = http_proxy
                     if https_proxy:
                         proxies["https://"] = https_proxy
-                    logger.info(f"使用代理配置: {proxies}")
+                    logger.info(f"使用HTTP/HTTPS代理配置: {proxies}")
             
             client_kwargs = {"timeout": 15.0, "follow_redirects": True}
             if proxies:
@@ -393,7 +398,7 @@ class WEBSEARCHPLUGIN(BasePlugin):
     plugin_name: str = "web_search_tool"  # 内部标识符
     enable_plugin: bool = True
     dependencies: List[str] = []  # 插件依赖列表
-    python_dependencies: List[str] = ["asyncddgs","exa_py"]  # Python包依赖列表
+    python_dependencies: List[str] = ["asyncddgs","exa_py","httpx[socks]"]  # Python包依赖列表
     config_file_name: str = "config.toml"  # 配置文件名
 
     # 配置节描述
@@ -412,6 +417,7 @@ class WEBSEARCHPLUGIN(BasePlugin):
         "proxy": {
             "http_proxy": ConfigField(type=str, default=None, description="HTTP代理地址，格式如: http://proxy.example.com:8080"),
             "https_proxy": ConfigField(type=str, default=None, description="HTTPS代理地址，格式如: http://proxy.example.com:8080"),
+            "socks5_proxy": ConfigField(type=str, default=None, description="SOCKS5代理地址，格式如: socks5://proxy.example.com:1080"),
             "enable_proxy": ConfigField(type=bool, default=False, description="是否启用代理")
         },
         "components":{
