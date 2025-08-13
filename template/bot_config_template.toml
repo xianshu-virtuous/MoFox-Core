@@ -92,7 +92,14 @@ focus_value = 1
 # 麦麦的专注思考能力，越高越容易专注，可能消耗更多token
 # 专注时能更好把握发言时机，能够进行持久的连续对话
 
-max_context_size = 20 # 上下文长度
+talk_frequency = 1 # 麦麦活跃度，越高，麦麦回复越频繁
+
+# 强制私聊专注模式
+force_focus_private = false # 是否强制私聊进入专注模式，开启后私聊将始终保持专注状态
+
+max_context_size = 25 # 上下文长度
+thinking_timeout = 40 # 麦麦一次回复最长思考规划时间，超过这个时间的思考会放弃（往往是api反应太慢）
+replyer_random_probability = 0.5 # 首要replyer模型被选择的概率
 
 mentioned_bot_inevitable_reply = true # 提及 bot 大概率回复
 at_bot_inevitable_reply = true # @bot 或 提及bot 大概率回复

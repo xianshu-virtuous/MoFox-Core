@@ -341,6 +341,15 @@ class HeartFChatting:
                 self.energy_value += 1 / global_config.chat.focus_value
                 self._log_energy_change("能量值增加")
 
+            # 检查是否应该退出专注模式
+            # 如果开启了强制私聊专注模式且当前为私聊，则不允许退出专注状态
+            is_private_chat = self.chat_stream.group_info is None
+            if global_config.chat.force_focus_private and is_private_chat:
+                # 强制私聊专注模式下，保持专注状态，但重置能量值防止过低
+                if self.energy_value <= 1:
+                    self.energy_value = 5  # 重置为较低但足够的能量值
+                return True
+            
             if self.energy_value <= 1:
                 self.energy_value = 1
                 self.loop_mode = ChatMode.NORMAL
@@ -348,6 +357,13 @@ class HeartFChatting:
 
             return True
         elif self.loop_mode == ChatMode.NORMAL:
+            # 检查是否应该强制进入专注模式（私聊且开启强制专注）
+            is_private_chat = self.chat_stream.group_info is None
+            if global_config.chat.force_focus_private and is_private_chat:
+                self.loop_mode = ChatMode.FOCUS
+                self.energy_value = 10  # 设置初始能量值
+                return True
+            
             if global_config.chat.focus_value != 0:
                 if new_message_count > 3 / pow(global_config.chat.focus_value, 0.5):
                     self.loop_mode = ChatMode.FOCUS

@@ -209,6 +209,9 @@ class ChatConfig(ConfigBase):
         
         return self.focus_value
 
+    force_focus_private: bool = False
+    """是否强制私聊进入专注模式，开启后私聊将始终保持专注状态"""
+
     def get_current_talk_frequency(self, chat_stream_id: Optional[str] = None) -> float:
         """
         根据当前时间和聊天流获取对应的 talk_frequency
