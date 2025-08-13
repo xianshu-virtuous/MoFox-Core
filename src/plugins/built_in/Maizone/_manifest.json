@@ -4,8 +4,8 @@
   "version": "2.0.0",
   "description": "让你的麦麦发QQ空间说说、评论、点赞，支持AI配图、定时发送和自动监控功能",
   "author": {
-    "name": "重构版",
-    "url": "https://github.com/internetsb"
+    "name": "MaiBot-Plus",
+    "url": "https://github.com/MaiBot-Plus"
   },
   "license": "AGPL-v3.0",
   
@@ -13,8 +13,8 @@
     "min_version": "0.8.0",
     "max_version": "0.10.0"
   },
-  "homepage_url": "https://github.com/internetsb/Maizone",
-  "repository_url": "https://github.com/internetsb/Maizone",
+  "homepage_url": "https://github.com/MaiBot-Plus/MaiMbot-Pro-Max",
+  "repository_url": "https://github.com/MaiBot-Plus/MaiMbot-Pro-Max",
   "keywords": ["QQ空间", "说说", "动态", "评论", "点赞", "自动化", "AI配图"],
   "categories": ["社交", "自动化", "QQ空间"],
   

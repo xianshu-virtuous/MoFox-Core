@@ -454,7 +454,7 @@ async def adapter_command_to_stream(
         }
 
         # 创建消息段
-        message_segment = Seg(type="adapter_command", data=adapter_command_data)
+        message_segment = Seg(type="adapter_command", data=adapter_command_data)  # type: ignore
 
         # 构建发送消息对象
         bot_message = MessageSending(

@@ -429,7 +429,7 @@ class EmojiManager:
             else:
                 emoji_update.usage_count += 1
                 emoji_update.last_used_time = time.time()  # Update last used time
-                emoji_update.save()  # Persist changes to DB
+                session.commit()  # Persist changes to DB
         except Exception as e:
             logger.error(f"记录表情使用失败: {str(e)}")
 
