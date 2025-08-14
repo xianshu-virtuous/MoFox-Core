@@ -812,7 +812,7 @@ def build_readable_actions(actions: List[Dict[str, Any]]) -> str:
     from src.common.logger import get_logger
     logger = get_logger("chat_message_builder")
     
-    logger.info(f"[build_readable_actions] 开始处理 {len(actions) if actions else 0} 条动作记录")
+    logger.debug(f"[build_readable_actions] 开始处理 {len(actions) if actions else 0} 条动作记录")
     
     if not actions:
         logger.debug("[build_readable_actions] 动作记录为空，返回空字符串")
@@ -821,19 +821,19 @@ def build_readable_actions(actions: List[Dict[str, Any]]) -> str:
     output_lines = []
     current_time = time.time()
     
-    logger.info(f"[build_readable_actions] 当前时间戳: {current_time}")
+    logger.debug(f"[build_readable_actions] 当前时间戳: {current_time}")
 
     # The get functions return actions sorted ascending by time. Let's reverse it to show newest first.
     # sorted_actions = sorted(actions, key=lambda x: x.get("time", 0), reverse=True)
 
     for i, action in enumerate(actions):
-        logger.info(f"[build_readable_actions] === 处理第 {i} 条动作记录 ===")
-        logger.info(f"[build_readable_actions] 原始动作数据: {action}")
+        logger.debug(f"[build_readable_actions] === 处理第 {i} 条动作记录 ===")
+        logger.debug(f"[build_readable_actions] 原始动作数据: {action}")
         
         action_time = action.get("time", current_time)
         action_name = action.get("action_name", "未知动作")
         
-        logger.info(f"[build_readable_actions] 动作时间戳: {action_time}, 动作名称: '{action_name}'")
+        logger.debug(f"[build_readable_actions] 动作时间戳: {action_time}, 动作名称: '{action_name}'")
         
         # 检查是否是原始的 action_name 值
         original_action_name = action.get("action_name")
@@ -849,10 +849,10 @@ def build_readable_actions(actions: List[Dict[str, Any]]) -> str:
             continue
 
         action_prompt_display = action.get("action_prompt_display", "无具体内容")
-        logger.info(f"[build_readable_actions] 动作提示显示: '{action_prompt_display}'")
+        logger.debug(f"[build_readable_actions] 动作提示显示: '{action_prompt_display}'")
 
         time_diff_seconds = current_time - action_time
-        logger.info(f"[build_readable_actions] 时间差: {time_diff_seconds} 秒")
+        logger.debug(f"[build_readable_actions] 时间差: {time_diff_seconds} 秒")
 
         if time_diff_seconds < 60:
             time_ago_str = f"在{int(time_diff_seconds)}秒前"
@@ -860,14 +860,14 @@ def build_readable_actions(actions: List[Dict[str, Any]]) -> str:
             time_diff_minutes = round(time_diff_seconds / 60)
             time_ago_str = f"在{int(time_diff_minutes)}分钟前"
 
-        logger.info(f"[build_readable_actions] 时间描述: '{time_ago_str}'")
+        logger.debug(f"[build_readable_actions] 时间描述: '{time_ago_str}'")
 
         line = f"{time_ago_str}，你使用了\"{action_name}\"，具体内容是：\"{action_prompt_display}\""
-        logger.info(f"[build_readable_actions] 生成的行: '{line}'")
+        logger.debug(f"[build_readable_actions] 生成的行: '{line}'")
         output_lines.append(line)
 
     result = "\n".join(output_lines)
-    logger.info(f"[build_readable_actions] 最终结果: '{result}'")
+    logger.debug(f"[build_readable_actions] 最终结果: '{result}'")
     return result
 
 
