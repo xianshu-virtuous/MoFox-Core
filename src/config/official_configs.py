@@ -123,7 +123,7 @@ class RelationshipConfig(ConfigBase):
     enable_relationship: bool = True
     """是否启用关系系统"""
 
-    relation_frequency: int = 1
+    relation_frequency: float = 1.0
     """关系频率，麦麦构建关系的速度"""
 
 
