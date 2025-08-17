@@ -416,7 +416,11 @@ MODULE_COLORS = {
     "model_utils": "\033[38;5;164m",  # 紫红色
     "relationship_fetcher": "\033[38;5;170m",  # 浅紫色
     "relationship_builder": "\033[38;5;93m",  # 浅蓝色
-    # s4u
+    "sqlalchemy_init": "\033[38;5;105m", #
+    "sqlalchemy_models": "\033[38;5;105m",
+    "sqlalchemy_database_api": "\033[38;5;105m",
+
+    #s4u
     "context_web_api": "\033[38;5;240m",  # 深灰色
     "S4U_chat": "\033[92m",  # 亮绿色
     
@@ -426,7 +430,9 @@ MODULE_COLORS = {
     "generator_api": "\033[38;5;28m",  # 森林绿
     "person_api": "\033[38;5;22m",  # 深绿色
     "tool_api": "\033[38;5;76m",  # 绿色
-    
+    "OpenAI客户端": "\033[38;5;81m",
+    "Gemini客户端": "\033[38;5;81m",
+
     # 插件系统扩展
     "plugin_base": "\033[38;5;196m",  # 红色
     "base_event_handler": "\033[38;5;203m",  # 粉红色
@@ -445,7 +451,9 @@ MODULE_COLORS = {
     "src.multimodal.video_analyzer": "\033[38;5;75m",  # 亮蓝色
     "ReplyerManager": "\033[38;5;173m",  # 浅橙色
     "relationship_builder_manager": "\033[38;5;176m",  # 浅紫色
-    
+    "expression_selector": "\033[38;5;176m",
+    "chat_message_builder": "\033[38;5;176m",
+
     # MaiZone QQ空间相关
     "MaiZone": "\033[38;5;98m",  # 紫色
     "MaiZone-Monitor": "\033[38;5;104m",  # 深紫色
@@ -453,10 +461,25 @@ MODULE_COLORS = {
     "MaiZone-Scheduler": "\033[38;5;134m",  # 紫红色
     "MaiZone-Utils": "\033[38;5;140m",  # 浅紫色
     
+    # MaiZone Refactored
+    "MaiZone.HistoryUtils": "\033[38;5;140m",
+    "MaiZone.SchedulerService": "\033[38;5;134m",
+    "MaiZone.QZoneService": "\033[38;5;98m",
+    "MaiZone.MonitorService": "\033[38;5;104m",
+    "MaiZone.ImageService": "\033[38;5;110m",
+    "MaiZone.CookieService": "\033[38;5;140m",
+    "MaiZone.ContentService": "\033[38;5;110m",
+    "MaiZone.Plugin": "\033[38;5;98m",
+    "MaiZone.SendFeedCommand": "\033[38;5;134m",
+    "MaiZone.SendFeedAction": "\033[38;5;134m",
+    "MaiZone.ReadFeedAction": "\033[38;5;134m",
+    
     # 网络工具
     "web_surfing_tool": "\033[38;5;130m",  # 棕色
     "tts": "\033[38;5;136m",  # 浅棕色
-    
+    "poke_plugin": "\033[38;5;136m",
+    "set_emoji_like_plugin": "\033[38;5;136m",
+
     # mais4u系统扩展
     "s4u_config": "\033[38;5;18m",  # 深蓝色
     "action": "\033[38;5;52m",  # 深红色（mais4u的action）
@@ -534,6 +557,19 @@ MODULE_ALIASES = {
     "MaiZone.ConfigLoader": "Mai空间配置",
     "MaiZone-Scheduler": "Mai空间调度",
     "MaiZone-Utils": "Mai空间工具",
+
+    # MaiZone Refactored
+    "MaiZone.HistoryUtils": "Mai空间历史",
+    "MaiZone.SchedulerService": "Mai空间调度",
+    "MaiZone.QZoneService": "Mai空间服务",
+    "MaiZone.MonitorService": "Mai空间监控",
+    "MaiZone.ImageService": "Mai空间图片",
+    "MaiZone.CookieService": "Mai空间饼干",
+    "MaiZone.ContentService": "Mai空间内容",
+    "MaiZone.Plugin": "Mai空间插件",
+    "MaiZone.SendFeedCommand": "Mai空间发说说",
+    "MaiZone.SendFeedAction": "Mai空间发说说",
+    "MaiZone.ReadFeedAction": "Mai空间读说说",
     
     # 网络工具
     "web_surfing_tool": "网络搜索",
