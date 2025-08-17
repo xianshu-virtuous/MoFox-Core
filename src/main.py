@@ -79,7 +79,19 @@ class MainSystem:
 
         # 其他初始化任务
         await asyncio.gather(self._init_components())
-
+        phrases = [
+            "我们的代码里没有bug，只有‘特性’.",
+            "你知道吗,雅诺狐的耳朵很好模",
+            "你群最高技术力——言柒姐姐！",
+            "初墨小姐宇宙第一(不是)",
+            "world.execute(me);",
+            "正在尝试连接到MaiBot的服务器...连接失败，正在转接到maimaiDX",
+            "你的bug就像星星一样多，而我的代码像太阳一样，一出来就看不见了。",
+            "温馨提示：请不要在代码中留下任何魔法数字，除非你知道它的含义。",
+            "世界上有10种人：懂二进制的和不懂的。"
+        ]
+        from random import choice
+        eggs = choice(phrases)
         logger.info(f"""
 全部系统初始化完成，{global_config.bot.nickname}已成功唤醒
 =========================================================
@@ -89,8 +101,9 @@ MaiMbot-Pro-Max(第三方改版)
 🌐 项目地址: https://github.com/MaiBot-Plus/MaiMbot-Pro-Max
 🏠 官方项目: https://github.com/MaiM-with-u/MaiBot
 =========================================================
-这是基于原版MMC的社区改版，包含增强功能和优化
+这是基于原版MMC的社区改版，包含增强功能和优化(同时也有更多的'特性')
 =========================================================
+小贴士:{eggs}
 """)
 
     async def _init_components(self):
