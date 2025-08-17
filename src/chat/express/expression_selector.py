@@ -140,48 +140,47 @@ class ExpressionSelector:
                 (Expression.chat_id.in_(related_chat_ids)) & (Expression.type == "grammar")
             ))
 
-        style_exprs = [
-            {
-                "id": expr.id,
-                "situation": expr.situation,
-                "style": expr.style,
-                "count": expr.count,
-                "last_active_time": expr.last_active_time,
-                "source_id": expr.chat_id,
-                "type": "style",
-                "create_date": expr.create_date if expr.create_date is not None else expr.last_active_time,
-            }
-            for expr in style_query.scalars()
-        ]
+            style_exprs = [
+                {
+                    "situation": expr.situation,
+                    "style": expr.style,
+                    "count": expr.count,
+                    "last_active_time": expr.last_active_time,
+                    "source_id": expr.chat_id,
+                    "type": "style",
+                    "create_date": expr.create_date if expr.create_date is not None else expr.last_active_time,
+                }
+                for expr in style_query.scalars()
+            ]
 
-        grammar_exprs = [
-            {
-                "situation": expr.situation,
-                "style": expr.style,
-                "count": expr.count,
-                "last_active_time": expr.last_active_time,
-                "source_id": expr.chat_id,
-                "type": "grammar",
-                "create_date": expr.create_date if expr.create_date is not None else expr.last_active_time,
-            }
-            for expr in grammar_query.scalars()
-        ]
+            grammar_exprs = [
+                {
+                    "situation": expr.situation,
+                    "style": expr.style,
+                    "count": expr.count,
+                    "last_active_time": expr.last_active_time,
+                    "source_id": expr.chat_id,
+                    "type": "grammar",
+                    "create_date": expr.create_date if expr.create_date is not None else expr.last_active_time,
+                }
+                for expr in grammar_query.scalars()
+            ]
 
-        style_num = int(total_num * style_percentage)
-        grammar_num = int(total_num * grammar_percentage)
-        # 按权重抽样（使用count作为权重）
-        if style_exprs:
-            style_weights = [expr.get("count", 1) for expr in style_exprs]
-            selected_style = weighted_sample(style_exprs, style_weights, total_num)
-        else:
-            selected_style = []
-        if grammar_exprs:
-            grammar_weights = [expr.get("count", 1) for expr in grammar_exprs]
-            selected_grammar = weighted_sample(grammar_exprs, grammar_weights, grammar_num)
-        else:
-            selected_grammar = []
-        
-        return selected_style, selected_grammar
+            style_num = int(total_num * style_percentage)
+            grammar_num = int(total_num * grammar_percentage)
+            # 按权重抽样（使用count作为权重）
+            if style_exprs:
+                style_weights = [expr.get("count", 1) for expr in style_exprs]
+                selected_style = weighted_sample(style_exprs, style_weights, style_num)
+            else:
+                selected_style = []
+            if grammar_exprs:
+                grammar_weights = [expr.get("count", 1) for expr in grammar_exprs]
+                selected_grammar = weighted_sample(grammar_exprs, grammar_weights, grammar_num)
+            else:
+                selected_grammar = []
+            
+            return selected_style, selected_grammar
 
     def update_expressions_count_batch(self, expressions_to_update: List[Dict[str, Any]], increment: float = 0.1):
         """对一批表达方式更新count值，按chat_id+type分组后一次性写入数据库"""
