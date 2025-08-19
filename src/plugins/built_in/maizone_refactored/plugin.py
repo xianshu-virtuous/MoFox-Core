@@ -70,8 +70,9 @@ class MaiZoneRefactoredPlugin(BasePlugin):
             "random_interval_max_minutes": ConfigField(type=int, default=15, description="随机间隔分钟数上限"),
         },
         "cookie": {
-            "http_fallback_host": ConfigField(type=str, default="127.0.0.1", description="备用Cookie获取服务的主机地址"),
-            "http_fallback_port": ConfigField(type=int, default=8080, description="备用Cookie获取服务的端口"),
+            "http_fallback_host": ConfigField(type=str, default="172.20.130.55", description="备用Cookie获取服务的主机地址"),
+            "http_fallback_port": ConfigField(type=int, default=9999, description="备用Cookie获取服务的端口"),
+            "napcat_token": ConfigField(type=str, default="", description="Napcat服务的认证Token（可选）"),
         },
     }
 

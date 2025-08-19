@@ -68,10 +68,11 @@ class CookieService:
 
     async def _get_cookies_from_http(self) -> Optional[Dict[str, str]]:
         """通过备用HTTP端点获取Cookie"""
-        host = self.get_config("cookie.http_fallback_host")
-        port = self.get_config("cookie.http_fallback_port")
+        host = self.get_config("cookie.http_fallback_host", "172.20.130.55")
+        port = self.get_config("cookie.http_fallback_port", "9999")
 
         if not host or not port:
+            logger.warning("Cookie HTTP备用配置缺失：请在配置文件中设置 cookie.http_fallback_host 和 cookie.http_fallback_port")
             return None
 
         http_url = f"http://{host}:{port}/get_cookies"

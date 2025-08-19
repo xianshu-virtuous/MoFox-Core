@@ -9,6 +9,7 @@ import json
 import os
 import random
 import time
+from pathlib import Path
 from typing import Callable, Optional, Dict, Any, List, Tuple
 
 import aiohttp
@@ -245,9 +246,9 @@ class QZoneService:
 
         try:
             # 使用HTTP服务器方式获取Cookie
-            host = self.get_config("cookie.http_fallback_host", "127.0.0.1")
-            port = self.get_config("cookie.http_fallback_port", "8080")
-            napcat_token = self.get_config("plugin.napcat_token", "")
+            host = self.get_config("cookie.http_fallback_host", "172.20.130.55")
+            port = self.get_config("cookie.http_fallback_port", "9999")
+            napcat_token = self.get_config("cookie.napcat_token", "")
             
             cookie_data = await self._fetch_cookies_http(host, port, napcat_token)
             if cookie_data and "cookies" in cookie_data:
