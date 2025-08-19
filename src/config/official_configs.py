@@ -83,6 +83,60 @@ class ChatConfig(ValidatedConfigBase):
     proactive_thinking_interval: int = Field(default=1500, description="主动思考间隔")
     proactive_thinking_prompt_template: str = Field(default="", description="主动思考提示模板")
 
+    def get_current_talk_frequency(self, stream_id: str) -> float:
+        """
+        根据时间和聊天流ID获取当前的聊天频率
+        
+        Args:
+            stream_id: 聊天流ID
+            
+        Returns:
+            float: 当前聊天频率
+        """
+        import time
+        from datetime import datetime
+        
+        # 获取当前时间
+        current_time = datetime.now()
+        current_hour = current_time.hour
+        current_minute = current_time.minute
+        current_time_str = f"{current_hour:02d}:{current_minute:02d}"
+        
+        # 查找匹配的聊天频率调整配置
+        for config_entry in self.talk_frequency_adjust:
+            if not config_entry:
+                continue
+                
+            # 第一个元素是聊天流匹配模式
+            stream_pattern = config_entry[0]
+            
+            # 检查是否匹配当前聊天流
+            if stream_pattern == "" or stream_pattern in stream_id:
+                # 查找当前时间对应的频率
+                current_frequency = self.talk_frequency
+                
+                # 遍历时间-频率对
+                for time_freq_pair in config_entry[1:]:
+                    if "," not in time_freq_pair:
+                        continue
+                        
+                    time_part, freq_part = time_freq_pair.split(",", 1)
+                    try:
+                        config_hour, config_minute = map(int, time_part.split(":"))
+                        config_time_minutes = config_hour * 60 + config_minute
+                        current_time_minutes = current_hour * 60 + current_minute
+                        
+                        # 如果当前时间大于等于配置时间，更新频率
+                        if current_time_minutes >= config_time_minutes:
+                            current_frequency = float(freq_part)
+                    except (ValueError, IndexError):
+                        continue
+                        
+                return current_frequency
+        
+        # 如果没有找到匹配的配置，返回默认频率
+        return self.talk_frequency
+
 
 
 class MessageReceiveConfig(ValidatedConfigBase):
@@ -105,6 +159,50 @@ class ExpressionConfig(ValidatedConfigBase):
 
     expression_learning: list[list] = Field(default_factory=lambda: [], description="表达学习")
     expression_groups: list[list[str]] = Field(default_factory=list, description="表达组")
+
+    def get_expression_config_for_chat(self, chat_id: str) -> tuple[bool, bool, float]:
+        """
+        获取指定聊天流的表达配置
+        
+        Args:
+            chat_id: 聊天流ID
+            
+        Returns:
+            tuple[bool, bool, float]: (use_expression, enable_learning, learning_intensity)
+        """
+        # 默认值
+        use_expression = False
+        enable_learning = False
+        learning_intensity = 1.0
+        
+        # 查找匹配的表达学习配置
+        for config_entry in self.expression_learning:
+            if not config_entry or len(config_entry) < 4:
+                continue
+                
+            # 配置格式: [chat_pattern, use_expression, enable_learning, learning_intensity]
+            chat_pattern = config_entry[0]
+            
+            # 检查是否匹配当前聊天流
+            if chat_pattern == "" or chat_pattern in chat_id:
+                try:
+                    # 解析配置值
+                    use_expr_str = config_entry[1].lower() if isinstance(config_entry[1], str) else str(config_entry[1])
+                    enable_learn_str = config_entry[2].lower() if isinstance(config_entry[2], str) else str(config_entry[2])
+                    
+                    use_expression = use_expr_str in ['enable', 'true', '1']
+                    enable_learning = enable_learn_str in ['enable', 'true', '1']
+                    learning_intensity = float(config_entry[3])
+                    
+                    # 找到匹配的配置后返回
+                    return use_expression, enable_learning, learning_intensity
+                    
+                except (ValueError, IndexError, TypeError):
+                    # 如果解析失败，继续查找下一个配置
+                    continue
+        
+        # 如果没有找到匹配的配置，返回默认值
+        return use_expression, enable_learning, learning_intensity
 
 
 

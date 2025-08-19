@@ -160,6 +160,14 @@ class ModelTaskConfig(ValidatedConfigBase):
         ),
         description="情绪模型配置"
     )
+    mood: TaskConfig = Field(
+        default_factory=lambda: TaskConfig(
+            model_list=["siliconflow-deepseek-v3"],
+            max_tokens=800,
+            temperature=0.3
+        ),
+        description="心情模型配置"
+    )
     vlm: TaskConfig = Field(
         default_factory=lambda: TaskConfig(
             model_list=["qwen2.5-vl-72b"],

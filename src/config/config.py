@@ -171,13 +171,17 @@ def _version_tuple(v):
 
 def _update_dict(target: TOMLDocument | dict | Table, source: TOMLDocument | dict):
     """
-    将source字典的值更新到target字典中（如果target中存在相同的键）
+    将source字典的值更新到target字典中
+    对于已存在的键，使用source的值进行更新
+    对于不存在的键，从source添加到target
     """
     for key, value in source.items():
         # 跳过version字段的更新
         if key == "version":
             continue
+        
         if key in target:
+            # 键已存在，更新值
             target_value = target[key]
             if isinstance(value, dict) and isinstance(target_value, (dict, Table)):
                 _update_dict(target_value, value)
@@ -193,6 +197,23 @@ def _update_dict(target: TOMLDocument | dict | Table, source: TOMLDocument | dic
                 except (TypeError, ValueError):
                     # 如果转换失败，直接赋值
                     target[key] = value
+        else:
+            # 键不存在，从source添加新键到target
+            try:
+                if isinstance(value, dict):
+                    # 对于字典类型，创建新的Table
+                    new_table = tomlkit.table()
+                    _update_dict(new_table, value)
+                    target[key] = new_table
+                elif isinstance(value, list):
+                    # 对于数组类型
+                    target[key] = tomlkit.array(str(value)) if value else tomlkit.array()
+                else:
+                    # 其他类型使用item方法创建新值
+                    target[key] = tomlkit.item(value)
+            except (TypeError, ValueError):
+                # 如果转换失败，直接赋值
+                target[key] = value
 
 
 def _update_config_generic(config_name: str, template_name: str):
