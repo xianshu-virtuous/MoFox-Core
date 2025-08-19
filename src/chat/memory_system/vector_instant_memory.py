@@ -4,46 +4,67 @@ import json
 import hashlib
 from typing import List, Optional, Tuple, Dict, Any
 from dataclasses import dataclass
+import threading
+from datetime import datetime, timedelta
 
 import numpy as np
 import chromadb
 from chromadb.config import Settings
-from sqlalchemy import select
-
 from src.common.logger import get_logger
 from src.chat.utils.utils import get_embedding
 from src.config.config import global_config
-from src.common.database.sqlalchemy_models import Memory
-from src.common.database.sqlalchemy_database_api import get_db_session
 
 
-logger = get_logger("vector_instant_memory")
+logger = get_logger("vector_instant_memory_v2")
 
 
 @dataclass
-class MemoryImportancePattern:
-    """记忆重要性模式"""
-    description: str
-    vector: List[float]
-    threshold: float = 0.6
+class ChatMessage:
+    """聊天消息数据结构"""
+    message_id: str
+    chat_id: str
+    content: str
+    timestamp: float
+    sender: str = "unknown"
+    message_type: str = "text"
 
 
-class VectorInstantMemory:
-    """基于向量的瞬时记忆系统
+class VectorInstantMemoryV2:
+    """重构的向量瞬时记忆系统 V2
     
-    完全替换原有的LLM判断方式，使用向量相似度进行：
-    1. 记忆重要性判断
-    2. 记忆内容去重
-    3. 记忆检索匹配
+    新设计理念：
+    1. 全量存储 - 所有聊天记录都存储为向量
+    2. 定时清理 - 定期清理过期记录
+    3. 实时匹配 - 新消息与历史记录做向量相似度匹配
     """
     
-    def __init__(self, chat_id: str):
+    def __init__(self, chat_id: str, retention_hours: int = 24, cleanup_interval: int = 3600):
+        """
+        初始化向量瞬时记忆系统
+        
+        Args:
+            chat_id: 聊天ID
+            retention_hours: 记忆保留时长(小时) 
+            cleanup_interval: 清理间隔(秒)
+        """
         self.chat_id = chat_id
+        self.retention_hours = retention_hours
+        self.cleanup_interval = cleanup_interval
+        
+        # ChromaDB相关
         self.client = None
         self.collection = None
-        self.importance_patterns = []
-        self._init_chroma()
         
+        # 清理任务相关
+        self.cleanup_task = None
+        self.is_running = True
+        
+        # 初始化系统
+        self._init_chroma()
+        self._start_cleanup_task()
+        
+        logger.info(f"向量瞬时记忆系统V2初始化完成: {chat_id} (保留{retention_hours}小时)")
+    
     def _init_chroma(self):
         """初始化ChromaDB连接"""
         try:
@@ -53,7 +74,7 @@ class VectorInstantMemory:
                 settings=Settings(anonymized_telemetry=False)
             )
             self.collection = self.client.get_or_create_collection(
-                name="instant_memories",
+                name="chat_messages",
                 metadata={"hnsw:space": "cosine"}
             )
             logger.info(f"向量记忆数据库初始化成功: {db_path}")
@@ -62,284 +83,289 @@ class VectorInstantMemory:
             self.client = None
             self.collection = None
     
-    async def _load_importance_patterns(self):
-        """加载重要性判断模式向量"""
-        if self.importance_patterns:
+    def _start_cleanup_task(self):
+        """启动定时清理任务"""
+        def cleanup_worker():
+            while self.is_running:
+                try:
+                    self._cleanup_expired_messages()
+                    time.sleep(self.cleanup_interval)
+                except Exception as e:
+                    logger.error(f"清理任务异常: {e}")
+                    time.sleep(60)  # 异常时等待1分钟再继续
+        
+        self.cleanup_task = threading.Thread(target=cleanup_worker, daemon=True)
+        self.cleanup_task.start()
+        logger.info(f"定时清理任务已启动，间隔{self.cleanup_interval}秒")
+    
+    def _cleanup_expired_messages(self):
+        """清理过期的聊天记录"""
+        if not self.collection:
             return
             
-        patterns = [
-            "用户分享了重要的个人信息和经历",
-            "讨论了未来的计划、安排或目标", 
-            "表达了强烈的情感、观点或态度",
-            "询问了重要的问题需要回答",
-            "发生了有趣的对话和深入交流",
-            "出现了新的话题或重要信息",
-            "用户表现出明显的情绪变化",
-            "涉及重要的决定或选择"
-        ]
-        
         try:
-            for i, pattern in enumerate(patterns):
-                vector = await get_embedding(pattern)
-                if vector:
-                    self.importance_patterns.append(
-                        MemoryImportancePattern(
-                            description=pattern,
-                            vector=vector,
-                            threshold=0.55 + i * 0.01  # 动态阈值
-                        )
-                    )
-                    
-            logger.info(f"加载了 {len(self.importance_patterns)} 个重要性判断模式")
+            # 计算过期时间戳
+            expire_time = time.time() - (self.retention_hours * 3600)
+            
+            # 查询所有记录
+            all_results = self.collection.get(
+                where={"chat_id": self.chat_id},
+                include=["metadatas"]
+            )
+            
+            # 找出过期的记录ID
+            expired_ids = []
+            metadatas = all_results.get("metadatas") or []
+            ids = all_results.get("ids") or []
+            
+            for i, metadata in enumerate(metadatas):
+                if metadata and isinstance(metadata, dict):
+                    timestamp = metadata.get("timestamp", 0)
+                    if isinstance(timestamp, (int, float)) and timestamp < expire_time:
+                        if i < len(ids):
+                            expired_ids.append(ids[i])
+            
+            # 批量删除过期记录
+            if expired_ids:
+                self.collection.delete(ids=expired_ids)
+                logger.info(f"清理了 {len(expired_ids)} 条过期聊天记录")
+                
         except Exception as e:
-            logger.error(f"加载重要性模式失败: {e}")
+            logger.error(f"清理过期记录失败: {e}")
     
-    async def should_create_memory(self, chat_history: str) -> Tuple[bool, float]:
-        """向量化判断是否需要创建记忆
+    async def store_message(self, content: str, sender: str = "user") -> bool:
+        """
+        存储聊天消息到向量库
         
         Args:
-            chat_history: 聊天历史
+            content: 消息内容
+            sender: 发送者
             
         Returns:
-            (是否需要记忆, 重要性分数)
+            bool: 是否存储成功
         """
-        if not chat_history.strip():
-            return False, 0.0
-            
-        await self._load_importance_patterns()
-        
-        try:
-            # 获取聊天历史的向量表示
-            history_vector = await get_embedding(chat_history[-500:])  # 只取最后500字符
-            if not history_vector:
-                return False, 0.0
-            
-            # 与重要性模式向量计算相似度
-            max_score = 0.0
-            best_pattern = None
-            
-            for pattern in self.importance_patterns:
-                similarity = self._cosine_similarity(history_vector, pattern.vector)
-                if similarity > max_score:
-                    max_score = similarity
-                    best_pattern = pattern
-            
-            should_remember = max_score > 0.6  # 基础阈值
-            
-            if should_remember and best_pattern:
-                logger.debug(f"触发记忆模式: {best_pattern.description} (相似度: {max_score:.3f})")
-                
-            return should_remember, max_score
-            
-        except Exception as e:
-            logger.error(f"向量化判断记忆重要性失败: {e}")
-            return False, 0.0
-    
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
-        """计算余弦相似度"""
-        try:
-            v1 = np.array(vec1)
-            v2 = np.array(vec2)
-            
-            dot_product = np.dot(v1, v2)
-            norms = np.linalg.norm(v1) * np.linalg.norm(v2)
-            
-            if norms == 0:
-                return 0.0
-                
-            return dot_product / norms
-            
-        except Exception as e:
-            logger.error(f"计算余弦相似度失败: {e}")
-            return 0.0
-    
-    def _extract_key_content(self, chat_history: str) -> str:
-        """快速提取关键内容（避免LLM调用）"""
-        lines = chat_history.strip().split('\n')
-        
-        # 简单规则：取最后几行非空对话
-        key_lines = []
-        for line in reversed(lines):
-            if line.strip() and ':' in line:  # 包含发言者格式
-                key_lines.insert(0, line.strip())
-                if len(key_lines) >= 3:  # 最多3行
-                    break
-        
-        return '\n'.join(key_lines) if key_lines else chat_history[-200:]
-    
-    async def _is_duplicate_memory(self, content: str) -> bool:
-        """检查是否为重复记忆"""
-        if not self.collection:
+        if not self.collection or not content.strip():
             return False
             
         try:
-            content_vector = await get_embedding(content)
-            if not content_vector:
+            # 生成消息向量
+            message_vector = await get_embedding(content)
+            if not message_vector:
+                logger.warning(f"消息向量生成失败: {content[:50]}...")
                 return False
             
-            # 查询最相似的记忆
-            results = self.collection.query(
-                query_embeddings=[content_vector],
-                n_results=1
+            # 生成唯一消息ID
+            message_id = f"{self.chat_id}_{int(time.time() * 1000)}_{hash(content) % 10000}"
+            
+            # 创建消息对象
+            message = ChatMessage(
+                message_id=message_id,
+                chat_id=self.chat_id,
+                content=content,
+                timestamp=time.time(),
+                sender=sender
             )
-            
-            if results['distances'] and results['distances'][0]:
-                similarity = 1 - results['distances'][0][0]  # ChromaDB用距离，转换为相似度
-                return similarity > 0.85  # 85%相似度认为重复
-                
-        except Exception as e:
-            logger.error(f"检查重复记忆失败: {e}")
-            
-        return False
-    
-    async def create_and_store_memory(self, chat_history: str):
-        """创建并存储向量化记忆"""
-        try:
-            # 1. 向量化判断重要性
-            should_store, importance_score = await self.should_create_memory(chat_history)
-            
-            if not should_store:
-                logger.debug("聊天内容不需要记忆")
-                return
-            
-            # 2. 提取关键内容
-            key_content = self._extract_key_content(chat_history)
-            
-            # 3. 检查重复
-            if await self._is_duplicate_memory(key_content):
-                logger.debug("发现重复记忆，跳过存储")
-                return
-            
-            # 4. 向量化存储
-            await self._store_vector_memory(key_content, importance_score)
-            
-            logger.info(f"成功存储向量记忆 (重要性: {importance_score:.3f}): {key_content[:50]}...")
-            
-        except Exception as e:
-            logger.error(f"创建向量记忆失败: {e}")
-    
-    async def _store_vector_memory(self, content: str, importance: float):
-        """存储向量化记忆"""
-        if not self.collection:
-            logger.warning("ChromaDB未初始化，无法存储向量记忆")
-            return
-            
-        try:
-            # 生成向量
-            content_vector = await get_embedding(content)
-            if not content_vector:
-                logger.error("生成记忆向量失败")
-                return
-            
-            # 生成唯一ID
-            memory_id = f"{self.chat_id}_{int(time.time() * 1000)}"
             
             # 存储到ChromaDB
             self.collection.add(
-                embeddings=[content_vector],
+                embeddings=[message_vector],
                 documents=[content],
                 metadatas=[{
-                    "chat_id": self.chat_id,
-                    "timestamp": time.time(),
-                    "importance": importance,
-                    "type": "instant_memory"
+                    "message_id": message.message_id,
+                    "chat_id": message.chat_id,
+                    "timestamp": message.timestamp,
+                    "sender": message.sender,
+                    "message_type": message.message_type
                 }],
-                ids=[memory_id]
+                ids=[message_id]
             )
             
-            # 同时存储到原数据库（保持兼容性）
-            await self._store_to_db(content, importance)
+            logger.debug(f"消息已存储: {content[:50]}...")
+            return True
             
         except Exception as e:
-            logger.error(f"存储向量记忆到ChromaDB失败: {e}")
+            logger.error(f"存储消息失败: {e}")
+            return False
     
-    async def _store_to_db(self, content: str, importance: float):
-        """存储到原数据库表"""
-        try:
-            with get_db_session() as session:
-                memory = Memory(
-                    memory_id=f"{self.chat_id}_{int(time.time() * 1000)}",
-                    chat_id=self.chat_id,
-                    memory_text=content,
-                    keywords=[],  # 向量版本不需要关键词
-                    create_time=time.time(),
-                    last_view_time=time.time()
-                )
-                session.add(memory)
-                session.commit()
-        except Exception as e:
-            logger.error(f"存储记忆到数据库失败: {e}")
-    
-    async def get_memory(self, target: str) -> Optional[str]:
-        """向量化检索相关记忆"""
-        if not self.collection:
-            return await self._fallback_get_memory(target)
+    async def find_similar_messages(self, query: str, top_k: int = 5, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
+        """
+        查找与查询相似的历史消息
+        
+        Args:
+            query: 查询内容
+            top_k: 返回的最相似消息数量
+            similarity_threshold: 相似度阈值
+            
+        Returns:
+            List[Dict]: 相似消息列表，包含content、similarity、timestamp等信息
+        """
+        if not self.collection or not query.strip():
+            return []
             
         try:
-            target_vector = await get_embedding(target)
-            if not target_vector:
-                return None
+            # 生成查询向量
+            query_vector = await get_embedding(query)
+            if not query_vector:
+                return []
             
             # 向量相似度搜索
             results = self.collection.query(
-                query_embeddings=[target_vector],
-                n_results=3,  # 取前3个最相关的
+                query_embeddings=[query_vector],
+                n_results=top_k,
                 where={"chat_id": self.chat_id}
             )
             
             if not results['documents'] or not results['documents'][0]:
-                return None
+                return []
             
-            # 返回最相关的记忆
-            best_memory = results['documents'][0][0]
-            distance = results['distances'][0][0] if results['distances'] else 1.0
-            similarity = 1 - distance
+            # 处理搜索结果
+            similar_messages = []
+            documents = results['documents'][0]
+            distances = results['distances'][0] if results['distances'] else []
+            metadatas = results['metadatas'][0] if results['metadatas'] else []
             
-            if similarity > 0.7:  # 70%相似度阈值
-                logger.debug(f"找到相关记忆 (相似度: {similarity:.3f}): {best_memory[:50]}...")
-                return best_memory
+            for i, doc in enumerate(documents):
+                # 计算相似度（ChromaDB返回距离，需转换）
+                distance = distances[i] if i < len(distances) else 1.0
+                similarity = 1 - distance
+                
+                # 过滤低相似度结果
+                if similarity < similarity_threshold:
+                    continue
+                
+                # 获取元数据
+                metadata = metadatas[i] if i < len(metadatas) else {}
+                
+                # 安全获取timestamp
+                timestamp = metadata.get("timestamp", 0) if isinstance(metadata, dict) else 0
+                timestamp = float(timestamp) if isinstance(timestamp, (int, float)) else 0.0
+                
+                similar_messages.append({
+                    "content": doc,
+                    "similarity": similarity,
+                    "timestamp": timestamp,
+                    "sender": metadata.get("sender", "unknown") if isinstance(metadata, dict) else "unknown",
+                    "message_id": metadata.get("message_id", "") if isinstance(metadata, dict) else "",
+                    "time_ago": self._format_time_ago(timestamp)
+                })
             
-            return None
+            # 按相似度排序
+            similar_messages.sort(key=lambda x: x["similarity"], reverse=True)
+            
+            logger.debug(f"找到 {len(similar_messages)} 条相似消息 (查询: {query[:30]}...)")
+            return similar_messages
             
         except Exception as e:
-            logger.error(f"向量检索记忆失败: {e}")
-            return await self._fallback_get_memory(target)
+            logger.error(f"查找相似消息失败: {e}")
+            return []
     
-    async def _fallback_get_memory(self, target: str) -> Optional[str]:
-        """回退到数据库检索"""
-        try:
-            with get_db_session() as session:
-                query = session.execute(select(Memory).where(
-                    Memory.chat_id == self.chat_id
-                ).order_by(Memory.create_time.desc()).limit(10)).scalars()
-                
-                memories = list(query)
-                
-                # 简单的关键词匹配
-                for memory in memories:
-                    if any(word in memory.memory_text for word in target.split() if len(word) > 1):
-                        return memory.memory_text
-                        
-                return memories[0].memory_text if memories else None
+    def _format_time_ago(self, timestamp: float) -> str:
+        """格式化时间差显示"""
+        if timestamp <= 0:
+            return "未知时间"
             
-        except Exception as e:
-            logger.error(f"回退检索记忆失败: {e}")
-            return None
+        try:
+            now = time.time()
+            diff = now - timestamp
+            
+            if diff < 60:
+                return f"{int(diff)}秒前"
+            elif diff < 3600:
+                return f"{int(diff/60)}分钟前"
+            elif diff < 86400:
+                return f"{int(diff/3600)}小时前"
+            else:
+                return f"{int(diff/86400)}天前"
+        except:
+            return "时间格式错误"
+    
+    async def get_memory_for_context(self, current_message: str, context_size: int = 3) -> str:
+        """
+        获取与当前消息相关的记忆上下文
+        
+        Args:
+            current_message: 当前消息
+            context_size: 上下文消息数量
+            
+        Returns:
+            str: 格式化的记忆上下文
+        """
+        similar_messages = await self.find_similar_messages(
+            current_message, 
+            top_k=context_size,
+            similarity_threshold=0.6  # 降低阈值以获得更多上下文
+        )
+        
+        if not similar_messages:
+            return ""
+        
+        # 格式化上下文
+        context_lines = []
+        for msg in similar_messages:
+            context_lines.append(
+                f"[{msg['time_ago']}] {msg['sender']}: {msg['content']} (相似度: {msg['similarity']:.2f})"
+            )
+        
+        return "相关的历史记忆:\n" + "\n".join(context_lines)
     
     def get_stats(self) -> Dict[str, Any]:
-        """获取记忆统计信息"""
+        """获取记忆系统统计信息"""
         stats = {
             "chat_id": self.chat_id,
-            "vector_enabled": self.collection is not None,
-            "total_memories": 0,
-            "importance_patterns": len(self.importance_patterns)
+            "retention_hours": self.retention_hours,
+            "cleanup_interval": self.cleanup_interval,
+            "system_status": "running" if self.is_running else "stopped",
+            "total_messages": 0,
+            "db_status": "connected" if self.collection else "disconnected"
         }
         
         if self.collection:
             try:
                 result = self.collection.count()
-                stats["total_memories"] = result
+                stats["total_messages"] = result
             except:
-                pass
-                
+                stats["total_messages"] = "查询失败"
+        
         return stats
+    
+    def stop(self):
+        """停止记忆系统"""
+        self.is_running = False
+        if self.cleanup_task and self.cleanup_task.is_alive():
+            logger.info("正在停止定时清理任务...")
+        logger.info(f"向量瞬时记忆系统已停止: {self.chat_id}")
+
+
+# 为了兼容现有代码，提供工厂函数
+def create_vector_memory_v2(chat_id: str, retention_hours: int = 24) -> VectorInstantMemoryV2:
+    """创建向量瞬时记忆系统V2实例"""
+    return VectorInstantMemoryV2(chat_id, retention_hours)
+
+
+# 使用示例
+async def demo():
+    """使用演示"""
+    memory = VectorInstantMemoryV2("demo_chat")
+    
+    # 存储一些测试消息
+    await memory.store_message("今天天气不错，出去散步了", "用户")
+    await memory.store_message("刚才买了个冰淇淋，很好吃", "用户") 
+    await memory.store_message("明天要开会，有点紧张", "用户")
+    
+    # 查找相似消息
+    similar = await memory.find_similar_messages("天气怎么样")
+    print("相似消息:", similar)
+    
+    # 获取上下文
+    context = await memory.get_memory_for_context("今天心情如何")
+    print("记忆上下文:", context)
+    
+    # 查看统计信息
+    stats = memory.get_stats()
+    print("系统状态:", stats)
+    
+    memory.stop()
+
+
+if __name__ == "__main__":
+    asyncio.run(demo())

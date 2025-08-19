@@ -24,7 +24,7 @@ from src.chat.utils.chat_message_builder import (
 )
 from src.chat.express.expression_selector import expression_selector
 from src.chat.memory_system.memory_activator import MemoryActivator
-from src.chat.memory_system.vector_instant_memory import VectorInstantMemory
+from src.chat.memory_system.hybrid_instant_memory import HybridInstantMemory
 from src.mood.mood_manager import mood_manager
 from src.person_info.person_info import Person, is_person_known
 from src.plugin_system.base.component_types import ActionInfo, EventType
@@ -190,7 +190,11 @@ class DefaultReplyer:
         self.is_group_chat, self.chat_target_info = get_chat_type_and_target_info(self.chat_stream.stream_id)
         self.heart_fc_sender = HeartFCSender()
         self.memory_activator = MemoryActivator()
-        self.instant_memory = VectorInstantMemory(chat_id=self.chat_stream.stream_id)
+        # 使用混合瞬时记忆系统V2，支持自定义保留时间
+        self.instant_memory = HybridInstantMemory(
+            chat_id=self.chat_stream.stream_id,
+            retention_hours=1
+        )
 
         from src.plugin_system.core.tool_use import ToolExecutor  # 延迟导入ToolExecutor，不然会循环依赖
 
@@ -421,25 +425,42 @@ class DefaultReplyer:
         
 
         if global_config.memory.enable_instant_memory:
+            # 异步存储聊天历史到混合记忆系统
             asyncio.create_task(self.instant_memory.create_and_store_memory(chat_history))
 
-            instant_memory_list = await self.instant_memory.get_memory(target)
-            instant_memory = instant_memory_list[0] if instant_memory_list else None
-            logger.info(f"即时记忆：{instant_memory}")
+            # 从混合记忆系统获取相关记忆
+            instant_memory_result = await self.instant_memory.get_memory(target)
+            
+            # 处理不同类型的返回结果
+            instant_memory = None
+            if isinstance(instant_memory_result, list) and instant_memory_result:
+                instant_memory = instant_memory_result[0]
+            elif isinstance(instant_memory_result, str) and instant_memory_result:
+                instant_memory = instant_memory_result
+            
+            logger.info(f"混合瞬时记忆：{instant_memory}")
 
-        if not running_memories:
-            return ""
+        # 构建记忆字符串，即使某种记忆为空也要继续
+        memory_str = ""
+        has_any_memory = False
 
+        # 添加长期记忆
+        if running_memories:
+            if not memory_str:
+                memory_str = "以下是当前在聊天中，你回忆起的记忆：\n"
+            for running_memory in running_memories:
+                memory_str += f"- {running_memory['content']}\n"
+            has_any_memory = True
 
-        memory_str = "以下是当前在聊天中，你回忆起的记忆：\n"
-        for running_memory in running_memories:
-            keywords,content = running_memory
-            memory_str += f"- {keywords}：{content}\n"
-
+        # 添加瞬时记忆
         if instant_memory:
+            if not memory_str:
+                memory_str = "以下是当前在聊天中，你回忆起的记忆：\n"
             memory_str += f"- {instant_memory}\n"
+            has_any_memory = True
 
-        return memory_str
+        # 只有当完全没有任何记忆时才返回空字符串
+        return memory_str if has_any_memory else ""
 
     async def build_tool_info(self, chat_history: str, sender: str, target: str, enable_tool: bool = True) -> str:
         """构建工具信息块
@@ -1089,7 +1110,7 @@ class DefaultReplyer:
         """构建单个发送消息"""
 
         bot_user_info = UserInfo(
-            user_id=global_config.bot.qq_account,
+            user_id=str(global_config.bot.qq_account),
             user_nickname=global_config.bot.nickname,
             platform=self.chat_stream.platform,
         )

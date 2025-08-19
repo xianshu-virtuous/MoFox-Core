@@ -312,11 +312,13 @@ class QZoneService:
         raise RuntimeError(f"无法连接到Napcat服务: 超过最大重试次数({max_retries})")
 
     async def _get_api_client(self, qq_account: str, stream_id: Optional[str]) -> Optional[Dict]:
-        cookies = await self._renew_and_load_cookies(qq_account, stream_id)
-        if not cookies: return None
+        cookies = await self.cookie_service.get_cookies(qq_account, stream_id)
+        if not cookies: 
+            return None
         
         p_skey = cookies.get('p_skey') or cookies.get('p_skey'.upper())
-        if not p_skey: return None
+        if not p_skey: 
+            return None
         
         gtk = self._generate_gtk(p_skey)
         uin = cookies.get('uin', '').lstrip('o')

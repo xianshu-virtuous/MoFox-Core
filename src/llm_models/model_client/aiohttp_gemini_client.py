@@ -475,6 +475,7 @@ class AiohttpGeminiClient(BaseClient):
             # 直接重抛项目定义的异常
             raise
         except Exception as e:
+            logger.debug(e)
             # 其他异常转换为网络连接错误
             raise NetworkConnectionError() from e
         
