@@ -142,6 +142,7 @@ class ValidatedConfigBase(BaseModel):
         "extra": "allow",  # 允许额外字段
         "validate_assignment": True,  # 验证赋值
         "arbitrary_types_allowed": True,  # 允许任意类型
+        "strict": True,  # 如果设为 True 会完全禁用类型转换
     }
     
     @classmethod

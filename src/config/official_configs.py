@@ -246,8 +246,8 @@ class ChatConfig(ValidatedConfigBase):
 class MessageReceiveConfig(ValidatedConfigBase):
     """消息接收配置类"""
 
-    ban_words: set[str] = Field(default_factory=lambda: set(), description="禁用词列表")
-    ban_msgs_regex: set[str] = Field(default_factory=lambda: set(), description="禁用消息正则列表")
+    ban_words: List[str] = Field(default_factory=lambda: list(), description="禁用词列表")
+    ban_msgs_regex: List[str] = Field(default_factory=lambda: list(), description="禁用消息正则列表")
 
 
 
@@ -426,7 +426,7 @@ class MemoryConfig(ValidatedConfigBase):
 
     enable_memory: bool = Field(default=True, description="启用记忆")
     memory_build_interval: int = Field(default=600, description="记忆构建间隔")
-    memory_build_distribution: tuple = Field(default_factory=lambda: (6.0, 3.0, 0.6, 32.0, 12.0, 0.4), description="记忆构建分布")
+    memory_build_distribution: list[float] = Field(default_factory=lambda: [6.0, 3.0, 0.6, 32.0, 12.0, 0.4], description="记忆构建分布")
     memory_build_sample_num: int = Field(default=8, description="记忆构建样本数量")
     memory_build_sample_length: int = Field(default=40, description="记忆构建样本长度")
     memory_compress_rate: float = Field(default=0.1, description="记忆压缩率")
