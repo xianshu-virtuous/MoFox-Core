@@ -51,7 +51,7 @@ class MaiZoneRefactoredPlugin(BasePlugin):
             "enable_reply": ConfigField(type=bool, default=True, description="完成后是否回复"),
             "ai_image_number": ConfigField(type=int, default=1, description="AI生成图片数量"),
             "image_number": ConfigField(type=int, default=1, description="本地配图数量（1-9张）"),
-            "image_directory": ConfigField(type=str, default="./data/images", description="图片存储目录")
+            "image_directory": ConfigField(type=str, default=str(Path(__file__).parent / "images"), description="图片存储目录")
         },
         "read": {
             "permission": ConfigField(type=list, default=[], description="阅读权限QQ号列表"),
