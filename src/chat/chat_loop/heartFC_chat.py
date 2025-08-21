@@ -154,10 +154,32 @@ class HeartFChatting:
 
             请根据当前情况做出选择。如果选择回复，请直接发送你想说的内容；如果选择保持沉默，请只回复"沉默"（注意：这个词不会被发送到群聊中）。""",
         }
+        
+        # 主动思考配置 - 支持新旧配置格式
         self.proactive_thinking_chat_scope = global_config.chat.The_scope_that_proactive_thinking_can_trigger
         if self.proactive_thinking_chat_scope not in self.VALID_PROACTIVE_SCOPES:
             logger.error(f"无效的主动思考范围: '{self.proactive_thinking_chat_scope}'。有效值为: {self.VALID_PROACTIVE_SCOPES}")
             raise ValueError(f"配置错误：无效的主动思考范围 '{self.proactive_thinking_chat_scope}'") #乱填参数是吧,我跟你爆了
+        
+        # 新的配置项 - 分离的私聊/群聊控制
+        self.proactive_thinking_in_private = global_config.chat.proactive_thinking_in_private
+        self.proactive_thinking_in_group = global_config.chat.proactive_thinking_in_group
+        
+        # ID列表控制（支持新旧两个字段）
+        self.proactive_thinking_ids = []
+        if hasattr(global_config.chat, 'enable_ids') and global_config.chat.enable_ids:
+            self.proactive_thinking_ids = global_config.chat.enable_ids
+        elif hasattr(global_config.chat, 'proactive_thinking_enable_ids') and global_config.chat.proactive_thinking_enable_ids:
+            self.proactive_thinking_ids = global_config.chat.proactive_thinking_enable_ids
+        
+        # 正态分布时间间隔配置
+        self.delta_sigma = getattr(global_config.chat, 'delta_sigma', 120)
+        
+        # 打印主动思考配置信息
+        logger.info(f"{self.log_prefix} 主动思考配置: 启用={global_config.chat.enable_proactive_thinking}, "
+                   f"旧范围={self.proactive_thinking_chat_scope}, 私聊={self.proactive_thinking_in_private}, "
+                   f"群聊={self.proactive_thinking_in_group}, ID列表={self.proactive_thinking_ids}, "
+                   f"基础间隔={global_config.chat.proactive_thinking_interval}s, Delta={self.delta_sigma}")
 
     async def start(self):
         """检查是否需要启动主循环，如果未激活则启动。"""
@@ -288,21 +310,24 @@ class HeartFChatting:
     async def _proactive_thinking_loop(self):
         """主动思考循环，仅在focus模式下生效"""
         while self.running:
-            await asyncio.sleep(30)  # 每30秒检查一次
+            await asyncio.sleep(15)  # 每15秒检查一次
 
             # 只在focus模式下进行主动思考
             if self.loop_mode != ChatMode.FOCUS:
                 continue
-            if self.proactive_thinking_chat_scope == "group" and self.chat_stream.group_info is None:
-                continue
-            if self.proactive_thinking_chat_scope == "private" and self.chat_stream.group_info is not None:
+            
+            # 检查是否应该在当前聊天类型中启用主动思考
+            if not self._should_enable_proactive_thinking():
                 continue
 
             current_time = time.time()
             silence_duration = current_time - self.last_message_time
 
+            # 使用正态分布计算动态间隔时间
+            target_interval = self._get_dynamic_thinking_interval()
+            
             # 检查是否达到主动思考的时间间隔
-            if silence_duration >= global_config.chat.proactive_thinking_interval:
+            if silence_duration >= target_interval:
                 try:
                     await self._execute_proactive_thinking(silence_duration)
                     # 重置计时器，避免频繁触发
@@ -310,6 +335,125 @@ class HeartFChatting:
                 except Exception as e:
                     logger.error(f"{self.log_prefix} 主动思考执行出错: {e}")
                     logger.error(traceback.format_exc())
+    
+    def _should_enable_proactive_thinking(self) -> bool:
+        """检查是否应该在当前聊天中启用主动思考"""
+        # 获取当前聊天ID
+        chat_id = None
+        if hasattr(self.chat_stream, 'chat_id'):
+            chat_id = int(self.chat_stream.chat_id)
+        
+        # 如果指定了ID列表，只在列表中的聊天启用
+        if self.proactive_thinking_ids:
+            if chat_id is None or chat_id not in self.proactive_thinking_ids:
+                return False
+        
+        # 检查聊天类型（私聊/群聊）控制
+        is_group_chat = self.chat_stream.group_info is not None
+        
+        if is_group_chat:
+            # 群聊：检查群聊启用开关
+            if not self.proactive_thinking_in_group:
+                return False
+        else:
+            # 私聊：检查私聊启用开关  
+            if not self.proactive_thinking_in_private:
+                return False
+        
+        # 兼容旧的范围配置
+        if self.proactive_thinking_chat_scope == "group" and not is_group_chat:
+            return False
+        if self.proactive_thinking_chat_scope == "private" and is_group_chat:
+            return False
+            
+        return True
+    
+    def _get_dynamic_thinking_interval(self) -> float:
+        """获取动态的主动思考间隔时间（使用正态分布和3-sigma规则）"""
+        try:
+            from src.utils.timing_utils import get_normal_distributed_interval
+            
+            base_interval = global_config.chat.proactive_thinking_interval
+            
+            # 🚨 保险机制：处理负数配置
+            if base_interval < 0:
+                logger.warning(f"{self.log_prefix} proactive_thinking_interval设置为{base_interval}为负数，使用绝对值{abs(base_interval)}")
+                base_interval = abs(base_interval)
+            
+            if self.delta_sigma < 0:
+                logger.warning(f"{self.log_prefix} delta_sigma设置为{self.delta_sigma}为负数，使用绝对值{abs(self.delta_sigma)}")
+                delta_sigma = abs(self.delta_sigma)
+            else:
+                delta_sigma = self.delta_sigma
+            
+            # 🚨 特殊情况处理
+            if base_interval == 0 and delta_sigma == 0:
+                logger.warning(f"{self.log_prefix} 基础间隔和Delta都为0，强制使用300秒安全间隔")
+                return 300
+            elif base_interval == 0:
+                # 基础间隔为0，但有delta_sigma，基于delta_sigma生成随机间隔
+                logger.info(f"{self.log_prefix} 基础间隔为0，使用纯随机模式，基于delta_sigma={delta_sigma}")
+                sigma_percentage = delta_sigma / 1000  # 假设1000秒作为虚拟基准
+                result = get_normal_distributed_interval(0, sigma_percentage, 1, 86400, use_3sigma_rule=True)
+                logger.debug(f"{self.log_prefix} 纯随机模式生成间隔: {result}秒")
+                return result
+            elif delta_sigma == 0:
+                # 禁用正态分布，使用固定间隔
+                logger.debug(f"{self.log_prefix} delta_sigma=0，禁用正态分布，使用固定间隔{base_interval}秒")
+                return base_interval
+            
+            # 正常情况：使用3-sigma规则的正态分布
+            sigma_percentage = delta_sigma / base_interval
+            
+            # 3-sigma边界计算
+            sigma = delta_sigma
+            three_sigma_range = 3 * sigma
+            theoretical_min = max(1, base_interval - three_sigma_range)
+            theoretical_max = base_interval + three_sigma_range
+            
+            logger.debug(f"{self.log_prefix} 3-sigma分布: 基础={base_interval}s, σ={sigma}s, "
+                        f"理论范围=[{theoretical_min:.0f}, {theoretical_max:.0f}]s")
+            
+            # 给用户最大自由度：使用3-sigma规则但不强制限制范围
+            result = get_normal_distributed_interval(
+                base_interval, 
+                sigma_percentage, 
+                1,  # 最小1秒
+                86400,  # 最大24小时
+                use_3sigma_rule=True
+            )
+            
+            return result
+            
+        except ImportError:
+            # 如果timing_utils不可用，回退到固定间隔
+            logger.warning(f"{self.log_prefix} timing_utils不可用，使用固定间隔")
+            return max(300, abs(global_config.chat.proactive_thinking_interval))
+        except Exception as e:
+            # 如果计算出错，回退到固定间隔
+            logger.error(f"{self.log_prefix} 动态间隔计算出错: {e}，使用固定间隔")
+            return max(300, abs(global_config.chat.proactive_thinking_interval))
+    
+    def _generate_random_interval_from_sigma(self, sigma: float) -> float:
+        """基于sigma值生成纯随机间隔（当基础间隔为0时使用）"""
+        try:
+            import numpy as np
+            
+            # 使用sigma作为标准差，0作为均值生成正态分布
+            interval = abs(np.random.normal(loc=0, scale=sigma))
+            
+            # 确保最小值
+            interval = max(interval, 30)  # 最小30秒
+            
+            # 限制最大值防止过度极端
+            interval = min(interval, 86400)  # 最大24小时
+            
+            logger.debug(f"{self.log_prefix} 纯随机模式生成间隔: {int(interval)}秒")
+            return int(interval)
+            
+        except Exception as e:
+            logger.error(f"{self.log_prefix} 纯随机间隔生成失败: {e}")
+            return 300  # 回退到5分钟
 
     def _format_duration(self, seconds: float) -> str:
         """格式化时间间隔为易读格式"""
@@ -333,10 +477,14 @@ class HeartFChatting:
         logger.info(f"{self.log_prefix} 触发主动思考，已沉默{formatted_time}")
 
         try:
-            # 根据聊天类型选择prompt
-            chat_type = "group" if self.chat_stream.group_info else "private"
-            prompt_template = self.proactive_thinking_prompts.get(chat_type, self.proactive_thinking_prompts["group"])
-            proactive_prompt = prompt_template.format(time=formatted_time)
+            # 优先使用配置文件中的prompt模板，如果没有则使用内置模板
+            if hasattr(global_config.chat, 'proactive_thinking_prompt_template') and global_config.chat.proactive_thinking_prompt_template.strip():
+                proactive_prompt = global_config.chat.proactive_thinking_prompt_template.format(time=formatted_time)
+            else:
+                # 回退到内置的prompt模板
+                chat_type = "group" if self.chat_stream.group_info else "private"
+                prompt_template = self.proactive_thinking_prompts.get(chat_type, self.proactive_thinking_prompts["group"])
+                proactive_prompt = prompt_template.format(time=formatted_time)
 
             # 创建一个虚拟的消息数据用于主动思考
             thinking_message = {

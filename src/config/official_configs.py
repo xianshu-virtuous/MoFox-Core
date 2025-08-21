@@ -82,6 +82,17 @@ class ChatConfig(ValidatedConfigBase):
     enable_proactive_thinking: bool = Field(default=False, description="启用主动思考")
     proactive_thinking_interval: int = Field(default=1500, description="主动思考间隔")
     The_scope_that_proactive_thinking_can_trigger: str = Field(default="all", description="主动思考可以触发的范围")
+    proactive_thinking_in_private: bool = Field(default=True, description="主动思考可以在私聊里面启用")
+    proactive_thinking_in_group: bool = Field(default=True, description="主动思考可以在群聊里面启用")
+    proactive_thinking_enable_ids: List[int] = Field(default_factory=list, description="启用主动思考的范围，不区分群聊和私聊，为空则不限制")
+    delta_sigma: int = Field(default=120, description="采用正态分布随机时间间隔")
+    enable_ids: List[int] = Field(default_factory=lambda: [123456, 234567], description="启用主动思考的范围，不区分群聊和私聊，为空则不限制")
+    proactive_thinking_prompt_template: str = Field(default="""现在群里面已经隔了{time}没有人发送消息了，请你结合上下文以及群聊里面之前聊过的话题和你的人设来决定要不要主动发送消息，你可以选择：
+
+1. 继续保持沉默（当{time}以前已经结束了一个话题并且你不想挑起新话题时）
+2. 选择回复（当{time}以前你发送了一条消息且没有人回复你时、你想主动挑起一个话题时）
+
+请根据当前情况做出选择。如果选择回复，请直接发送你想说的内容；如果选择保持沉默，请只回复"沉默"（注意：这个词不会被发送到群聊中）。""", description="主动思考提示模板")
 
     def get_current_talk_frequency(self, chat_stream_id: Optional[str] = None) -> float:
         """
