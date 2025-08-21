@@ -187,7 +187,7 @@ class CommandSkipListManager:
         
         return False, None
     
-    def refresh_plugin_commands(self):
+    async def refresh_plugin_commands(self):
         """刷新插件命令列表"""
         if not self.config.auto_collect_plugin_commands:
             return
@@ -243,9 +243,9 @@ def should_skip_injection_detection(message_text: str) -> tuple[bool, Optional[s
     return skip_list_manager.should_skip_detection(message_text)
 
 
-def refresh_plugin_commands():
+async def refresh_plugin_commands():
     """刷新插件命令列表"""
-    skip_list_manager.refresh_plugin_commands()
+    await skip_list_manager.refresh_plugin_commands()
 
 
 def get_skip_patterns_info():
