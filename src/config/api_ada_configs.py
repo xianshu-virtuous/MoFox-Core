@@ -83,6 +83,7 @@ class TaskConfig(ValidatedConfigBase):
     max_tokens: int = Field(default=800, description="任务最大输出token数")
     temperature: float = Field(default=0.7, description="模型温度")
     concurrency_count: int = Field(default=1, description="并发请求数量")
+    anti_truncation: bool = Field(default=False, description="是否启用反截断功能，防止模型输出被截断")
 
     @field_validator('model_list')
     @classmethod
