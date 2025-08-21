@@ -757,6 +757,11 @@ class DefaultReplyer:
         if global_config.mood.enable_mood:
             chat_mood = mood_manager.get_mood_by_chat_id(chat_id)
             mood_prompt = chat_mood.mood_state
+            
+            # 检查是否有愤怒状态的补充提示词
+            angry_prompt_addition = mood_manager.get_angry_prompt_addition(chat_id)
+            if angry_prompt_addition:
+                mood_prompt = f"{mood_prompt}。{angry_prompt_addition}"
         else:
             mood_prompt = ""
             
@@ -1000,6 +1005,11 @@ class DefaultReplyer:
         if global_config.mood.enable_mood:
             chat_mood = mood_manager.get_mood_by_chat_id(chat_id)
             mood_prompt = chat_mood.mood_state
+            
+            # 检查是否有愤怒状态的补充提示词
+            angry_prompt_addition = mood_manager.get_angry_prompt_addition(chat_id)
+            if angry_prompt_addition:
+                mood_prompt = f"{mood_prompt}。{angry_prompt_addition}"
         else:
             mood_prompt = ""
 

@@ -666,6 +666,18 @@ class PluginsConfig(ValidatedConfigBase):
     centralized_config: bool = Field(default=True, description="是否启用插件配置集中化管理")
 
 
+class WakeUpSystemConfig(ValidatedConfigBase):
+    """唤醒度系统配置类"""
+
+    enable: bool = Field(default=True, description="是否启用唤醒度系统")
+    wakeup_threshold: float = Field(default=15.0, ge=1.0, description="唤醒阈值，达到此值时会被唤醒")
+    private_message_increment: float = Field(default=3.0, ge=0.1, description="私聊消息增加的唤醒度")
+    group_mention_increment: float = Field(default=2.0, ge=0.1, description="群聊艾特增加的唤醒度")
+    decay_rate: float = Field(default=0.2, ge=0.0, description="每次衰减的唤醒度数值")
+    decay_interval: float = Field(default=30.0, ge=1.0, description="唤醒度衰减间隔(秒)")
+    angry_duration: float = Field(default=300.0, ge=10.0, description="愤怒状态持续时间(秒)")
+
+
 class MonthlyPlanSystemConfig(ValidatedConfigBase):
     """月层计划系统配置类"""
 

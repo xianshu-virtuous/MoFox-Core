@@ -43,6 +43,7 @@ from src.config.official_configs import (
     TavilyConfig,
     AntiPromptInjectionConfig,
     PluginsConfig,
+    WakeUpSystemConfig,
     MonthlyPlanSystemConfig
 )
 
@@ -403,6 +404,7 @@ class Config(ValidatedConfigBase):
     web_search: WebSearchConfig = Field(default_factory=lambda: WebSearchConfig(), description="网络搜索配置")
     tavily: TavilyConfig = Field(default_factory=lambda: TavilyConfig(), description="Tavily配置")
     plugins: PluginsConfig = Field(default_factory=lambda: PluginsConfig(), description="插件配置")
+    wakeup_system: WakeUpSystemConfig = Field(default_factory=lambda: WakeUpSystemConfig(), description="唤醒度系统配置")
     monthly_plan_system: MonthlyPlanSystemConfig = Field(default_factory=lambda: MonthlyPlanSystemConfig(), description="月层计划系统配置")
 
 

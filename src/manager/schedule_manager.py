@@ -312,8 +312,16 @@ class ScheduleManager:
                 continue
         return None
 
-    def is_sleeping(self) -> bool:
-        """检查当前是否处于休眠时间（日程表的第一项或最后一项）"""
+    def is_sleeping(self, wakeup_manager=None) -> bool:
+        """
+        检查当前是否处于休眠时间（日程表的第一项或最后一项）
+        
+        Args:
+            wakeup_manager: 可选的唤醒度管理器，用于检查是否被唤醒
+            
+        Returns:
+            bool: 是否处于休眠状态
+        """
         if not global_config.schedule.enable_is_sleep:
             return False
         if not self.today_schedule:
@@ -325,6 +333,7 @@ class ScheduleManager:
         first_item = self.today_schedule[0]
         last_item = self.today_schedule[-1]
 
+        is_in_sleep_time = False
         for item in [first_item, last_item]:
             try:
                 time_range = item.get("time_range")
@@ -338,16 +347,27 @@ class ScheduleManager:
                 if start_time <= end_time:
                     # 同一天内的时间段
                     if start_time <= now < end_time:
-                        return True
+                        is_in_sleep_time = True
+                        break
                 else:
                     # 跨天的时间段
                     if now >= start_time or now < end_time:
-                        return True
+                        is_in_sleep_time = True
+                        break
             except (ValueError, KeyError, AttributeError) as e:
                 logger.warning(f"解析休眠日程事件失败: {item}, 错误: {e}")
                 continue
         
-        return False
+        # 如果不在休眠时间，直接返回False
+        if not is_in_sleep_time:
+            return False
+            
+        # 如果在休眠时间，检查是否被唤醒度管理器唤醒
+        if wakeup_manager and wakeup_manager.is_in_angry_state():
+            logger.debug("虽然在休眠时间，但已被唤醒度管理器唤醒")
+            return False
+            
+        return True
 
     def _validate_schedule_with_pydantic(self, schedule_data) -> bool:
         """使用Pydantic验证日程数据格式和完整性"""

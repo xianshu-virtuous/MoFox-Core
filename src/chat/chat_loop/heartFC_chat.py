@@ -19,6 +19,7 @@ from .cycle_processor import CycleProcessor
 from .response_handler import ResponseHandler
 from .normal_mode_handler import NormalModeHandler
 from .cycle_tracker import CycleTracker
+from .wakeup_manager import WakeUpManager
 
 logger = get_logger("hfc")
 
@@ -44,6 +45,10 @@ class HeartFChatting:
         self.energy_manager = EnergyManager(self.context)
         self.proactive_thinker = ProactiveThinker(self.context, self.cycle_processor)
         self.normal_mode_handler = NormalModeHandler(self.context, self.cycle_processor)
+        self.wakeup_manager = WakeUpManager(self.context)
+        
+        # 将唤醒度管理器设置到上下文中
+        self.context.wakeup_manager = self.wakeup_manager
         
         self._loop_task: Optional[asyncio.Task] = None
         
@@ -90,6 +95,7 @@ class HeartFChatting:
 
         await self.energy_manager.start()
         await self.proactive_thinker.start()
+        await self.wakeup_manager.start()
         
         self._loop_task = asyncio.create_task(self._main_chat_loop())
         self._loop_task.add_done_callback(self._handle_loop_completion)
@@ -112,6 +118,7 @@ class HeartFChatting:
         
         await self.energy_manager.stop()
         await self.proactive_thinker.stop()
+        await self.wakeup_manager.stop()
         
         if self._loop_task and not self._loop_task.done():
             self._loop_task.cancel()
@@ -169,16 +176,15 @@ class HeartFChatting:
         单次循环体处理
         
         功能说明:
-        - 检查是否处于睡眠模式，如果是则跳过处理
+        - 检查是否处于睡眠模式，如果是则处理唤醒度逻辑
         - 获取最近的新消息（过滤机器人自己的消息和命令）
         - 更新最后消息时间和读取时间
         - 根据当前聊天模式执行不同的处理逻辑
         - FOCUS模式：直接处理所有消息并检查退出条件
         - NORMAL模式：检查进入FOCUS模式的条件，并通过normal_mode_handler处理消息
         """
-        if schedule_manager.is_sleeping():
-            return
-
+        is_sleeping = schedule_manager.is_sleeping(self.wakeup_manager)
+        
         recent_messages = message_api.get_messages_by_time_in_chat(
             chat_id=self.context.stream_id,
             start_time=self.context.last_read_time,
@@ -192,6 +198,13 @@ class HeartFChatting:
         if recent_messages:
             self.context.last_message_time = time.time()
             self.context.last_read_time = time.time()
+            
+            # 处理唤醒度逻辑
+            if is_sleeping:
+                self._handle_wakeup_messages(recent_messages)
+                # 如果仍在睡眠状态，跳过正常处理
+                if schedule_manager.is_sleeping(self.wakeup_manager):
+                    return
 
         if self.context.loop_mode == ChatMode.FOCUS:
             if recent_messages:
@@ -262,3 +275,47 @@ class HeartFChatting:
 
             if self.context.energy_value >= 30:  # 如果能量值达到或超过30
                 self.context.loop_mode = ChatMode.FOCUS  # 进入专注模式
+    
+    def _handle_wakeup_messages(self, messages):
+            """
+            处理休眠状态下的消息，累积唤醒度
+            
+            Args:
+                messages: 消息列表
+                
+            功能说明:
+            - 区分私聊和群聊消息
+            - 检查群聊消息是否艾特了机器人
+            - 调用唤醒度管理器累积唤醒度
+            - 如果达到阈值则唤醒并进入愤怒状态
+            """
+            if not self.wakeup_manager:
+                return
+                
+            is_private_chat = self.context.chat_stream.group_info is None if self.context.chat_stream else False
+            
+            for message in messages:
+                is_mentioned = False
+                
+                # 检查群聊消息是否艾特了机器人
+                if not is_private_chat:
+                    # 检查消息中是否包含艾特信息
+                    message_content = message.get("processed_plain_text", "")
+                    bot_name = global_config.bot.nickname
+                    alias_names = global_config.bot.alias_names or []
+                    
+                    # 检查是否被艾特（简单的文本匹配）
+                    if f"@{bot_name}" in message_content:
+                        is_mentioned = True
+                    else:
+                        for alias in alias_names:
+                            if f"@{alias}" in message_content:
+                                is_mentioned = True
+                                break
+                
+                # 累积唤醒度
+                woke_up = self.wakeup_manager.add_wakeup_value(is_private_chat, is_mentioned)
+                
+                if woke_up:
+                    logger.info(f"{self.context.log_prefix} 被消息吵醒，进入愤怒状态！")
+                    break
