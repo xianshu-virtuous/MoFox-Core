@@ -6,7 +6,7 @@
 
 import asyncio
 import time
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from src.common.logger import get_logger
 from src.config.config import global_config
 

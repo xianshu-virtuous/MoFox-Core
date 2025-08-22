@@ -4,10 +4,8 @@ Bing search engine implementation
 import asyncio
 import functools
 import random
-import os
 import traceback
 from typing import Dict, List, Any
-from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
 

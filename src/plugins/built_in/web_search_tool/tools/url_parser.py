@@ -3,7 +3,7 @@ URL parser tool implementation
 """
 import asyncio
 import functools
-from typing import Any, Dict, List
+from typing import Any, Dict
 from exa_py import Exa
 import httpx
 from bs4 import BeautifulSoup

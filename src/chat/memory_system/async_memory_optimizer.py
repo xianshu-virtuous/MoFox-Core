@@ -8,8 +8,6 @@ import asyncio
 import time
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass
-from queue import Queue
-import threading
 from concurrent.futures import ThreadPoolExecutor
 from src.common.logger import get_logger
 from src.config.config import global_config

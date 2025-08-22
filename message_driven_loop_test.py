@@ -10,7 +10,7 @@
 
 import asyncio
 import time
-from typing import List, Dict, Any
+from typing import List
 
 
 class MockMessage:
@@ -129,7 +129,7 @@ async def test_message_driven_logic():
     )
     
     # 统计结果
-    print(f"\n=== 测试结果 ===")
+    print("\n=== 测试结果 ===")
     print(f"思考循环次数: {chat_loop.thinking_cycles}")
     print(f"状态检查次数: {chat_loop.status_checks}")
     print(f"思考/检查比例: {chat_loop.thinking_cycles}/{chat_loop.status_checks}")
@@ -163,7 +163,7 @@ async def test_no_message_scenario():
         if not has_new_messages:
             await asyncio.sleep(1.0)
     
-    print(f"无消息运行结果:")
+    print("无消息运行结果:")
     print(f"  思考循环: {chat_loop.thinking_cycles} 次")
     print(f"  状态检查: {chat_loop.status_checks} 次")
     
