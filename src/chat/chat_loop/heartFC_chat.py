@@ -152,15 +152,24 @@ class HeartFChatting:
         
         功能说明:
         - 持续运行聊天处理循环
-        - 每次循环调用_loop_body处理消息
+        - 只有在有新消息时才进行思考循环
+        - 无新消息时等待新消息到达（由主动思考系统单独处理主动发言）
         - 处理取消和异常情况
         - 在异常时尝试重新启动循环
-        - 记录循环结束日志
         """
         try:
             while self.context.running:
-                await self._loop_body()
-                await asyncio.sleep(0.1)
+                has_new_messages = await self._loop_body()
+                
+                if has_new_messages:
+                    # 有新消息时，继续快速检查是否还有更多消息
+                    await asyncio.sleep(1)
+                else:
+                    # 无新消息时，等待较长时间再检查
+                    # 这里只是为了定期检查系统状态，不进行思考循环
+                    # 真正的新消息响应依赖于消息到达时的通知
+                    await asyncio.sleep(1.0)
+                        
         except asyncio.CancelledError:
             logger.info(f"{self.context.log_prefix} 麦麦已关闭聊天")
         except Exception:
@@ -170,13 +179,17 @@ class HeartFChatting:
             self._loop_task = asyncio.create_task(self._main_chat_loop())
         logger.error(f"{self.context.log_prefix} 结束了当前聊天循环")
 
-    async def _loop_body(self):
+    async def _loop_body(self) -> bool:
         """
         单次循环体处理
         
+        Returns:
+            bool: 是否处理了新消息
+            
         功能说明:
         - 检查是否处于睡眠模式，如果是则处理唤醒度逻辑
         - 获取最近的新消息（过滤机器人自己的消息和命令）
+        - 只有在有新消息时才进行思考循环处理
         - 更新最后消息时间和读取时间
         - 根据当前聊天模式执行不同的处理逻辑
         - FOCUS模式：直接处理所有消息并检查退出条件
@@ -194,27 +207,37 @@ class HeartFChatting:
             filter_command=True,
         )
         
-        if recent_messages:
+        has_new_messages = bool(recent_messages)
+        
+        # 只有在有新消息时才进行思考循环处理
+        if has_new_messages:
             self.context.last_message_time = time.time()
             self.context.last_read_time = time.time()
             
             # 处理唤醒度逻辑
             if is_sleeping:
                 self._handle_wakeup_messages(recent_messages)
-                # 如果仍在睡眠状态，跳过正常处理
+                # 如果仍在睡眠状态，跳过正常处理但仍返回有新消息
                 if schedule_manager.is_sleeping(self.wakeup_manager):
-                    return
+                    return has_new_messages
 
-        if self.context.loop_mode == ChatMode.FOCUS:
-            if recent_messages:
+            # 根据聊天模式处理新消息
+            if self.context.loop_mode == ChatMode.FOCUS:
                 for message in recent_messages:
                     await self.cycle_processor.observe(message)
-            self._check_focus_exit()
-        elif self.context.loop_mode == ChatMode.NORMAL:
-            self._check_focus_entry(len(recent_messages))
-            if recent_messages:
+                self._check_focus_exit()
+            elif self.context.loop_mode == ChatMode.NORMAL:
+                self._check_focus_entry(len(recent_messages))
                 for message in recent_messages:
                     await self.normal_mode_handler.handle_message(message)
+        else:
+            # 无新消息时，只进行模式检查，不进行思考循环
+            if self.context.loop_mode == ChatMode.FOCUS:
+                self._check_focus_exit()
+            elif self.context.loop_mode == ChatMode.NORMAL:
+                self._check_focus_entry(0)  # 传入0表示无新消息
+                    
+        return has_new_messages
 
     def _check_focus_exit(self):
         """

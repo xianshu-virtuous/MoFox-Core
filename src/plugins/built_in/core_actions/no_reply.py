@@ -16,7 +16,7 @@ class NoReplyAction(BaseAction):
 
     focus_activation_type = ActionActivationType.ALWAYS  # 修复：在focus模式下应该始终可用
     normal_activation_type = ActionActivationType.ALWAYS  # 修复：在normal模式下应该始终可用
-    mode_enable = ChatMode.FOCUS | ChatMode.NORMAL  # 修复：在所有模式下都可用
+    mode_enable = ChatMode.FOCUS 
     parallel_action = False
 
     # 动作基本信息
