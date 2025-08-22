@@ -336,18 +336,69 @@ class ActionPlanner:
                         )
                         reasoning = f"LLM 返回了当前不可用的动作 '{action}' (可用: {list(current_available_actions.keys())})。原始理由: {reasoning}"
                         action = "no_reply"
+                        
+                        # 检查no_reply是否可用，如果不可用则使用reply作为终极回退
+                        if "no_reply" not in current_available_actions:
+                            if "reply" in current_available_actions:
+                                action = "reply"
+                                reasoning += " (no_reply不可用，使用reply作为回退)"
+                                logger.warning(f"{self.log_prefix}no_reply不可用，使用reply作为回退")
+                            else:
+                                # 如果连reply都不可用，使用第一个可用的动作
+                                if current_available_actions:
+                                    action = list(current_available_actions.keys())[0]
+                                    reasoning += f" (no_reply和reply都不可用，使用{action}作为回退)"
+                                    logger.warning(f"{self.log_prefix}no_reply和reply都不可用，使用{action}作为回退")
+                                else:
+                                    # 如果没有任何可用动作，这是一个严重错误
+                                    logger.error(f"{self.log_prefix}没有任何可用动作，系统状态异常")
+                                    action = "no_reply"  # 仍然尝试no_reply，让上层处理
+                    
+                    # 对no_reply动作本身也进行可用性检查
+                    elif action == "no_reply" and "no_reply" not in current_available_actions:
+                        if "reply" in current_available_actions:
+                            action = "reply"
+                            reasoning = f"no_reply不可用，自动回退到reply。原因: {reasoning}"
+                            logger.warning(f"{self.log_prefix}no_reply不可用，自动回退到reply")
+                        elif current_available_actions:
+                            action = list(current_available_actions.keys())[0]
+                            reasoning = f"no_reply不可用，自动回退到{action}。原因: {reasoning}"
+                            logger.warning(f"{self.log_prefix}no_reply不可用，自动回退到{action}")
+                        else:
+                            logger.error(f"{self.log_prefix}没有任何可用动作，保持no_reply让上层处理")
 
                 except Exception as json_e:
                     logger.warning(f"{self.log_prefix}解析LLM响应JSON失败 {json_e}. LLM原始输出: '{llm_content}'")
                     traceback.print_exc()
                     reasoning = f"解析LLM响应JSON失败: {json_e}. 将使用默认动作 'no_reply'."
                     action = "no_reply"
+                    
+                    # 检查no_reply是否可用
+                    if "no_reply" not in current_available_actions:
+                        if "reply" in current_available_actions:
+                            action = "reply"
+                            reasoning += " (no_reply不可用，使用reply)"
+                        elif current_available_actions:
+                            action = list(current_available_actions.keys())[0]
+                            reasoning += f" (no_reply不可用，使用{action})"
 
         except Exception as outer_e:
             logger.error(f"{self.log_prefix}Planner 处理过程中发生意外错误，规划失败，将执行 no_reply: {outer_e}")
             traceback.print_exc()
             action = "no_reply"
             reasoning = f"Planner 内部处理错误: {outer_e}"
+            
+            # 检查no_reply是否可用
+            current_available_actions = self.action_manager.get_using_actions()
+            if "no_reply" not in current_available_actions:
+                if "reply" in current_available_actions:
+                    action = "reply"
+                    reasoning += " (no_reply不可用，使用reply)"
+                elif current_available_actions:
+                    action = list(current_available_actions.keys())[0]
+                    reasoning += f" (no_reply不可用，使用{action})"
+                else:
+                    logger.error(f"{self.log_prefix}严重错误：没有任何可用动作")
 
         is_parallel = False
         if mode == ChatMode.NORMAL and action in current_available_actions:

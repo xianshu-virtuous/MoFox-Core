@@ -74,6 +74,22 @@ class MainSystem:
             logger.info("🛑 插件热重载系统已停止")
         except Exception as e:
             logger.error(f"停止热重载系统时出错: {e}")
+        
+        try:
+            # 停止异步记忆管理器
+            if global_config.memory.enable_memory:
+                from src.chat.memory_system.async_memory_optimizer import async_memory_manager
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(async_memory_manager.shutdown())
+                else:
+                    loop.run_until_complete(async_memory_manager.shutdown())
+                logger.info("🛑 记忆管理器已停止")
+        except ImportError:
+            pass  # 异步记忆优化器不存在
+        except Exception as e:
+            logger.error(f"停止记忆管理器时出错: {e}")
 
     async def initialize(self):
         """初始化系统组件"""
@@ -89,7 +105,7 @@ class MainSystem:
             ("初墨小姐宇宙第一(不是)", 10), #15
             ("world.execute(me);", 10),
             ("正在尝试连接到MaiBot的服务器...连接失败...，正在转接到maimaiDX", 10),
-            ("你的bug就像星星一样多，而我的代码像太阳一样，一出来就看不见了。    （金日成...误💦）", 10),
+            ("你的bug就像星星一样多，而我的代码像太阳一样，一出来就看不见了。", 10),
             ("温馨提示：请不要在代码中留下任何魔法数字，除非你知道它的含义。", 10),
             ("世界上只有10种人：懂二进制的和不懂的。", 10),
             ("喵喵~你的麦麦被猫娘入侵了喵~", 15),
@@ -159,6 +175,16 @@ MaiMbot-Pro-Max(第三方修改版)
             if self.hippocampus_manager:
                 self.hippocampus_manager.initialize()
                 logger.info("记忆系统初始化成功")
+                
+                # 初始化异步记忆管理器
+                try:
+                    from src.chat.memory_system.async_memory_optimizer import async_memory_manager
+                    await async_memory_manager.initialize()
+                    logger.info("记忆管理器初始化成功")
+                except ImportError:
+                    logger.warning("异步记忆优化方法不可用，将回退使用同步模式")
+                except Exception as e:
+                    logger.error(f"记忆管理器初始化失败: {e}")
         else:
             logger.info("记忆系统已禁用，跳过初始化")
 
@@ -214,8 +240,50 @@ MaiMbot-Pro-Max(第三方修改版)
         """记忆构建任务"""
         while True:
             await asyncio.sleep(global_config.memory.memory_build_interval)
-            logger.info("正在进行记忆构建")
-            await self.hippocampus_manager.build_memory()  # type: ignore
+            
+            try:
+                # 使用异步记忆管理器进行非阻塞记忆构建
+                from src.chat.memory_system.async_memory_optimizer import build_memory_nonblocking
+                
+                logger.info("正在启动记忆构建")
+                
+                # 定义构建完成的回调函数
+                def build_completed(result):
+                    if result:
+                        logger.info("记忆构建完成")
+                    else:
+                        logger.warning("记忆构建失败")
+                
+                # 启动异步构建，不等待完成
+                task_id = await build_memory_nonblocking()
+                logger.info(f"记忆构建任务已提交：{task_id}")
+                
+            except ImportError:
+                # 如果异步优化器不可用，使用原有的同步方式（但在单独的线程中运行）
+                logger.warning("记忆优化器不可用，使用线性运行执行记忆构建")
+                
+                def sync_build_memory():
+                    """在线程池中执行同步记忆构建"""
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        result = loop.run_until_complete(self.hippocampus_manager.build_memory())
+                        logger.info("记忆构建完成")
+                        return result
+                    except Exception as e:
+                        logger.error(f"记忆构建失败: {e}")
+                        return None
+                    finally:
+                        loop.close()
+                
+                # 在线程池中执行记忆构建
+                asyncio.get_event_loop().run_in_executor(None, sync_build_memory)
+                
+            except Exception as e:
+                logger.error(f"记忆构建任务启动失败: {e}")
+                # fallback到原有的同步方式
+                logger.info("正在进行记忆构建（同步模式）")
+                await self.hippocampus_manager.build_memory()  # type: ignore
 
     async def forget_memory_task(self):
         """记忆遗忘任务"""

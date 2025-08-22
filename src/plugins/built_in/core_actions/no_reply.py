@@ -14,9 +14,9 @@ logger = get_logger("no_reply_action")
 class NoReplyAction(BaseAction):
     """不回复动作，支持waiting和breaking两种形式."""
 
-    focus_activation_type = ActionActivationType.NEVER
-    normal_activation_type = ActionActivationType.NEVER
-    mode_enable = ChatMode.FOCUS
+    focus_activation_type = ActionActivationType.ALWAYS  # 修复：在focus模式下应该始终可用
+    normal_activation_type = ActionActivationType.ALWAYS  # 修复：在normal模式下应该始终可用
+    mode_enable = ChatMode.FOCUS | ChatMode.NORMAL  # 修复：在所有模式下都可用
     parallel_action = False
 
     # 动作基本信息

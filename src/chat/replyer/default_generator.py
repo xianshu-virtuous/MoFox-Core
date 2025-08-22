@@ -425,13 +425,79 @@ class DefaultReplyer:
         
 
         if global_config.memory.enable_instant_memory:
-            # 异步存储聊天历史到向量记忆系统
-            asyncio.create_task(self.instant_memory.store_message(chat_history))
+            # 使用异步记忆包装器（最优化的非阻塞模式）
+            try:
+                from src.chat.memory_system.async_instant_memory_wrapper import get_async_instant_memory
+                
+                # 获取异步记忆包装器
+                async_memory = get_async_instant_memory(self.chat_stream.stream_id)
+                
+                # 后台存储聊天历史（完全非阻塞）
+                async_memory.store_memory_background(chat_history)
+                
+                # 快速检索记忆，最大超时2秒
+                instant_memory = await async_memory.get_memory_with_fallback(target, max_timeout=2.0)
+                
+                logger.info(f"异步瞬时记忆：{instant_memory}")
+                
+            except ImportError:
+                # 如果异步包装器不可用，尝试使用异步记忆管理器
+                try:
+                    from src.chat.memory_system.async_memory_optimizer import (
+                        retrieve_memory_nonblocking,
+                        store_memory_nonblocking
+                    )
+                    
+                    # 异步存储聊天历史（非阻塞）
+                    asyncio.create_task(store_memory_nonblocking(
+                        chat_id=self.chat_stream.stream_id,
+                        content=chat_history
+                    ))
+                    
+                    # 尝试从缓存获取瞬时记忆
+                    instant_memory = await retrieve_memory_nonblocking(
+                        chat_id=self.chat_stream.stream_id,
+                        query=target
+                    )
+                    
+                    # 如果没有缓存结果，快速检索一次
+                    if instant_memory is None:
+                        try:
+                            instant_memory = await asyncio.wait_for(
+                                self.instant_memory.get_memory_for_context(target),
+                                timeout=1.5
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning("瞬时记忆检索超时，使用空结果")
+                            instant_memory = ""
+                    
+                    logger.info(f"向量瞬时记忆：{instant_memory}")
+                    
+                except ImportError:
+                    # 最后的fallback：使用原有逻辑但加上超时控制
+                    logger.warning("异步记忆系统不可用，使用带超时的同步方式")
+                    
+                    # 异步存储聊天历史
+                    asyncio.create_task(self.instant_memory.store_message(chat_history))
 
-            # 从向量记忆系统获取相关记忆上下文
-            instant_memory = await self.instant_memory.get_memory_for_context(target)
+                    # 带超时的记忆检索
+                    try:
+                        instant_memory = await asyncio.wait_for(
+                            self.instant_memory.get_memory_for_context(target),
+                            timeout=1.0  # 最保守的1秒超时
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning("瞬时记忆检索超时，跳过记忆获取")
+                        instant_memory = ""
+                    except Exception as e:
+                        logger.error(f"瞬时记忆检索失败: {e}")
+                        instant_memory = ""
+                    
+                    logger.info(f"同步瞬时记忆：{instant_memory}")
             
-            logger.info(f"向量瞬时记忆：{instant_memory}")
+            except Exception as e:
+                logger.error(f"瞬时记忆系统异常: {e}")
+                instant_memory = ""
 
         # 构建记忆字符串，即使某种记忆为空也要继续
         memory_str = ""

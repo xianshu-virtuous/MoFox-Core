@@ -329,7 +329,35 @@ class CycleProcessor:
                 action_message=action_message,
             )
             if not action_handler:
-                return False, "", ""
+                # 动作处理器创建失败，尝试回退机制
+                logger.warning(f"{self.context.log_prefix} 创建动作处理器失败: {action}，尝试回退方案")
+                
+                # 获取当前可用的动作
+                available_actions = self.context.action_manager.get_using_actions()
+                fallback_action = None
+                
+                # 回退优先级：reply > 第一个可用动作
+                if "reply" in available_actions:
+                    fallback_action = "reply"
+                elif available_actions:
+                    fallback_action = list(available_actions.keys())[0]
+                
+                if fallback_action and fallback_action != action:
+                    logger.info(f"{self.context.log_prefix} 使用回退动作: {fallback_action}")
+                    action_handler = self.context.action_manager.create_action(
+                        action_name=fallback_action,
+                        action_data=action_data,
+                        reasoning=f"原动作'{action}'不可用，自动回退。{reasoning}",
+                        cycle_timers=cycle_timers,
+                        thinking_id=thinking_id,
+                        chat_stream=self.context.chat_stream,
+                        log_prefix=self.context.log_prefix,
+                        action_message=action_message,
+                    )
+                
+                if not action_handler:
+                    logger.error(f"{self.context.log_prefix} 回退方案也失败，无法创建任何动作处理器")
+                    return False, "", ""
             
             success, reply_text = await action_handler.handle_action()
             return success, reply_text, ""
