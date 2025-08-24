@@ -619,6 +619,8 @@ class VideoAnalysisConfig(ValidatedConfigBase):
 
     enable: bool = Field(default=True, description="启用")
     analysis_mode: str = Field(default="batch_frames", description="分析模式")
+    frame_extraction_mode: str = Field(default="fixed_number", description="抽帧模式")
+    frame_interval_seconds: float = Field(default=2.0, description="抽帧时间间隔")
     max_frames: int = Field(default=8, description="最大帧数")
     frame_quality: int = Field(default=85, description="帧质量")
     max_image_size: int = Field(default=800, description="最大图像大小")
