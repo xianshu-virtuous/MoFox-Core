@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from datetime import datetime
 
 from src.common.logger import get_logger
-from src.common.database.sqlalchemy_models import get_database_engine, PermissionNodes, UserPermissions
+from src.common.database.sqlalchemy_models import get_engine, PermissionNodes, UserPermissions
 from src.plugin_system.apis.permission_api import IPermissionManager, PermissionNode, UserInfo
 from src.config.config import global_config
 
@@ -21,7 +21,7 @@ class PermissionManager(IPermissionManager):
     """权限管理器实现类"""
     
     def __init__(self):
-        self.engine = get_database_engine()
+        self.engine = get_engine()
         self.SessionLocal = sessionmaker(bind=self.engine)
         self._master_users: Set[Tuple[str, str]] = set()
         self._load_master_users()
