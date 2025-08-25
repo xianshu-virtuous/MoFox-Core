@@ -64,3 +64,4 @@ chromadb
 asyncio
 tavily-python
 google-generativeai
+lunar_python
