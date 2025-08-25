@@ -1,6 +1,6 @@
 # 模型配置指南
 
-本文档将指导您如何配置 `model_config.toml` 文件，该文件用于配置 MaiBot 的各种AI模型和API服务提供商。
+本文档将指导您如何配置 `model_config.toml` 文件，该文件用于配置 MoFox_Bot 的各种AI模型和API服务提供商。
 
 ## 配置文件结构
 
