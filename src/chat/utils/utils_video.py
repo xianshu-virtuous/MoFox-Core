@@ -55,6 +55,7 @@ def _extract_frames_worker(video_path: str,
             # 新模式：按时间间隔抽帧
             time_interval = frame_interval_seconds
             next_frame_time = 0.0
+            extracted_count = 0  # 初始化提取帧计数器
             
             while cap.isOpened():
                 ret, frame = cap.read()
@@ -69,20 +70,21 @@ def _extract_frames_worker(video_path: str,
                     pil_image = Image.fromarray(frame_rgb)
                     
                     # 调整图像大小
-                    if max(pil_image.size) > self.max_image_size:
-                        ratio = self.max_image_size / max(pil_image.size)
+                    if max(pil_image.size) > max_image_size:
+                        ratio = max_image_size / max(pil_image.size)
                         new_size = tuple(int(dim * ratio) for dim in pil_image.size)
                         pil_image = pil_image.resize(new_size, Image.Resampling.LANCZOS)
                     
                     # 转换为base64
                     buffer = io.BytesIO()
-                    pil_image.save(buffer, format='JPEG', quality=self.frame_quality)
+                    pil_image.save(buffer, format='JPEG', quality=frame_quality)
                     frame_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
                     
                     frames.append((frame_base64, current_time))
                     extracted_count += 1
                     
-                    logger.debug(f"提取第{extracted_count}帧 (时间: {current_time:.2f}s)")
+                    # 注意：这里不能使用logger，因为在线程池中
+                    # logger.debug(f"提取第{extracted_count}帧 (时间: {current_time:.2f}s)")
                     
                     next_frame_time += time_interval
         else:

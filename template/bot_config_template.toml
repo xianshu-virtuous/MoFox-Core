@@ -1,5 +1,5 @@
 [inner]
-version = "6.4.4"
+version = "6.4.6"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -388,6 +388,8 @@ max_frames = 16 # 最大分析帧数（仅在 mode = "fixed_number" 时生效）
 frame_quality = 80 # 帧图像JPEG质量 (1-100)
 max_image_size = 800 # 单帧最大图像尺寸(像素)
 enable_frame_timing = true # 是否在分析中包含帧的时间信息
+use_multiprocessing = true # 是否使用线程池处理视频帧提取（推荐开启，可防止卡死）
+max_workers = 2 # 最大线程数（建议1-2个，避免过度消耗资源）
 # 批量分析时使用的提示词
 batch_analysis_prompt = """请分析这个视频的内容。这些图片是从视频中按时间顺序提取的关键帧。
 
