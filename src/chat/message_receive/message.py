@@ -111,6 +111,7 @@ class MessageRecv(Message):
         self.is_picid = False
         self.has_picid = False
         self.is_voice = False
+        self.is_video = False
         self.is_mentioned = None
         self.is_notify = False
 
@@ -143,6 +144,7 @@ class MessageRecv(Message):
             if segment.type == "text":
                 self.is_picid = False
                 self.is_emoji = False
+                self.is_video = False
                 return segment.data  # type: ignore
             elif segment.type == "image":
                 # 如果是base64图片数据
@@ -150,6 +152,7 @@ class MessageRecv(Message):
                     self.has_picid = True
                     self.is_picid = True
                     self.is_emoji = False
+                    self.is_video = False
                     image_manager = get_image_manager()
                     # print(f"segment.data: {segment.data}")
                     _, processed_text = await image_manager.process_image(segment.data)
@@ -160,6 +163,7 @@ class MessageRecv(Message):
                 self.is_emoji = True
                 self.is_picid = False
                 self.is_voice = False
+                self.is_video = False
                 if isinstance(segment.data, str):
                     return await get_image_manager().get_emoji_description(segment.data)
                 return "[发了一个表情包，网卡了加载不出来]"
@@ -167,6 +171,7 @@ class MessageRecv(Message):
                 self.is_picid = False
                 self.is_emoji = False
                 self.is_voice = True
+                self.is_video = False
                 if isinstance(segment.data, str):
                     return await get_voice_text(segment.data)
                 return "[发了一段语音，网卡了加载不出来]"
@@ -174,6 +179,7 @@ class MessageRecv(Message):
                 self.is_picid = False
                 self.is_emoji = False
                 self.is_voice = False
+                self.is_video = False
                 self.is_mentioned = float(segment.data)  # type: ignore
                 return ""
             elif segment.type == "priority_info":
@@ -195,6 +201,7 @@ class MessageRecv(Message):
                 self.is_picid = False
                 self.is_emoji = False
                 self.is_voice = False
+                self.is_video = True
                 logger.info(f"接收到视频消息，数据类型: {type(segment.data)}")
                 if global_config.video_analysis.enable:
                     logger.info("已启用视频识别,开始识别")
