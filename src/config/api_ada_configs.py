@@ -47,6 +47,7 @@ class ModelInfo(ValidatedConfigBase):
     price_out: float = Field(default=0.0, ge=0, description="每M token输出价格")
     force_stream_mode: bool = Field(default=False, description="是否强制使用流式输出模式")
     extra_params: Dict[str, Any] = Field(default_factory=dict, description="额外参数（用于API调用时的额外配置）")
+    anti_truncation: bool = Field(default=False, description="是否启用反截断功能，防止模型输出被截断")
 
     @field_validator('price_in', 'price_out')
     @classmethod
@@ -83,7 +84,6 @@ class TaskConfig(ValidatedConfigBase):
     max_tokens: int = Field(default=800, description="任务最大输出token数")
     temperature: float = Field(default=0.7, description="模型温度")
     concurrency_count: int = Field(default=1, description="并发请求数量")
-    anti_truncation: bool = Field(default=False, description="是否启用反截断功能，防止模型输出被截断")
 
     @field_validator('model_list')
     @classmethod

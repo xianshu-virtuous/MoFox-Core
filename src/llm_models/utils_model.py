@@ -291,12 +291,12 @@ class LLMRequest:
         model_name = model_info.name
         
         # 检查是否启用反截断
-        use_anti_truncation = getattr(self.model_for_task, "anti_truncation", False)
+        use_anti_truncation = getattr(api_provider, "anti_truncation", False)
         
         processed_prompt = prompt
         if use_anti_truncation:
             processed_prompt += self.anti_truncation_instruction
-            logger.info(f"任务 '{self.task_name}' 已启用反截断功能")
+            logger.info(f"{api_provider} '{self.task_name}' 已启用反截断功能")
             
         processed_prompt = self._apply_content_obfuscation(processed_prompt, api_provider)
         
