@@ -529,7 +529,7 @@ class ActionPlanner:
             moderation_prompt_block = "请不要输出违法违规内容，不要输出色情，暴力，政治相关内容，如有敏感内容，请规避。"
             
             custom_prompt_block = ""
-            if global_config.custom_prompt.planner_custom_prompt_enable and global_config.custom_prompt.planner_custom_prompt_content:
+            if global_config.custom_prompt.planner_custom_prompt_content:
                 custom_prompt_block = global_config.custom_prompt.planner_custom_prompt_content
 
             planner_prompt_template = await global_prompt_manager.get_prompt_async("planner_prompt")

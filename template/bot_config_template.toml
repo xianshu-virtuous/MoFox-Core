@@ -1,5 +1,5 @@
 [inner]
-version = "6.4.9"
+version = "6.5.1"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -313,8 +313,7 @@ regex_rules = [
 # 可以自定义部分提示词
 [custom_prompt]
 image_prompt = "请用中文描述这张图片的内容。如果有文字，请把文字描述概括出来，请留意其主题，直观感受，输出为一段平文本，最多30字，请注意不要分点，就输出一段文本"
-planner_custom_prompt_enable = false # 是否启用决策器自定义提示词(就是可以在决策器的默认提示词后面加入你的提示词,如果看不懂最好还是关了吧)
-planner_custom_prompt_content = "" # 决策器自定义提示词内容，仅在planner_custom_prompt_enable为True时生效
+planner_custom_prompt_content = "" # 决策器自定义提示词内容，如果这里没有内容则不生效
 
 [response_post_process]
 enable_response_post_process = true # 是否启用回复后处理，包括错别字生成器，回复分割器
@@ -371,9 +370,6 @@ use_wss = false # 是否使用WSS安全连接，只支持ws模式
 cert_file = "" # SSL证书文件路径，仅在use_wss=true时有效
 key_file = "" # SSL密钥文件路径，仅在use_wss=true时有效
 
-[telemetry] #发送统计信息，主要是看全球有多少只麦麦
-enable = true
-
 [schedule] #日程管理
 enable = false # 是否启用日程管理功能
 # 日程生成指导原则，如果不设置则使用默认原则
@@ -385,9 +381,6 @@ guidelines = """
 另外，请保证充足的休眠时间来处理和整合一天的数据。
 """
 enable_is_sleep = false
-
-[experimental] #实验性功能
-enable_friend_chat = false # 是否启用好友聊天
 
 [video_analysis] # 视频分析配置
 enable = true # 是否启用视频分析功能
@@ -417,16 +410,13 @@ batch_analysis_prompt = """请以第一人称的视角来观看这一个视频�
 请用中文回答，结果要详细准确。"""
 # 请不要修改{personality_core}和{personality_side}哦~
 
-[exa] # EXA API密钥列表，支持轮询机制
-api_keys = ["None"]
-
-[tavily] # Tavily API密钥列表，支持轮询机制
-api_keys = ["None"]
 
 # 网络搜索组件配置
 [web_search]
 enable_web_search_tool = true # 是否启用联网搜索tool
 enable_url_tool = true # 是否启用URL解析tool
+tavily_api_keys = ["None"]# Tavily API密钥列表，支持轮询机制
+exa_api_keys = ["None"]# EXA API密钥列表，支持轮询机制
 
 # 搜索引擎配置
 enabled_engines = ["ddg"] # 启用的搜索引擎列表，可选: "exa", "tavily", "ddg","bing"
@@ -441,16 +431,12 @@ centralized_config = true # 是否启用插件配置集中化管理
 [monthly_plan_system]
 # 是否启用本功能
 enable = true
-
 # 每个月允许存在的最大计划数量
 max_plans_per_month = 20
-
 # 计划使用多少次后自动标记为已完成
 completion_threshold = 3
-
 # 多少天内不重复抽取同一个计划
 avoid_repetition_days = 7
-
 # 月度计划生成的指导原则（可选，如果不设置则使用默认原则）
 guidelines = """
 我希望你能为自己制定一些有意义的月度小目标和计划。
@@ -472,10 +458,9 @@ angry_prompt = "你被人吵醒了非常生气，说话带着怒气" # "被吵�
 [cross_context] # 跨群聊上下文共享配置
 # 这是总开关，用于一键启用或禁用此功能
 enable = false
-
 # 在这里定义您的“共享组”
 # 只有在同一个组内的群聊才会共享上下文
-# 注意：这里的chat_ids需要填写群号，而不是哈希过的ID
+# 注意：这里的chat_ids需要填写群号
 [[cross_context.groups]]
 name = "项目A技术讨论组"
 chat_ids = [
@@ -487,7 +472,6 @@ chat_ids = [
 # QQ空间互通组配置
 # 启用后，发布说说时会读取指定互通组的上下文
 enable = false
-
 # 定义QQ空间互通组
 # 同一个组的chat_id会共享上下文，用于生成更相关的说说
 [[maizone_intercom.groups]]

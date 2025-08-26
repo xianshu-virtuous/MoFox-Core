@@ -525,12 +525,6 @@ class ResponseSplitterConfig(ValidatedConfigBase):
     enable_kaomoji_protection: bool = Field(default=False, description="启用颜文字保护")
 
 
-class TelemetryConfig(ValidatedConfigBase):
-    """遥测配置类"""
-
-    enable: bool = Field(default=True, description="启用")
-
-
 class DebugConfig(ValidatedConfigBase):
     """调试配置类"""
 
@@ -539,8 +533,6 @@ class DebugConfig(ValidatedConfigBase):
 
 class ExperimentalConfig(ValidatedConfigBase):
     """实验功能配置类"""
-
-    enable_friend_chat: bool = Field(default=False, description="启用好友聊天")
     pfc_chatting: bool = Field(default=False, description="启用PFC聊天")
 
 
@@ -600,20 +592,6 @@ class DependencyManagementConfig(ValidatedConfigBase):
 
 
 
-class ExaConfig(ValidatedConfigBase):
-    """EXA搜索引擎配置类"""
-
-    api_keys: list[str] = Field(default_factory=lambda: [], description="API密钥列表")
-
-
-
-class TavilyConfig(ValidatedConfigBase):
-    """Tavily搜索引擎配置类"""
-
-    api_keys: list[str] = Field(default_factory=lambda: [], description="API密钥列表")
-
-
-
 class VideoAnalysisConfig(ValidatedConfigBase):
     """视频分析配置类"""
 
@@ -633,6 +611,8 @@ class WebSearchConfig(ValidatedConfigBase):
 
     enable_web_search_tool: bool = Field(default=True, description="启用网络搜索工具")
     enable_url_tool: bool = Field(default=True, description="启用URL工具")
+    tavily_api_keys: list[str] = Field(default_factory=lambda: [], description="Tavily API密钥列表，支持轮询机制")
+    exa_api_keys: list[str] = Field(default_factory=lambda: [], description="exa API密钥列表，支持轮询机制")
     enabled_engines: list[str] = Field(default_factory=lambda: ["ddg"], description="启用的搜索引擎")
     search_strategy: Literal["fallback","single","parallel"] = Field(default="single", description="搜索策略")
 

@@ -25,7 +25,6 @@ from src.config.official_configs import (
     ChineseTypoConfig,
     ResponsePostProcessConfig,
     ResponseSplitterConfig,
-    TelemetryConfig,
     ExperimentalConfig,
     MessageReceiveConfig,
     MaimMessageConfig,
@@ -38,9 +37,7 @@ from src.config.official_configs import (
     ScheduleConfig,
     VideoAnalysisConfig,
     DependencyManagementConfig,
-    ExaConfig,
     WebSearchConfig,
-    TavilyConfig,
     AntiPromptInjectionConfig,
     PluginsConfig,
     WakeUpSystemConfig,
@@ -389,7 +386,6 @@ class Config(ValidatedConfigBase):
     chinese_typo: ChineseTypoConfig = Field(..., description="中文错别字配置")
     response_post_process: ResponsePostProcessConfig = Field(..., description="响应后处理配置")
     response_splitter: ResponseSplitterConfig = Field(..., description="响应分割配置")
-    telemetry: TelemetryConfig = Field(..., description="遥测配置")
     experimental: ExperimentalConfig = Field(..., description="实验性功能配置")
     maim_message: MaimMessageConfig = Field(..., description="Maim消息配置")
     lpmm_knowledge: LPMMKnowledgeConfig = Field(..., description="LPMM知识配置")
@@ -404,9 +400,7 @@ class Config(ValidatedConfigBase):
     anti_prompt_injection: AntiPromptInjectionConfig = Field(default_factory=lambda: AntiPromptInjectionConfig(), description="反提示注入配置")
     video_analysis: VideoAnalysisConfig = Field(default_factory=lambda: VideoAnalysisConfig(), description="视频分析配置")
     dependency_management: DependencyManagementConfig = Field(default_factory=lambda: DependencyManagementConfig(), description="依赖管理配置")
-    exa: ExaConfig = Field(default_factory=lambda: ExaConfig(), description="Exa配置")
     web_search: WebSearchConfig = Field(default_factory=lambda: WebSearchConfig(), description="网络搜索配置")
-    tavily: TavilyConfig = Field(default_factory=lambda: TavilyConfig(), description="Tavily配置")
     plugins: PluginsConfig = Field(default_factory=lambda: PluginsConfig(), description="插件配置")
     wakeup_system: WakeUpSystemConfig = Field(default_factory=lambda: WakeUpSystemConfig(), description="唤醒度系统配置")
     monthly_plan_system: MonthlyPlanSystemConfig = Field(default_factory=lambda: MonthlyPlanSystemConfig(), description="月层计划系统配置")
