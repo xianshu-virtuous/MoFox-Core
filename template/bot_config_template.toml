@@ -52,6 +52,9 @@ qq_account = 1145141919810 # 麦麦的QQ账号
 nickname = "麦麦" # 麦麦的昵称
 alias_names = ["麦叠", "牢麦"] # 麦麦的别名
 
+[command]
+command_prefixes = ['/', '!', '.', '#']
+
 [personality]
 # 建议50字以内，描述人格的核心特质
 personality_core = "是一个积极向上的女大学生" 
