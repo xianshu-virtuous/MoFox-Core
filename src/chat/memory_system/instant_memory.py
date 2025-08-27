@@ -2,7 +2,6 @@
 import time
 import re
 import orjson
-import json
 import traceback
 
 from json_repair import repair_json
@@ -109,7 +108,7 @@ class InstantMemory:
             memory_id=memory_item.memory_id,
             chat_id=memory_item.chat_id,
             memory_text=memory_item.memory_text,
-            keywords=json.dumps(memory_item.keywords, ensure_ascii=False),
+            keywords=orjson.dumps(memory_item.keywords),
             create_time=memory_item.create_time,
             last_view_time=memory_item.last_view_time,
         )
