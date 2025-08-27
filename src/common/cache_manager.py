@@ -4,13 +4,13 @@ import hashlib
 from pathlib import Path
 import numpy as np
 import faiss
-import chromadb
 from typing import Any, Dict, Optional, Union
 from src.common.logger import get_logger
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import global_config, model_config
 from src.common.database.sqlalchemy_models import CacheEntries
 from src.common.database.sqlalchemy_database_api import db_query, db_save
+from src.common.vector_db import vector_db_service
 
 logger = get_logger("cache_manager")
 
@@ -28,25 +28,23 @@ class CacheManager:
             cls._instance = super(CacheManager, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, default_ttl: int = 3600, chroma_path: str = "data/chroma_db"):
+    def __init__(self, default_ttl: int = 3600):
         """
         初始化缓存管理器。
         """
         if not hasattr(self, '_initialized'):
             self.default_ttl = default_ttl
-            
+            self.semantic_cache_collection_name = "semantic_cache"
+
             # L1 缓存 (内存)
             self.l1_kv_cache: Dict[str, Dict[str, Any]] = {}
             embedding_dim = global_config.lpmm_knowledge.embedding_dimension
             self.l1_vector_index = faiss.IndexFlatIP(embedding_dim)
             self.l1_vector_id_to_key: Dict[int, str] = {}
             
-            # 语义缓存 (ChromaDB)
-                
-            self.chroma_client = chromadb.PersistentClient(path=chroma_path)
-            self.chroma_collection = self.chroma_client.get_or_create_collection(name="semantic_cache")
+            # L2 向量缓存 (使用新的服务)
+            vector_db_service.get_or_create_collection(self.semantic_cache_collection_name)
 
-            
             # 嵌入模型
             self.embedding_model = LLMRequest(model_config.model_task_config.embedding)
 
@@ -152,18 +150,20 @@ class CacheManager:
                     return self.l1_kv_cache[l1_hit_key]["data"]
 
         # 步骤 2b: L2 精确缓存 (数据库)
-        cache_results = await db_query(
+        cache_results_obj = await db_query(
             model_class=CacheEntries,
             query_type="get",
             filters={"cache_key": key},
             single_result=True
         )
         
-        if cache_results:
-            expires_at = cache_results["expires_at"]
+        if cache_results_obj:
+            # 使用 getattr 安全访问属性，避免 Pylance 类型检查错误
+            expires_at = getattr(cache_results_obj, "expires_at", 0)
             if time.time() < expires_at:
                 logger.info(f"命中L2键值缓存: {key}")
-                data = orjson.loads(cache_results["cache_value"])
+                cache_value = getattr(cache_results_obj, "cache_value", "{}")
+                data = orjson.loads(cache_value)
                 
                 # 更新访问统计
                 await db_query(
@@ -172,7 +172,7 @@ class CacheManager:
                     filters={"cache_key": key},
                     data={
                         "last_accessed": time.time(),
-                        "access_count": cache_results["access_count"] + 1
+                        "access_count": getattr(cache_results_obj, "access_count", 0) + 1
                     }
                 )
                 
@@ -187,29 +187,35 @@ class CacheManager:
                     filters={"cache_key": key}
                 )
 
-        # 步骤 2c: L2 语义缓存 (ChromaDB)
-        if query_embedding is not None and self.chroma_collection:
+        # 步骤 2c: L2 语义缓存 (VectorDB Service)
+        if query_embedding is not None:
             try:
-                results = self.chroma_collection.query(query_embeddings=query_embedding.tolist(), n_results=1)
-                if results and results['ids'] and results['ids'][0]:
-                    distance = results['distances'][0][0] if results['distances'] and results['distances'][0] else 'N/A'
+                results = vector_db_service.query(
+                    collection_name=self.semantic_cache_collection_name,
+                    query_embeddings=query_embedding.tolist(),
+                    n_results=1
+                )
+                if results and results.get('ids') and results['ids'][0]:
+                    distance = results['distances'][0][0] if results.get('distances') and results['distances'][0] else 'N/A'
                     logger.debug(f"L2语义搜索找到最相似的结果: id={results['ids'][0]}, 距离={distance}")
+                    
                     if distance != 'N/A' and distance < 0.75:
                         l2_hit_key = results['ids'][0][0] if isinstance(results['ids'][0], list) else results['ids'][0]
                         logger.info(f"命中L2语义缓存: key='{l2_hit_key}', 距离={distance:.4f}")
                         
                         # 从数据库获取缓存数据
-                        semantic_cache_results = await db_query(
+                        semantic_cache_results_obj = await db_query(
                             model_class=CacheEntries,
                             query_type="get",
                             filters={"cache_key": l2_hit_key},
                             single_result=True
                         )
                         
-                        if semantic_cache_results:
-                            expires_at = semantic_cache_results["expires_at"]
+                        if semantic_cache_results_obj:
+                            expires_at = getattr(semantic_cache_results_obj, "expires_at", 0)
                             if time.time() < expires_at:
-                                data = orjson.loads(semantic_cache_results["cache_value"])
+                                cache_value = getattr(semantic_cache_results_obj, "cache_value", "{}")
+                                data = orjson.loads(cache_value)
                                 logger.debug(f"L2语义缓存返回的数据: {data}")
                                 
                                 # 回填 L1
@@ -218,13 +224,13 @@ class CacheManager:
                                     try:
                                         new_id = self.l1_vector_index.ntotal
                                         faiss.normalize_L2(query_embedding)
-                                        self.l1_vector_index.add(x=query_embedding)
+                                        self.l1_vector_index.add(x=query_embedding)  # type: ignore
                                         self.l1_vector_id_to_key[new_id] = key
                                     except Exception as e:
                                         logger.error(f"回填L1向量索引时发生错误: {e}")
                                 return data
             except Exception as e:
-                logger.warning(f"ChromaDB查询失败: {e}")
+                logger.warning(f"VectorDB Service 查询失败: {e}")
 
         logger.debug(f"缓存未命中: {key}")
         return None
@@ -261,25 +267,29 @@ class CacheManager:
         )
 
         # 写入语义缓存
-        if semantic_query and self.embedding_model and self.chroma_collection:
+        if semantic_query and self.embedding_model:
             try:
                 embedding_result = await self.embedding_model.get_embedding(semantic_query)
                 if embedding_result:
-                    # embedding_result是一个元组(embedding_vector, model_name)，取第一个元素
                     embedding_vector = embedding_result[0] if isinstance(embedding_result, tuple) else embedding_result
                     validated_embedding = self._validate_embedding(embedding_vector)
                     if validated_embedding is not None:
                         embedding = np.array([validated_embedding], dtype='float32')
+                        
                         # 写入 L1 Vector
                         new_id = self.l1_vector_index.ntotal
                         faiss.normalize_L2(embedding)
-                        self.l1_vector_index.add(x=embedding)
+                        self.l1_vector_index.add(x=embedding)  # type: ignore
                         self.l1_vector_id_to_key[new_id] = key
-                        # 写入 L2 Vector
-                        self.chroma_collection.add(embeddings=embedding.tolist(), ids=[key])
-                    except Exception as e:
-                        logger.error(f"写入语义缓存时发生错误: {e}")
-                        # 继续执行，不影响主要缓存功能
+                        
+                        # 写入 L2 Vector (使用新的服务)
+                        vector_db_service.add(
+                            collection_name=self.semantic_cache_collection_name,
+                            embeddings=embedding.tolist(),
+                            ids=[key]
+                        )
+            except Exception as e:
+                logger.warning(f"语义缓存写入失败: {e}")
 
         logger.info(f"已缓存条目: {key}, TTL: {ttl}s")
 
@@ -299,15 +309,14 @@ class CacheManager:
             filters={}  # 删除所有记录
         )
         
-        # 清空ChromaDB
-        if self.chroma_collection:
-            try:
-                self.chroma_client.delete_collection(name="semantic_cache")
-                self.chroma_collection = self.chroma_client.get_or_create_collection(name="semantic_cache")
-            except Exception as e:
-                logger.warning(f"清空ChromaDB失败: {e}")
+        # 清空 VectorDB
+        try:
+            vector_db_service.delete_collection(name=self.semantic_cache_collection_name)
+            vector_db_service.get_or_create_collection(name=self.semantic_cache_collection_name)
+        except Exception as e:
+            logger.warning(f"清空 VectorDB 集合失败: {e}")
         
-        logger.info("L2 (数据库 & ChromaDB) 缓存已清空。")
+        logger.info("L2 (数据库 & VectorDB) 缓存已清空。")
 
     async def clear_all(self):
         """清空所有缓存。"""

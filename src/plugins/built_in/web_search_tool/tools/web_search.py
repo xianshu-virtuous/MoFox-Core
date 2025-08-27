@@ -7,7 +7,6 @@ from typing import Any, Dict, List
 from src.common.logger import get_logger
 from src.plugin_system import BaseTool, ToolParamType
 from src.plugin_system.apis import config_api
-from src.common.cache_manager import tool_cache
 
 from ..engines.exa_engine import ExaSearchEngine
 from ..engines.tavily_engine import TavilySearchEngine

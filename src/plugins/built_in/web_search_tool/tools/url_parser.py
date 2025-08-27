@@ -11,7 +11,6 @@ from bs4 import BeautifulSoup
 from src.common.logger import get_logger
 from src.plugin_system import BaseTool, ToolParamType, llm_api
 from src.plugin_system.apis import config_api
-from src.common.cache_manager import tool_cache
 
 from ..utils.formatters import format_url_parse_results
 from ..utils.url_utils import parse_urls_from_input, validate_urls
