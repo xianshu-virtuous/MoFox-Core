@@ -154,7 +154,8 @@ class QZoneService:
             # --- 第一步: 单独处理自己说说的评论 ---
             if self.get_config("monitor.enable_auto_reply", False):
                 try:
-                    own_feeds = await api_client["list_feeds"](qq_account, 5) # 获取自己最近5条说说
+                    # 传入新参数，表明正在检查自己的说说
+                    own_feeds = await api_client["list_feeds"](qq_account, 5, is_monitoring_own_feeds=True)
                     if own_feeds:
                         logger.info(f"获取到自己 {len(own_feeds)} 条说说，检查评论...")
                         for feed in own_feeds:
@@ -255,16 +256,17 @@ class QZoneService:
         if not comments:
             return
 
-        # 找到所有我已经回复过的评论的ID
-        replied_to_tids = {
-            c['parent_tid'] for c in comments
-            if c.get('parent_tid') and str(c.get('qq_account')) == str(qq_account)
-        }
+        # 1. 将评论分为用户评论和自己的回复
+        user_comments = [c for c in comments if str(c.get('qq_account')) != str(qq_account)]
+        my_replies = [c for c in comments if str(c.get('qq_account')) == str(qq_account)]
 
-        # 找出所有非我发出且我未回复过的评论
+        # 2. 获取所有已经被我回复过的评论的ID
+        replied_comment_ids = {reply.get('parent_tid') for reply in my_replies if reply.get('parent_tid')}
+
+        # 3. 找出所有尚未被回复过的用户评论
         comments_to_reply = [
-            c for c in comments
-            if str(c.get('qq_account')) != str(qq_account) and c.get('comment_tid') not in replied_to_tids
+            comment for comment in user_comments
+            if comment.get('comment_tid') not in replied_comment_ids
         ]
 
         if not comments_to_reply:
@@ -641,7 +643,7 @@ class QZoneService:
                 logger.error(f"上传图片 {index+1} 异常: {e}", exc_info=True)
                 return None
 
-        async def _list_feeds(t_qq: str, num: int) -> List[Dict]:
+        async def _list_feeds(t_qq: str, num: int, is_monitoring_own_feeds: bool = False) -> List[Dict]:
             """获取指定用户说说列表"""
             try:
                 params = {
@@ -667,37 +669,41 @@ class QZoneService:
                 feeds_list = []
                 my_name = json_data.get("logininfo", {}).get("name", "")
                 for msg in json_data.get("msglist", []):
-                    is_commented = any(
-                        c.get("name") == my_name for c in msg.get("commentlist", []) if isinstance(c, dict)
-                    )
-                    if not is_commented:
-                        images = [pic['url1'] for pic in msg.get('pictotal', []) if 'url1' in pic]
-
-                        comments = []
-                        if 'commentlist' in msg:
-                            for c in msg['commentlist']:
-                                comments.append({
-                                    'qq_account': c.get('uin'),
-                                    'nickname': c.get('name'),
-                                    'content': c.get('content'),
-                                    'comment_tid': c.get('tid'),
-                                    'parent_tid': c.get('parent_tid') # API直接返回了父ID
-                                })
-
-                        feeds_list.append(
-                            {
-                                "tid": msg.get("tid", ""),
-                                "content": msg.get("content", ""),
-                                "created_time": time.strftime(
-                                    "%Y-%m-%d %H:%M:%S", time.localtime(msg.get("created_time", 0))
-                                ),
-                                "rt_con": msg.get("rt_con", {}).get("content", "")
-                                if isinstance(msg.get("rt_con"), dict)
-                                else "",
-                                "images": images,
-                                "comments": comments
-                            }
+                    # 只有在处理好友说说时，才检查是否已评论并跳过
+                    if not is_monitoring_own_feeds:
+                        is_commented = any(
+                            c.get("name") == my_name for c in msg.get("commentlist", []) if isinstance(c, dict)
                         )
+                        if is_commented:
+                            continue
+
+                    images = [pic['url1'] for pic in msg.get('pictotal', []) if 'url1' in pic]
+
+                    comments = []
+                    if 'commentlist' in msg:
+                        for c in msg['commentlist']:
+                            comments.append({
+                                'qq_account': c.get('uin'),
+                                'nickname': c.get('name'),
+                                'content': c.get('content'),
+                                'comment_tid': c.get('tid'),
+                                'parent_tid': c.get('parent_tid') # API直接返回了父ID
+                            })
+
+                    feeds_list.append(
+                        {
+                            "tid": msg.get("tid", ""),
+                            "content": msg.get("content", ""),
+                            "created_time": time.strftime(
+                                "%Y-%m-%d %H:%M:%S", time.localtime(msg.get("created_time", 0))
+                            ),
+                            "rt_con": msg.get("rt_con", {}).get("content", "")
+                            if isinstance(msg.get("rt_con"), dict)
+                            else "",
+                            "images": images,
+                            "comments": comments
+                        }
+                    )
                 return feeds_list
             except Exception as e:
                 logger.error(f"获取说说列表失败: {e}", exc_info=True)
