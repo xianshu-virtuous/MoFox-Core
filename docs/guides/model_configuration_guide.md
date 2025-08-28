@@ -43,12 +43,11 @@ retry_interval = 10                     # 重试间隔（秒）
 | `name` | ✅ | 服务商名称，需要在模型配置中引用 | - |
 | `base_url` | ✅ | API服务的基础URL | - |
 | `api_key` | ✅ | API密钥，请替换为实际密钥 | - |
-| `client_type` | ❌ | 客户端类型：`openai`（OpenAI格式）或 `gemini`（Gemini格式，现在支持不良好） | `openai` |
+| `client_type` | ❌ | 客户端类型：`openai`（OpenAI格式）或 `aiohttp_gemini`(至少现在支持良好) | `openai` |
 | `max_retry` | ❌ | API调用失败时的最大重试次数 | 2 |
 | `timeout` | ❌ | API请求超时时间（秒） | 30 |
 | `retry_interval` | ❌ | 重试间隔时间（秒） | 10 |
 
-**请注意，对于`client_type`为`gemini`的模型，`base_url`字段无效。**
 ### 2.3 支持的服务商示例
 
 #### DeepSeek
@@ -73,9 +72,9 @@ client_type = "openai"
 ```toml
 [[api_providers]]
 name = "Google"
-base_url = "https://api.google.com/v1"
+base_url = "https://api.google.com/v1" #在MoFox-Bot中, 使用aiohttp_gemini客户端的提供商可以自定义base_url
 api_key = "your-google-api-key"
-client_type = "gemini"  # 注意：Gemini需要使用特殊客户端
+client_type = "aiohttp_gemini"  # 注意：Gemini需要使用特殊客户端
 ```
 
 ## 3. 模型配置
@@ -118,11 +117,11 @@ enable_thinking = false # 禁用思考
 
 比如上面就是参考SiliconFlow的文档配置配置的`Qwen3`禁用思考参数。
 
-![SiliconFlow文档截图](image-1.png)
+![SiliconFlow文档截图](../assets/image-1.png)
 
 以豆包文档为另一个例子
 
-![豆包文档截图](image.png)
+![豆包文档截图](../assets/image.png)
 
 得到豆包`"doubao-seed-1-6-250615"`的禁用思考配置方法为
 ```toml
@@ -268,7 +267,7 @@ max_tokens = 800
 
 | 任务类型 | 推荐模型类型 | 示例 |
 |----------|--------------|------|
-| 高精度任务 | 大模型 | DeepSeek-V3, GPT-4 |
+| 高精度任务 | 大模型 | DeepSeek-V3, GPT-5,Gemini-2.5-Pro |
 | 高频率任务 | 小模型 | Qwen3-8B |
 | 多模态任务 | 专用模型 | Qwen2.5-VL, SenseVoice |
 | 工具调用 | 支持Function Call的模型 | Qwen3-14B |
@@ -277,7 +276,6 @@ max_tokens = 800
 
 1. **分层使用**：核心功能使用高质量模型，辅助功能使用经济模型
 2. **合理配置max_tokens**：根据实际需求设置，避免浪费
-3. **选择免费模型**：对于测试环境，优先使用price为0的模型
 
 ## 6. 配置验证
 

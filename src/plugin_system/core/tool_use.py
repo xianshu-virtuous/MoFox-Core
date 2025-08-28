@@ -244,13 +244,14 @@ class ToolExecutor:
             function_name = tool_call.func_name
             function_args = tool_call.args or {}
             logger.info(f"{self.log_prefix} 正在执行工具: [bold green]{function_name}[/bold green] | 参数: {function_args}")
-            function_args["llm_called"] = True
-
+            function_args["llm_called"] = True  # 标记为LLM调用
+            # 获取对应工具实例
             tool_instance = tool_instance or get_tool_instance(function_name)
             if not tool_instance:
                 logger.warning(f"未知工具名称: {function_name}")
                 return None
 
+            # 执行工具并记录日志
             logger.debug(f"{self.log_prefix}执行工具 {function_name}，参数: {function_args}")
             result = await tool_instance.execute(function_args)
             if result:
