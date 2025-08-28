@@ -87,7 +87,7 @@ class CommandArgs:
         """
         return self.get_arg(0, default)
     
-    def get_remaining(self, start_index: int = 1) -> str:
+    def get_remaining(self, start_index: int = 0) -> str:
         """获取从指定索引开始的剩余参数字符串
         
         Args:
