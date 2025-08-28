@@ -7,32 +7,10 @@ from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional, List, Union
 
 from src.common.logger import get_logger
-from src.common.tool_history import ToolHistoryManager
 
 install(extra_lines=3)
 
 logger = get_logger("prompt_build")
-
-# 创建工具历史管理器实例
-tool_history_manager = ToolHistoryManager()
-
-def get_tool_history_prompt(message_id: Optional[str] = None) -> str:
-    """获取工具历史提示词
-    
-    Args:
-        message_id: 会话ID, 用于只获取当前会话的历史
-        
-    Returns:
-        格式化的工具历史提示词
-    """
-    from src.config.config import global_config
-
-    if not global_config.tool.history.enable_prompt_history:
-        return ""
-
-    return tool_history_manager.get_recent_history_prompt(
-        chat_id=message_id
-    )
 
 class PromptContext:
     def __init__(self):
@@ -49,7 +27,7 @@ class PromptContext:
     @_current_context.setter
     def _current_context(self, value: Optional[str]):
         """设置当前协程的上下文ID"""
-        self._current_context_var.set(value)
+        self._current_context_var.set(value) # type: ignore
 
     @asynccontextmanager
     async def async_scope(self, context_id: Optional[str] = None):
@@ -73,7 +51,7 @@ class PromptContext:
             # 保存当前协程的上下文值，不影响其他协程
             previous_context = self._current_context
             # 设置当前协程的新上下文
-            token = self._current_context_var.set(context_id) if context_id else None
+            token = self._current_context_var.set(context_id) if context_id else None # type: ignore
         else:
             # 如果没有提供新上下文，保持当前上下文不变
             previous_context = self._current_context
@@ -111,7 +89,8 @@ class PromptContext:
         """异步注册提示模板到指定作用域"""
         async with self._context_lock:
             if target_context := context_id or self._current_context:
-                self._context_prompts.setdefault(target_context, {})[prompt.name] = prompt
+                if prompt.name:
+                    self._context_prompts.setdefault(target_context, {})[prompt.name] = prompt
 
 
 class PromptManager:
@@ -153,40 +132,15 @@ class PromptManager:
 
     def add_prompt(self, name: str, fstr: str) -> "Prompt":
         prompt = Prompt(fstr, name=name)
-        self._prompts[prompt.name] = prompt
+        if prompt.name:
+            self._prompts[prompt.name] = prompt
         return prompt
 
     async def format_prompt(self, name: str, **kwargs) -> str:
         # 获取当前提示词
         prompt = await self.get_prompt_async(name)
-        # 获取当前会话ID
-        message_id = self._context._current_context
-
-        # 获取工具历史提示词
-        tool_history = ""
-        if name in ['action_prompt', 'replyer_prompt', 'planner_prompt', 'tool_executor_prompt']:
-            tool_history = get_tool_history_prompt(message_id)
-
         # 获取基本格式化结果
         result = prompt.format(**kwargs)
-
-        # 如果有工具历史，插入到适当位置
-        if tool_history:
-            # 查找合适的插入点
-            # 在人格信息和身份块之后，但在主要内容之前
-            identity_end = result.find("```\n现在，你说：")
-            if identity_end == -1:
-                # 如果找不到特定标记，尝试在第一个段落后插入
-                first_double_newline = result.find("\n\n")
-                if first_double_newline != -1:
-                    # 在第一个双换行后插入
-                    result = f"{result[:first_double_newline + 2]}{tool_history}\n{result[first_double_newline + 2:]}"
-                else:
-                    # 如果找不到合适的位置，添加到开头
-                    result = f"{tool_history}\n\n{result}"
-            else:
-                # 在找到的位置插入
-                result = f"{result[:identity_end]}\n{tool_history}\n{result[identity_end:]}"
         return result
 
 
@@ -195,6 +149,11 @@ global_prompt_manager = PromptManager()
 
 
 class Prompt(str):
+    template: str
+    name: Optional[str]
+    args: List[str]
+    _args: List[Any]
+    _kwargs: Dict[str, Any]
     # 临时标记，作为类常量
     _TEMP_LEFT_BRACE = "__ESCAPED_LEFT_BRACE__"
     _TEMP_RIGHT_BRACE = "__ESCAPED_RIGHT_BRACE__"
@@ -215,7 +174,7 @@ class Prompt(str):
         """将临时标记还原为实际的花括号字符"""
         return template.replace(Prompt._TEMP_LEFT_BRACE, "{").replace(Prompt._TEMP_RIGHT_BRACE, "}")
 
-    def __new__(cls, fstr, name: Optional[str] = None, args: Union[List[Any], tuple[Any, ...]] = None, **kwargs):
+    def __new__(cls, fstr, name: Optional[str] = None, args: Optional[Union[List[Any], tuple[Any, ...]]] = None, **kwargs):
         # 如果传入的是元组，转换为列表
         if isinstance(args, tuple):
             args = list(args)
@@ -251,7 +210,7 @@ class Prompt(str):
 
     @classmethod
     async def create_async(
-        cls, fstr, name: Optional[str] = None, args: Union[List[Any], tuple[Any, ...]] = None, **kwargs
+        cls, fstr, name: Optional[str] = None, args: Optional[Union[List[Any], tuple[Any, ...]]] = None, **kwargs
     ):
         """异步创建Prompt实例"""
         prompt = cls(fstr, name, args, **kwargs)
@@ -260,7 +219,9 @@ class Prompt(str):
         return prompt
 
     @classmethod
-    def _format_template(cls, template, args: List[Any] = None, kwargs: Dict[str, Any] = None) -> str:
+    def _format_template(cls, template, args: Optional[List[Any]] = None, kwargs: Optional[Dict[str, Any]] = None) -> str:
+        if kwargs is None:
+            kwargs = {}
         # 预处理模板中的转义花括号
         processed_template = cls._process_escaped_braces(template)
 

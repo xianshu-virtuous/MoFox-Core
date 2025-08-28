@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 import numpy as np
 import faiss
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, List
 from src.common.logger import get_logger
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import global_config, model_config
@@ -141,7 +141,7 @@ class CacheManager:
         # 步骤 2a: L1 语义缓存 (FAISS)
         if query_embedding is not None and self.l1_vector_index.ntotal > 0:
             faiss.normalize_L2(query_embedding)
-            distances, indices = self.l1_vector_index.search(query_embedding, 1)
+            distances, indices = self.l1_vector_index.search(query_embedding, 1) # type: ignore
             if indices.size > 0 and distances[0][0] > 0.75: # IP 越大越相似
                 hit_index = indices[0][0]
                 l1_hit_key = self.l1_vector_id_to_key.get(hit_index)
@@ -349,3 +349,63 @@ class CacheManager:
 
 # 全局实例
 tool_cache = CacheManager()
+
+import inspect
+import time
+
+def wrap_tool_executor():
+    """
+    包装工具执行器以添加缓存功能
+    这个函数应该在系统启动时被调用一次
+    """
+    from src.plugin_system.core.tool_use import ToolExecutor
+    from src.plugin_system.apis.tool_api import get_tool_instance
+    original_execute = ToolExecutor.execute_tool_call
+
+    async def wrapped_execute_tool_call(self, tool_call, tool_instance=None):
+        if not tool_instance:
+            tool_instance = get_tool_instance(tool_call.func_name)
+
+        if not tool_instance or not tool_instance.enable_cache:
+            return await original_execute(self, tool_call, tool_instance)
+
+        try:
+            tool_file_path = inspect.getfile(tool_instance.__class__)
+            semantic_query = None
+            if tool_instance.semantic_cache_query_key:
+                semantic_query = tool_call.args.get(tool_instance.semantic_cache_query_key)
+
+            cached_result = await tool_cache.get(
+                tool_name=tool_call.func_name,
+                function_args=tool_call.args,
+                tool_file_path=tool_file_path,
+                semantic_query=semantic_query
+            )
+            if cached_result:
+                logger.info(f"{getattr(self, 'log_prefix', '')}使用缓存结果，跳过工具 {tool_call.func_name} 执行")
+                return cached_result
+        except Exception as e:
+            logger.error(f"{getattr(self, 'log_prefix', '')}检查工具缓存时出错: {e}")
+
+        result = await original_execute(self, tool_call, tool_instance)
+
+        try:
+            tool_file_path = inspect.getfile(tool_instance.__class__)
+            semantic_query = None
+            if tool_instance.semantic_cache_query_key:
+                semantic_query = tool_call.args.get(tool_instance.semantic_cache_query_key)
+            
+            await tool_cache.set(
+                tool_name=tool_call.func_name,
+                function_args=tool_call.args,
+                tool_file_path=tool_file_path,
+                data=result,
+                ttl=tool_instance.cache_ttl,
+                semantic_query=semantic_query
+            )
+        except Exception as e:
+            logger.error(f"{getattr(self, 'log_prefix', '')}设置工具缓存时出错: {e}")
+
+        return result
+
+    ToolExecutor.execute_tool_call = wrapped_execute_tool_call
