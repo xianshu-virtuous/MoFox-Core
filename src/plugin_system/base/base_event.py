@@ -119,17 +119,17 @@ class BaseEvent:
             for i, result in enumerate(results):
                 subscriber = sorted_subscribers[i]
                 handler_name = subscriber.handler_name if hasattr(subscriber, 'handler_name') else subscriber.__class__.__name__
-                
-                if isinstance(result, Exception):
-                    # 处理执行异常
-                    logger.error(f"事件处理器 {handler_name} 执行失败: {result}")
-                    processed_results.append(HandlerResult(False, True, str(result), handler_name))
-                else:
-                    # 正常执行结果
-                    if not result.handler_name:
-                        # 补充handler_name
-                        result.handler_name = handler_name
-                    processed_results.append(result)
+                if result:
+                    if isinstance(result, Exception):
+                        # 处理执行异常
+                        logger.error(f"事件处理器 {handler_name} 执行失败: {result}")
+                        processed_results.append(HandlerResult(False, True, str(result), handler_name))
+                    else:
+                        # 正常执行结果
+                        if not result.handler_name:
+                            # 补充handler_name
+                            result.handler_name = handler_name
+                        processed_results.append(result)
             
             return HandlerResultsCollection(processed_results)
     

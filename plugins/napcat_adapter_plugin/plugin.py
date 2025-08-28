@@ -52,7 +52,6 @@ class LauchNapcatAdapterHandler(BaseEventHandler):
             elif post_type is None:
                 await put_response(decoded_raw_message)
 
-
     async def message_process(self):
         while True:
             message = await message_queue.get()
@@ -79,7 +78,7 @@ class LauchNapcatAdapterHandler(BaseEventHandler):
             logger.error(f"启动 WebSocket 连接失败: {e}")
             raise
 
-    async def execute(self, kwargs):         
+    async def execute(self, kwargs):       
         # 执行功能配置迁移（如果需要）
         logger.info("检查功能配置迁移...")
         auto_migrate_features()

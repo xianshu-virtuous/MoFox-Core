@@ -26,7 +26,6 @@ class BaseEventHandler(ABC):
 
     def __init__(self):
         self.log_prefix = "[EventHandler]"
-        self.plugin_name = ""
         """对应插件名"""
         self.plugin_config: Optional[Dict] = None
         """插件配置字典"""

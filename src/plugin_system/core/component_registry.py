@@ -166,7 +166,8 @@ class ComponentRegistry:
         if not isinstance(action_info, ActionInfo) or not issubclass(action_class, BaseAction):
             logger.error(f"注册失败: {action_name} 不是有效的Action")
             return False
-
+        
+        action_class.plugin_name = action_info.plugin_name
         self._action_registry[action_name] = action_class
 
         # 如果启用，添加到默认动作集
@@ -184,6 +185,7 @@ class ComponentRegistry:
             logger.error(f"注册失败: {command_name} 不是有效的Command")
             return False
 
+        command_class.plugin_name = command_info.plugin_name
         self._command_registry[command_name] = command_class
 
         # 如果启用了且有匹配模式
@@ -213,6 +215,7 @@ class ComponentRegistry:
         if not hasattr(self, '_plus_command_registry'):
             self._plus_command_registry: Dict[str, Type[PlusCommand]] = {}
 
+        plus_command_class.plugin_name = plus_command_info.plugin_name
         self._plus_command_registry[plus_command_name] = plus_command_class
 
         logger.debug(f"已注册PlusCommand组件: {plus_command_name}")
@@ -222,6 +225,7 @@ class ComponentRegistry:
         """注册Tool组件到Tool特定注册表"""
         tool_name = tool_info.name
 
+        tool_class.plugin_name = tool_info.plugin_name
         self._tool_registry[tool_name] = tool_class
 
         # 如果是llm可用的且启用的工具,添加到 llm可用工具列表
@@ -246,6 +250,7 @@ class ComponentRegistry:
             logger.warning(f"EventHandler组件 {handler_name} 未启用")
             return True  # 未启用，但是也是注册成功
         
+        handler_class.plugin_name = handler_info.plugin_name
         # 使用EventManager进行事件处理器注册
         from src.plugin_system.core.event_manager import event_manager
         return event_manager.register_event_handler(handler_class)
