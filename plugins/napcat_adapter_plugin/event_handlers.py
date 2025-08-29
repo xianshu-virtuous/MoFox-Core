@@ -1,8 +1,6 @@
-from typing import List, Tuple, Optional
 
 from src.plugin_system import BaseEventHandler
 from src.plugin_system.base.base_event import HandlerResult
-from src.plugin_system.core.event_manager import event_manager
 
 from .src.send_handler import send_handler
 from .event_types import *

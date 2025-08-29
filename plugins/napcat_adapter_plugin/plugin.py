@@ -5,7 +5,7 @@ import inspect
 import websockets as Server
 from . import event_types,CONSTS,event_handlers
 
-from typing import List, Tuple
+from typing import List
 
 from src.plugin_system import BasePlugin, BaseEventHandler, register_plugin, EventType, ConfigField
 from src.plugin_system.base.base_event import HandlerResult
@@ -27,7 +27,7 @@ from .src.send_handler import send_handler
 from .src.config import global_config
 from .src.config.features_config import features_manager
 from .src.config.migrate_features import auto_migrate_features
-from .src.mmc_com_layer import mmc_start_com, mmc_stop_com, router
+from .src.mmc_com_layer import mmc_start_com, router
 from .src.response_pool import put_response, check_timeout_response
 from .src.websocket_manager import websocket_manager
 

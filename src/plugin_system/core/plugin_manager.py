@@ -1,7 +1,6 @@
 import asyncio
 import os
 import traceback
-import sys
 import importlib
 
 from typing import Dict, List, Optional, Tuple, Type, Any

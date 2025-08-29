@@ -348,7 +348,6 @@ class PluginHotReloadManager:
 
     def _force_clear_plugin_modules(self, plugin_name: str):
         """强制清理插件相关的模块缓存"""
-        import sys
         
         # 找到所有相关的模块名
         modules_to_remove = []

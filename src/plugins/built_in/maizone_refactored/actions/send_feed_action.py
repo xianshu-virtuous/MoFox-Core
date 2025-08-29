@@ -6,9 +6,9 @@ from typing import Tuple
 
 from src.common.logger import get_logger
 from src.plugin_system import BaseAction, ActionActivationType, ChatMode
-from src.plugin_system.apis import person_api, generator_api
+from src.plugin_system.apis import generator_api
 from src.plugin_system.apis.permission_api import permission_api
-from ..services.manager import get_qzone_service, get_config_getter
+from ..services.manager import get_qzone_service
 
 logger = get_logger("MaiZone.SendFeedAction")
 

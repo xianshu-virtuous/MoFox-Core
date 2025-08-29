@@ -9,7 +9,6 @@ from src.plugin_system import (
     BaseEventHandler,
     EventType,
     BaseTool,
-    ToolParamType,
     PlusCommand,
     CommandArgs,
     ChatType,
