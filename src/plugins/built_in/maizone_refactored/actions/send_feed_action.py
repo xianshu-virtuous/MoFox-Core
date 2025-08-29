@@ -7,6 +7,7 @@ from typing import Tuple
 from src.common.logger import get_logger
 from src.plugin_system import BaseAction, ActionActivationType, ChatMode
 from src.plugin_system.apis import person_api, generator_api
+from src.plugin_system.apis.permission_api import permission_api
 from ..services.manager import get_qzone_service, get_config_getter
 
 logger = get_logger("MaiZone.SendFeedAction")
@@ -32,27 +33,11 @@ class SendFeedAction(BaseAction):
 
     async def _check_permission(self) -> bool:
         """检查当前用户是否有权限执行此动作"""
-        user_name = self.action_data.get("user_name", "")
-        person_id = person_api.get_person_id_by_name(user_name)
-        if not person_id:
-            return False
+        platform = self.chat_stream.platform
+        user_id = self.chat_stream.user_info.user_id
         
-        user_id = await person_api.get_person_value(person_id, "user_id")
-        if not user_id:
-            return False
-
-        get_config = get_config_getter()
-        permission_list = get_config("send.permission", [])
-        permission_type = get_config("send.permission_type", "whitelist")
-
-        if not isinstance(permission_list, list):
-            return False
-
-        if permission_type == 'whitelist':
-            return user_id in permission_list
-        elif permission_type == 'blacklist':
-            return user_id not in permission_list
-        return False
+        # 使用权限API检查用户是否有发送说说的权限
+        return permission_api.check_permission(platform, user_id, "plugin.maizone.send_feed")
 
     async def execute(self) -> Tuple[bool, str]:
         """

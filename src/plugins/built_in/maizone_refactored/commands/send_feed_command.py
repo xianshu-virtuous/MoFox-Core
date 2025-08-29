@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-发送说说命令组件
+发送说说命令        await self.send_text(f"收到！正在为你生成关于"{topic or '随机'}"的说说，请稍候...【热重载测试成功】")件
 """
 from typing import Tuple
 
@@ -16,15 +16,16 @@ logger = get_logger("MaiZone.SendFeedCommand")
 class SendFeedCommand(PlusCommand):
     """
     响应用户通过 `/send_feed` 命令发送说说的请求。
+    测试热重载功能 - 这是一个测试注释，现在应该可以正常工作了！
     """
     command_name: str = "send_feed"
-    command_description: str = "发送一条QQ空间说说"
+    command_description: str = "发一条QQ空间说说"
     command_aliases = ["发空间"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @require_permission("plugin.send.permission")
+    @require_permission("plugin.maizone.send_feed", "❌ 你没有发送QQ空间说说的权限")
     async def execute(self, args: CommandArgs) -> Tuple[bool, str, bool]:
         """
         执行命令的核心逻辑。

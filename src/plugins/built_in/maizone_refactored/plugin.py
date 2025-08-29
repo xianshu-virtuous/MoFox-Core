@@ -83,11 +83,18 @@ class MaiZoneRefactoredPlugin(BasePlugin):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # 注册权限节点
         permission_api.register_permission_node(
-            "plugin.send.permission",
-            "是否可以使用机器人发送说说",
+            "plugin.maizone.send_feed",
+            "是否可以使用机器人发送QQ空间说说",
             "maiZone",
             False
+        )
+        permission_api.register_permission_node(
+            "plugin.maizone.read_feed", 
+            "是否可以使用机器人读取QQ空间说说",
+            "maiZone",
+            True
         )
         content_service = ContentService(self.get_config)
         image_service = ImageService(self.get_config)
@@ -99,10 +106,18 @@ class MaiZoneRefactoredPlugin(BasePlugin):
         register_service("qzone", qzone_service)
         register_service("get_config", self.get_config)
         
-        asyncio.create_task(scheduler_service.start())
-        asyncio.create_task(monitor_service.start())
+        # 保存服务引用以便后续启动
+        self.scheduler_service = scheduler_service
+        self.monitor_service = monitor_service
         
-        logger.info("MaiZone重构版插件已加载，服务已注册，后台任务已启动。")
+        logger.info("MaiZone重构版插件已加载，服务已注册。")
+
+    async def on_plugin_loaded(self):
+        """插件加载完成后的回调，启动异步服务"""
+        if hasattr(self, 'scheduler_service') and hasattr(self, 'monitor_service'):
+            asyncio.create_task(self.scheduler_service.start())
+            asyncio.create_task(self.monitor_service.start())
+            logger.info("MaiZone后台任务已启动。")
 
     def get_plugin_components(self) -> List[Tuple[ComponentInfo, Type]]:
         return [

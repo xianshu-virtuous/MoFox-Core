@@ -2,6 +2,7 @@ import asyncio
 import os
 import traceback
 import sys
+import importlib
 
 from typing import Dict, List, Optional, Tuple, Type, Any
 from importlib.util import spec_from_file_location, module_from_spec
@@ -289,11 +290,11 @@ class PluginManager:
 
         Args:
             plugin_file: 插件文件路径
-            plugin_name: 插件名称
-            plugin_dir: 插件目录路径
         """
-        # 生成模块名
+        # 生成模块名和插件信息
         plugin_path = Path(plugin_file)
+        plugin_dir = plugin_path.parent  # 插件目录
+        plugin_name = plugin_dir.name    # 插件名称
         module_name = ".".join(plugin_path.parent.parts)
 
         try:
@@ -307,13 +308,13 @@ class PluginManager:
             module.__package__ = module_name  # 设置模块包名
             spec.loader.exec_module(module)
 
-            logger.debug(f"插件模块加载成功: {plugin_file}")
+            logger.debug(f"插件模块加载成功: {plugin_file} -> {plugin_name} ({plugin_dir})")
             return True
 
         except Exception as e:
             error_msg = f"加载插件模块 {plugin_file} 失败: {e}"
             logger.error(error_msg)
-            self.failed_plugins[module_name] = error_msg
+            self.failed_plugins[plugin_name if 'plugin_name' in locals() else module_name] = error_msg
             return False
 
     # == 兼容性检查 ==
@@ -527,6 +528,10 @@ class PluginManager:
             # 从已加载插件中移除
             del self.loaded_plugins[plugin_name]
 
+            # 从插件类注册表中移除
+            if plugin_name in self.plugin_classes:
+                del self.plugin_classes[plugin_name]
+
             # 从失败列表中移除（如果存在）
             if plugin_name in self.failed_plugins:
                 del self.failed_plugins[plugin_name]
@@ -535,7 +540,7 @@ class PluginManager:
             return True
 
         except Exception as e:
-            logger.error(f"❌ 插件卸载失败: {plugin_name} - {str(e)}")
+            logger.error(f"❌ 插件卸载失败: {plugin_name} - {str(e)}", exc_info=True)
             return False
 
     def reload_plugin(self, plugin_name: str) -> bool:
@@ -548,54 +553,53 @@ class PluginManager:
             bool: 重载是否成功
         """
         try:
-            # 先卸载插件
+            logger.info(f"🔄 开始重载插件: {plugin_name}")
+
+            # 卸载插件
             if plugin_name in self.loaded_plugins:
-                self.unload_plugin(plugin_name)
+                if not self.unload_plugin(plugin_name):
+                    logger.warning(f"⚠️ 插件卸载失败，继续重载: {plugin_name}")
 
-            # 清除Python模块缓存
-            plugin_path = self.plugin_paths.get(plugin_name)
-            if plugin_path:
-                plugin_file = os.path.join(plugin_path, "plugin.py")
-                if os.path.exists(plugin_file):
-                    # 从sys.modules中移除相关模块
-                    modules_to_remove = []
-                    plugin_module_prefix = ".".join(Path(plugin_file).parent.parts)
+            # 重新扫描插件目录
+            self.rescan_plugin_directory()
 
-                    for module_name in sys.modules:
-                        if module_name.startswith(plugin_module_prefix):
-                            modules_to_remove.append(module_name)
-
-                    for module_name in modules_to_remove:
-                        del sys.modules[module_name]
-
-                    # 从插件类注册表中移除
-                    if plugin_name in self.plugin_classes:
-                        del self.plugin_classes[plugin_name]
-
-                    # 重新加载插件模块
-                    if self._load_plugin_module_file(plugin_file):
-                        # 重新加载插件实例
-                        success, _ = self.load_registered_plugin_classes(plugin_name)
-                        if success:
-                            logger.info(f"🔄 插件重载成功: {plugin_name}")
-                            return True
-                        else:
-                            logger.error(f"❌ 插件重载失败: {plugin_name} - 实例化失败")
-                            return False
-                    else:
-                        logger.error(f"❌ 插件重载失败: {plugin_name} - 模块加载失败")
-                        return False
+            # 重新加载插件实例
+            if plugin_name in self.plugin_classes:
+                success, _ = self.load_registered_plugin_classes(plugin_name)
+                if success:
+                    logger.info(f"✅ 插件重载成功: {plugin_name}")
+                    return True
                 else:
-                    logger.error(f"❌ 插件重载失败: {plugin_name} - 插件文件不存在")
+                    logger.error(f"❌ 插件重载失败: {plugin_name} - 实例化失败")
                     return False
             else:
-                logger.error(f"❌ 插件重载失败: {plugin_name} - 插件路径未知")
+                logger.error(f"❌ 插件重载失败: {plugin_name} - 插件类未找到")
                 return False
 
         except Exception as e:
-            logger.error(f"❌ 插件重载失败: {plugin_name} - {str(e)}")
-            logger.debug("详细错误信息: ", exc_info=True)
+            logger.error(f"❌ 插件重载失败: {plugin_name} - {str(e)}", exc_info=True)
             return False
+
+    def force_reload_plugin(self, plugin_name: str) -> bool:
+        """强制重载插件（使用简化的方法）
+        
+        Args:
+            plugin_name: 插件名称
+            
+        Returns:
+            bool: 重载是否成功
+        """
+        return self.reload_plugin(plugin_name)
+
+    def clear_all_plugin_caches(self):
+        """清理所有插件相关的模块缓存（简化版）"""
+        try:
+            logger.info("🧹 清理模块缓存...")
+            # 清理importlib缓存
+            importlib.invalidate_caches()
+            logger.info("🧹 模块缓存清理完成")
+        except Exception as e:
+            logger.error(f"❌ 清理模块缓存时发生错误: {e}", exc_info=True)
 
 
 # 全局插件管理器实例
