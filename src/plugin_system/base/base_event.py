@@ -9,7 +9,7 @@ class HandlerResult:
     
     所有事件处理器必须返回此类的实例
     """
-    def __init__(self, success: bool, continue_process: bool, message: Any = {}, handler_name: str = ""):
+    def __init__(self, success: bool, continue_process: bool, message: Any = None, handler_name: str = ""):
         self.success = success
         self.continue_process = continue_process
         self.message = message
@@ -83,8 +83,8 @@ class BaseEvent:
     def __init__(
             self, 
             name: str, 
-            allowed_subscribers: List[str]=[],  
-            allowed_triggers: List[str]=[]
+            allowed_subscribers: List[str] = None,
+            allowed_triggers: List[str] = None
         ):
         self.name = name
         self.enabled = True

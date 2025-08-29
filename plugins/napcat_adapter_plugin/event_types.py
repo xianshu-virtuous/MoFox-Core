@@ -43,7 +43,7 @@ class NapcatEvent(Enum):
         Args:
             nickname (Optional[str]): 名称(必须)
             personal_note (Optional[str]): 个性签名
-            sex (Optional['0'|'1'|'2']): 性别
+            sex ('0'|'1'|'2'): 性别
             raw (Optional[dict]): 原始请求体
 
         Returns:
@@ -61,38 +61,504 @@ class NapcatEvent(Enum):
 
         '''
         GET_ONLINE_CLIENTS = "napcat_get_online_clients"    
-        '''获取当前账号在线客户端列表'''
+        '''获取当前账号在线客户端列表
+        
+        Args:
+            no_cache (Optional[bool]):  是否不使用缓存
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": [
+                "string"
+            ],
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         SET_ONLINE_STATUS = "napcat_set_online_status" 
-        '''设置在线状态'''
+        '''设置在线状态
+        
+        Args:
+            status (Optional[str]): 状态代码(必须)
+            ext_status (Optional[str]): 额外状态代码,默认为0
+            battery_status (Optional[str]): 电池信息,默认为0
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": null,
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         GET_FRIENDS_WITH_CATEGORY = "napcat_get_friends_with_category" 
-        '''获取好友分组列表'''
+        '''获取好友分组列表
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": [
+                {
+                    "categoryId": 0,
+                    "categorySortId": 0,
+                    "categoryName": "string",
+                    "categoryMbCount": 0,
+                    "onlineCount": 0,
+                    "buddyList": [
+                        {
+                            "birthday_year": 0,
+                            "birthday_month": 0,
+                            "birthday_day": 0,
+                            "user_id": 0,
+                            "age": 0,
+                            "phone_num": "string",
+                            "email": "string",
+                            "category_id": 0,
+                            "nickname": "string",
+                            "remark": "string",
+                            "sex": "string",
+                            "level": 0
+                        }
+                    ]
+                }
+            ],
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         SET_AVATAR = "napcat_set_qq_avatar" 
-        '''设置头像'''
-        SEND_LIKE = "napcat_send_like"  '''点赞'''
+        '''设置头像
+        
+        Args:
+            file (Optional[str]): 文件路径或base64(必需)
+            raw (Optional[dict]): 原始请求体
+
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": null,
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
+        SEND_LIKE = "napcat_send_like"  
+        '''点赞
+        
+        Args:
+            user_id (Optional[str|int]): 用户id(必需)
+            times (Optional[int]): 点赞次数,默认1
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": null,
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         SET_FRIEND_ADD_REQUEST = "napcat_set_friend_add_request"    
-        '''处理好友请求'''
+        '''处理好友请求
+        
+        Args:
+            flag (Optional[str]): 请求id(必需)
+            approve (Optional[bool]): 是否同意(必需)
+            remark (Optional[str]): 好友备注(必需)
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": null,
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         SET_SELF_LONGNICK = "napcat_set_self_longnick"  
-        '''设置个性签名'''
+        '''设置个性签名
+        
+        Args:
+            longNick (Optional[str]): 内容(必需)
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": {
+                "result": 0,
+                "errMsg": "string"
+            },
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         GET_LOGIN_INFO = "napcat_get_login_info"  
-        '''获取登录号信息'''
+        '''获取登录号信息
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": {
+                "user_id": 0,
+                "nickname": "string"
+            },
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         GET_RECENT_CONTACT = "napcat_get_recent_contact"    
-        '''最近消息列表'''
+        '''最近消息列表
+
+        Args:
+            count (Optional[int]): 会话数量
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": [
+                {
+                    "lastestMsg": {
+                        "self_id": 0,
+                        "user_id": 0,
+                        "time": 0,
+                        "real_seq": "string",
+                        "message_type": "string",
+                        "sender": {
+                            "user_id": 0,
+                            "nickname": "string",
+                            "sex": "male",
+                            "age": 0,
+                            "card": "string",
+                            "role": "owner"
+                        },
+                        "raw_message": "string",
+                        "font": 0,
+                        "sub_type": "string",
+                        "message": [
+                            {
+                                "type": "text",
+                                "data": {
+                                    "text": "string"
+                                }
+                            }
+                        ],
+                        "message_format": "string",
+                        "post_type": "string",
+                        "group_id": 0
+                    },
+                    "peerUin": "string",
+                    "remark": "string",
+                    "msgTime": "string",
+                    "chatType": 0,
+                    "msgId": "string",
+                    "sendNickName": "string",
+                    "sendMemberName": "string",
+                    "peerName": "string"
+                }
+            ],
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         GET_STRANGER_INFO = "napcat_get_stranger_info"  
-        '''获取(指定)账号信息'''
+        '''获取(指定)账号信息
+        
+        Args:
+            user_id (Optional[str|int]): 用户id(必需)
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": {
+                "user_id": 0,
+                "uid": "string",
+                "uin": "string",
+                "nickname": "string",
+                "age": 0,
+                "qid": "string",
+                "qqLevel": 0,
+                "sex": "string",
+                "long_nick": "string",
+                "reg_time": 0,
+                "is_vip": true,
+                "is_years_vip": true,
+                "vip_level": 0,
+                "remark": "string",
+                "status": 0,
+                "login_days": 0
+            },
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         GET_FRIEND_LIST = "napcat_get_friend_list"  
-        '''获取好友列表'''
+        '''获取好友列表
+        
+        Args:
+            no_cache (Opetional[bool]): 是否不使用缓存
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": [
+                {
+                    "birthday_year": 0,
+                    "birthday_month": 0,
+                    "birthday_day": 0,
+                    "user_id": 0,
+                    "age": 0,
+                    "phone_num": "string",
+                    "email": "string",
+                    "category_id": 0,
+                    "nickname": "string",
+                    "remark": "string",
+                    "sex": "string",
+                    "level": 0
+                }
+            ],
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         GET_PROFILE_LIKE = "napcat_get_profile_like"    
-        '''获取点赞列表'''
+        '''获取点赞列表
+        
+        Args:
+            user_id (Opetional[str|int]): 用户id,指定用户,不填为获取所有
+            start (Opetional[int]): 起始值
+            count (Opetional[int]): 返回数量
+            raw (Optional[dict]): 原始请求体
+
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": {
+                "uid": "string",
+                "time": 0,
+                "favoriteInfo": {
+                    "total_count": 0,
+                    "last_time": 0,
+                    "today_count": 0,
+                    "userInfos": [
+                        {
+                            "uid": "string",
+                            "src": 0,
+                            "latestTime": 0,
+                            "count": 0,
+                            "giftCount": 0,
+                            "customId": 0,
+                            "lastCharged": 0,
+                            "bAvailableCnt": 0,
+                            "bTodayVotedCnt": 0,
+                            "nick": "string",
+                            "gender": 0,
+                            "age": 0,
+                            "isFriend": true,
+                            "isvip": true,
+                            "isSvip": true,
+                            "uin": 0
+                        }
+                    ]
+                },
+                "voteInfo": {
+                    "total_count": 0,
+                    "new_count": 0,
+                    "new_nearby_count": 0,
+                    "last_visit_time": 0,
+                    "userInfos": [
+                        {
+                            "uid": "string",
+                            "src": 0,
+                            "latestTime": 0,
+                            "count": 0,
+                            "giftCount": 0,
+                            "customId": 0,
+                            "lastCharged": 0,
+                            "bAvailableCnt": 0,
+                            "bTodayVotedCnt": 0,
+                            "nick": "string",
+                            "gender": 0,
+                            "age": 0,
+                            "isFriend": true,
+                            "isvip": true,
+                            "isSvip": true,
+                            "uin": 0
+                        }
+                    ]
+                }
+            },
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         DELETE_FRIEND = "napcat_delete_friend"  
-        '''删除好友'''
+        '''删除好友
+        
+        Args:
+            user_id (Opetional[str|int]): 用户id(必需)
+            temp_block (Opetional[bool]): 拉黑(必需)
+            temp_both_del (Opetional[bool]): 双向删除(必需)
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": {
+                "result": 0,
+                "errMsg": "string"
+            },
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         GET_USER_STATUS = "napcat_get_user_status"  
-        '''获取用户状态'''
+        '''获取(指定)用户状态
+        
+        Args:
+            user_id (Opetional[str|int]): 用户id(必需)
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": {
+                "status": 0,
+                "ext_status": 0
+            },
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         GET_STATUS = "napcat_get_status"    
-        '''获取状态'''
+        '''获取状态
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": {
+                "online": true,
+                "good": true,
+                "stat": {}
+            },
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         GET_MINI_APP_ARK = "napcat_get_mini_app_ark"    
-        '''获取小程序卡片'''
+        '''获取小程序卡片
+        
+        Args:
+            type (Optional[str]): 类型(如bili、weibo,必需)
+            title (Optional[str]): 标题(必需)
+            desc (Optional[str]): 描述(必需)
+            picUrl (Optional[str]): 图片URL(必需)
+            jumpUrl (Optional[str]): 跳转URL(必需)
+            webUrl (Optional[str]): 网页URL
+            rawArkData (Optional[bool]): 是否返回原始ark数据
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": {
+                "appName": "string",
+                "appView": "string",
+                "ver": "string",
+                "desc": "string",
+                "prompt": "string",
+                "metaData": {
+                    "detail_1": {
+                        "appid": "string",
+                        "appType": 0,
+                        "title": "string",
+                        "desc": "string",
+                        "icon": "string",
+                        "preview": "string",
+                        "url": "string",
+                        "scene": 0,
+                        "host": {
+                            "uin": 0,
+                            "nick": "string"
+                        },
+                        "shareTemplateId": "string",
+                        "shareTemplateData": {},
+                        "showLittleTail": "string",
+                        "gamePoints": "string",
+                        "gamePointsUrl": "string",
+                        "shareOrigin": 0
+                    }
+                },
+                "config": {
+                    "type": "string",
+                    "width": 0,
+                    "height": 0,
+                    "forward": 0,
+                    "autoSize": 0,
+                    "ctime": 0,
+                    "token": "string"
+                }
+            },
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
         SET_DIY_ONLINE_STATUS = "napcat_set_diy_online_status"  
-        '''设置自定义在线状态'''
+        '''设置自定义在线状态
+        
+        Args:
+            face_id (Optional[str|int]): 表情ID(必需)
+            face_type (Optional[str|int]): 表情类型
+            wording (Optional[str]):描述文本
+            raw (Optional[dict]): 原始请求体
+        
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": "string",
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        '''
     
     class MESSAGE(Enum):
         """

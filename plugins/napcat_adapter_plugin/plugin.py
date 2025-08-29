@@ -148,7 +148,6 @@ class NapcatAdapterPlugin(BasePlugin):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         for e in event_types.NapcatEvent.ON_RECEIVED:
             event_manager.register_event(e ,allowed_triggers=[self.plugin_name])
         
