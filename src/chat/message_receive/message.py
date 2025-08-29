@@ -11,7 +11,7 @@ from maim_message import Seg, UserInfo, BaseMessageInfo, MessageBase
 from src.common.logger import get_logger
 from src.chat.utils.utils_image import get_image_manager
 from src.chat.utils.utils_voice import get_voice_text
-from src.chat.utils.utils_video import get_video_analyzer
+from src.chat.utils.utils_video import get_video_analyzer, is_video_analysis_available
 from src.config.config import global_config
 from .chat_stream import ChatStream
 
@@ -203,6 +203,12 @@ class MessageRecv(Message):
                 self.is_voice = False
                 self.is_video = True
                 logger.info(f"接收到视频消息，数据类型: {type(segment.data)}")
+                
+                # 检查视频分析功能是否可用
+                if not is_video_analysis_available():
+                    logger.warning("⚠️ Rust视频处理模块不可用，跳过视频分析")
+                    return "[视频]"
+                
                 if global_config.video_analysis.enable:
                     logger.info("已启用视频识别,开始识别")
                     if isinstance(segment.data, dict):
@@ -378,6 +384,12 @@ class MessageRecvS4U(MessageRecv):
                 self.is_emoji = False
                 
                 logger.info(f"接收到视频消息，数据类型: {type(segment.data)}")
+                
+                # 检查视频分析功能是否可用
+                if not is_video_analysis_available():
+                    logger.warning("⚠️ Rust视频处理模块不可用，跳过视频分析")
+                    return "[视频]"
+                
                 if global_config.video_analysis.enable:
                     logger.info("已启用视频识别,开始识别")
                     if isinstance(segment.data, dict):

@@ -25,10 +25,18 @@ from src.common.database.sqlalchemy_models import get_db_session, Videos
 
 logger = get_logger("utils_video")
 
-# 导入 Rust 视频处理模块
-import rust_video
-
-logger.info("✅ Rust 视频处理模块加载成功")
+# Rust模块可用性检测
+RUST_VIDEO_AVAILABLE = False
+try:
+    import rust_video
+    RUST_VIDEO_AVAILABLE = True
+    logger.info("✅ Rust 视频处理模块加载成功")
+except ImportError as e:
+    logger.warning(f"⚠️ Rust 视频处理模块加载失败: {e}")
+    logger.warning("⚠️ 视频识别功能将自动禁用")
+except Exception as e:
+    logger.error(f"❌ 加载Rust模块时发生错误: {e}")
+    RUST_VIDEO_AVAILABLE = False
 
 # 全局正在处理的视频哈希集合，用于防止重复处理
 processing_videos = set()
@@ -44,6 +52,14 @@ class VideoAnalyzer:
 
     def __init__(self):
         """初始化视频分析器"""
+        # 检查Rust模块是否可用
+        if not RUST_VIDEO_AVAILABLE:
+            logger.warning("⚠️ Rust视频处理模块不可用，视频分析器将以降级模式运行")
+            self.disabled = True
+            return
+            
+        self.disabled = False
+        
         # 使用专用的视频分析配置
         try:
             self.video_llm = LLMRequest(
@@ -58,7 +74,7 @@ class VideoAnalyzer:
                 request_type="vlm"
             )
             logger.warning(f"video_analysis配置不可用({e})，回退使用vlm配置")
-        
+         
         # 从配置文件读取参数，如果配置不存在则使用默认值
         config = global_config.video_analysis
 
@@ -138,6 +154,10 @@ class VideoAnalyzer:
 
     def _log_system_info(self):
         """记录系统信息"""
+        if not RUST_VIDEO_AVAILABLE:
+            logger.info("⚠️ Rust模块不可用，跳过系统信息获取")
+            return
+            
         try:
             system_info = rust_video.get_system_info()
             logger.info(f"🔧 系统信息: 线程数={system_info.get('threads', '未知')}")
@@ -240,6 +260,10 @@ class VideoAnalyzer:
 
     async def extract_frames(self, video_path: str) -> List[Tuple[str, float]]:
         """提取视频帧 - 使用 Rust 实现"""
+        if not RUST_VIDEO_AVAILABLE:
+            logger.error("❌ Rust视频处理模块不可用，无法提取视频帧")
+            return []
+            
         # 优先尝试高级接口，失败时回退到基础接口
         try:
             return await self._extract_frames_rust_advanced(video_path)
@@ -545,6 +569,11 @@ class VideoAnalyzer:
         Returns:
             Tuple[bool, str]: (是否成功, 分析结果或错误信息)
         """
+        if self.disabled or not RUST_VIDEO_AVAILABLE:
+            error_msg = "❌ 视频分析功能已禁用：Rust视频处理模块不可用"
+            logger.warning(error_msg)
+            return (False, error_msg)
+            
         try:
             logger.info(f"开始分析视频: {os.path.basename(video_path)}")
             
@@ -588,6 +617,9 @@ class VideoAnalyzer:
         Returns:
             Dict[str, str]: 包含分析结果的字典，格式为 {"summary": "分析结果"}
         """
+        if self.disabled or not RUST_VIDEO_AVAILABLE:
+            return {"summary": "❌ 视频分析功能已禁用：Rust视频处理模块不可用"}
+            
         video_hash = None
         video_event = None
         
@@ -717,6 +749,13 @@ class VideoAnalyzer:
 
     def get_processing_capabilities(self) -> Dict[str, any]:
         """获取处理能力信息"""
+        if not RUST_VIDEO_AVAILABLE:
+            return {
+                "error": "Rust视频处理模块不可用",
+                "available": False,
+                "reason": "rust_video模块未安装或加载失败"
+            }
+            
         try:
             system_info = rust_video.get_system_info()
             
@@ -732,14 +771,15 @@ class VideoAnalyzer:
                 "cpu_features": cpu_features,
                 "recommended_settings": self._get_recommended_settings(cpu_features),
                 "analysis_modes": ["auto", "batch", "sequential"],
-                "supported_formats": ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.m4v', '.3gp', '.webm']
+                "supported_formats": ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.m4v', '.3gp', '.webm'],
+                "available": True
             }
             
             return capabilities
             
         except Exception as e:
             logger.error(f"获取处理能力信息失败: {e}")
-            return {"error": str(e)}
+            return {"error": str(e), "available": False}
 
     def _get_recommended_settings(self, cpu_features: Dict[str, bool]) -> Dict[str, any]:
         """根据CPU特性推荐最佳设置"""
@@ -773,3 +813,32 @@ def get_video_analyzer() -> VideoAnalyzer:
     if _video_analyzer is None:
         _video_analyzer = VideoAnalyzer()
     return _video_analyzer
+
+def is_video_analysis_available() -> bool:
+    """检查视频分析功能是否可用
+    
+    Returns:
+        bool: 如果Rust视频处理模块可用且功能未禁用则返回True
+    """
+    return RUST_VIDEO_AVAILABLE
+
+def get_video_analysis_status() -> Dict[str, any]:
+    """获取视频分析功能的详细状态信息
+    
+    Returns:
+        Dict[str, any]: 包含功能状态信息的字典
+    """
+    status = {
+        "available": RUST_VIDEO_AVAILABLE,
+        "module_name": "rust_video",
+        "description": "Rust视频处理模块"
+    }
+    
+    if not RUST_VIDEO_AVAILABLE:
+        status.update({
+            "error": "模块未安装或加载失败",
+            "solution": "请安装rust_video模块或检查编译环境",
+            "fallback_enabled": True
+        })
+    
+    return status
