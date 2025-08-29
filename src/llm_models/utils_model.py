@@ -295,7 +295,7 @@ class LLMRequest:
         for model_info, api_provider, client in model_scheduler:
             start_time = time.time()
             model_name = model_info.name
-            logger.info(f"正在尝试使用模型: {model_name}")
+            logger.debug(f"正在尝试使用模型: {model_name}") # 你不许刷屏
 
             try:
                 # 检查是否启用反截断
@@ -371,7 +371,7 @@ class LLMRequest:
                             raise RuntimeError("生成空回复")
                         content = "生成的响应为空"
                     
-                    logger.info(f"模型 '{model_name}' 成功生成回复。")
+                    logger.debug(f"模型 '{model_name}' 成功生成回复。") # 你也不许刷屏
                     return content, (reasoning_content, model_name, tool_calls)
 
             except RespNotOkException as e:
