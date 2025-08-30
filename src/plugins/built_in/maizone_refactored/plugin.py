@@ -73,7 +73,8 @@ class MaiZoneRefactoredPlugin(BasePlugin):
             "enable_schedule": ConfigField(type=bool, default=False, description="是否启用定时发送"),
             "random_interval_min_minutes": ConfigField(type=int, default=5, description="随机间隔分钟数下限"),
             "random_interval_max_minutes": ConfigField(type=int, default=15, description="随机间隔分钟数上限"),
-            "activity_blacklist": ConfigField(type=list, default=["睡觉", "睡眠", "梦乡"], description="不会触发自动说说的活动黑名单"),
+            "forbidden_hours_start": ConfigField(type=int, default=2, description="禁止发送的开始小时(24小时制)"),
+            "forbidden_hours_end": ConfigField(type=int, default=6, description="禁止发送的结束小时(24小时制)"),
         },
         "cookie": {
             "http_fallback_host": ConfigField(type=str, default="172.20.130.55", description="备用Cookie获取服务的主机地址"),

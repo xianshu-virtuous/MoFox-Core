@@ -76,11 +76,22 @@ class SchedulerService:
                 logger.info(f"当前检测到的日程活动: {current_activity}")
 
                 if current_activity:
-                    # 3. 检查活动是否在黑名单中
-                    activity_blacklist = self.get_config("schedule.activity_blacklist", ["睡觉", "睡眠"])
-                    if any(keyword in current_activity for keyword in activity_blacklist):
-                        logger.info(f"活动 '{current_activity}' 包含黑名单关键字，本次跳过。")
-                        self.last_processed_activity = current_activity  # 更新状态以防活动切换后立即触发
+                    # 3. 检查当前时间是否在禁止发送的时间段内
+                    now = datetime.datetime.now()
+                    forbidden_start = self.get_config("schedule.forbidden_hours_start", 2)
+                    forbidden_end = self.get_config("schedule.forbidden_hours_end", 6)
+                    
+                    is_forbidden_time = False
+                    if forbidden_start < forbidden_end:
+                        # 例如，2点到6点
+                        is_forbidden_time = forbidden_start <= now.hour < forbidden_end
+                    else:
+                        # 例如，23点到第二天7点
+                        is_forbidden_time = now.hour >= forbidden_start or now.hour < forbidden_end
+
+                    if is_forbidden_time:
+                        logger.info(f"当前时间 {now.hour}点 处于禁止发送时段 ({forbidden_start}-{forbidden_end})，本次跳过。")
+                        self.last_processed_activity = current_activity
                     
                     # 4. 检查活动是否是新的活动
                     elif current_activity != self.last_processed_activity:
