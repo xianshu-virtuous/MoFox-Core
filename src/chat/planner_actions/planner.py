@@ -450,7 +450,7 @@ class ActionPlanner:
             schedule_block = ""
             if global_config.schedule.enable:
                 if current_activity := schedule_manager.get_current_activity():
-                    schedule_block = f"你当前正在：{current_activity}。"
+                    schedule_block = f"你当前正在：{current_activity},但注意它与群聊的聊天无关。"
 
             mood_block = ""
             if global_config.mood.enable_mood:
