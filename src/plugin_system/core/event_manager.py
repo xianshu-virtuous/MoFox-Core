@@ -43,8 +43,8 @@ class EventManager:
     def register_event(
             self, 
             event_name: Union[EventType, str],
-            allowed_subscribers: List[str]=[],  
-            allowed_triggers: List[str]=[]
+            allowed_subscribers: List[str]=None,  
+            allowed_triggers: List[str]=None
             ) -> bool:
         """注册一个新的事件
         
@@ -55,6 +55,10 @@ class EventManager:
         Returns:
             bool: 注册成功返回True，已存在返回False
         """
+        if allowed_triggers is None:
+            allowed_triggers = []
+        if allowed_subscribers is None:
+            allowed_subscribers = []
         if event_name in self._events:
             logger.warning(f"事件 {event_name} 已存在，跳过注册")
             return False
