@@ -25,7 +25,7 @@ class SendFeedCommand(PlusCommand):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @require_permission("plugin.maizone.send_feed", "❌ 你没有发送QQ空间说说的权限")
+    @require_permission("plugin.maizone.send_feed")
     async def execute(self, args: CommandArgs) -> Tuple[bool, str, bool]:
         """
         执行命令的核心逻辑。
