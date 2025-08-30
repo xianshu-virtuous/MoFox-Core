@@ -52,11 +52,22 @@ class VideoAnalyzer:
 
     def __init__(self):
         """初始化视频分析器"""
-        # 检查Rust模块是否可用
-        if not RUST_VIDEO_AVAILABLE:
-            logger.warning("⚠️ Rust视频处理模块不可用，视频分析器将以降级模式运行")
+        # 检查是否有任何可用的视频处理实现
+        opencv_available = False
+        try:
+            import cv2
+            opencv_available = True
+        except ImportError:
+            pass
+            
+        if not RUST_VIDEO_AVAILABLE and not opencv_available:
+            logger.error("❌ 没有可用的视频处理实现，视频分析器将被禁用")
             self.disabled = True
             return
+        elif not RUST_VIDEO_AVAILABLE:
+            logger.warning("⚠️ Rust视频处理模块不可用，将使用Python降级实现")
+        elif not opencv_available:
+            logger.warning("⚠️ OpenCV不可用，仅支持Rust关键帧模式")
             
         self.disabled = False
         
@@ -259,17 +270,26 @@ class VideoAnalyzer:
             logger.warning(f"无效的分析模式: {mode}")
 
     async def extract_frames(self, video_path: str) -> List[Tuple[str, float]]:
-        """提取视频帧 - 使用 Rust 实现"""
-        if not RUST_VIDEO_AVAILABLE:
-            logger.error("❌ Rust视频处理模块不可用，无法提取视频帧")
-            return []
-            
-        # 优先尝试高级接口，失败时回退到基础接口
-        try:
-            return await self._extract_frames_rust_advanced(video_path)
-        except Exception as e:
-            logger.warning(f"高级接口失败: {e}，使用基础接口")
-            return await self._extract_frames_rust(video_path)
+        """提取视频帧 - 智能选择最佳实现"""
+        # 检查是否应该使用Rust实现
+        if RUST_VIDEO_AVAILABLE and self.frame_extraction_mode == "keyframe":
+            # 优先尝试Rust关键帧提取
+            try:
+                return await self._extract_frames_rust_advanced(video_path)
+            except Exception as e:
+                logger.warning(f"Rust高级接口失败: {e}，尝试基础接口")
+                try:
+                    return await self._extract_frames_rust(video_path)
+                except Exception as e2:
+                    logger.warning(f"Rust基础接口也失败: {e2}，降级到Python实现")
+                    return await self._extract_frames_python_fallback(video_path)
+        else:
+            # 使用Python实现（支持time_interval和fixed_number模式）
+            if not RUST_VIDEO_AVAILABLE:
+                logger.info("🔄 Rust模块不可用，使用Python抽帧实现")
+            else:
+                logger.info(f"🔄 抽帧模式为 {self.frame_extraction_mode}，使用Python抽帧实现")
+            return await self._extract_frames_python_fallback(video_path)
 
     async def _extract_frames_rust_advanced(self, video_path: str) -> List[Tuple[str, float]]:
         """使用 Rust 高级接口的帧提取"""
@@ -427,6 +447,33 @@ class VideoAnalyzer:
             logger.error(f"❌ Rust 帧提取失败: {e}")
             raise e
 
+    async def _extract_frames_python_fallback(self, video_path: str) -> List[Tuple[str, float]]:
+        """Python降级抽帧实现 - 支持多种抽帧模式"""
+        try:
+            # 导入旧版本分析器
+            from .utils_video_legacy import get_legacy_video_analyzer
+            
+            logger.info("🔄 使用Python降级抽帧实现...")
+            legacy_analyzer = get_legacy_video_analyzer()
+            
+            # 同步配置参数
+            legacy_analyzer.max_frames = self.max_frames
+            legacy_analyzer.frame_quality = self.frame_quality
+            legacy_analyzer.max_image_size = self.max_image_size
+            legacy_analyzer.frame_extraction_mode = self.frame_extraction_mode
+            legacy_analyzer.frame_interval_seconds = self.frame_interval_seconds
+            legacy_analyzer.use_multiprocessing = self.use_multiprocessing
+            
+            # 使用旧版本的抽帧功能
+            frames = await legacy_analyzer.extract_frames(video_path)
+            
+            logger.info(f"✅ Python降级抽帧完成: {len(frames)} 帧")
+            return frames
+            
+        except Exception as e:
+            logger.error(f"❌ Python降级抽帧失败: {e}")
+            return []
+
     async def analyze_frames_batch(self, frames: List[Tuple[str, float]], user_question: str = None) -> str:
         """批量分析所有帧"""
         logger.info(f"开始批量分析{len(frames)}帧")
@@ -569,8 +616,8 @@ class VideoAnalyzer:
         Returns:
             Tuple[bool, str]: (是否成功, 分析结果或错误信息)
         """
-        if self.disabled or not RUST_VIDEO_AVAILABLE:
-            error_msg = "❌ 视频分析功能已禁用：Rust视频处理模块不可用"
+        if self.disabled:
+            error_msg = "❌ 视频分析功能已禁用：没有可用的视频处理实现"
             logger.warning(error_msg)
             return (False, error_msg)
             
@@ -617,8 +664,8 @@ class VideoAnalyzer:
         Returns:
             Dict[str, str]: 包含分析结果的字典，格式为 {"summary": "分析结果"}
         """
-        if self.disabled or not RUST_VIDEO_AVAILABLE:
-            return {"summary": "❌ 视频分析功能已禁用：Rust视频处理模块不可用"}
+        if self.disabled:
+            return {"summary": "❌ 视频分析功能已禁用：没有可用的视频处理实现"}
             
         video_hash = None
         video_event = None
@@ -818,9 +865,14 @@ def is_video_analysis_available() -> bool:
     """检查视频分析功能是否可用
     
     Returns:
-        bool: 如果Rust视频处理模块可用且功能未禁用则返回True
+        bool: 如果有任何可用的视频处理实现则返回True
     """
-    return RUST_VIDEO_AVAILABLE
+    # 现在即使Rust模块不可用，也可以使用Python降级实现
+    try:
+        import cv2
+        return True
+    except ImportError:
+        return False
 
 def get_video_analysis_status() -> Dict[str, any]:
     """获取视频分析功能的详细状态信息
@@ -828,17 +880,41 @@ def get_video_analysis_status() -> Dict[str, any]:
     Returns:
         Dict[str, any]: 包含功能状态信息的字典
     """
+    # 检查OpenCV是否可用
+    opencv_available = False
+    try:
+        import cv2
+        opencv_available = True
+    except ImportError:
+        pass
+    
     status = {
-        "available": RUST_VIDEO_AVAILABLE,
-        "module_name": "rust_video",
-        "description": "Rust视频处理模块"
+        "available": opencv_available or RUST_VIDEO_AVAILABLE,
+        "implementations": {
+            "rust_keyframe": {
+                "available": RUST_VIDEO_AVAILABLE,
+                "description": "Rust智能关键帧提取",
+                "supported_modes": ["keyframe"]
+            },
+            "python_legacy": {
+                "available": opencv_available,
+                "description": "Python传统抽帧方法",
+                "supported_modes": ["fixed_number", "time_interval"]
+            }
+        },
+        "supported_modes": []
     }
     
-    if not RUST_VIDEO_AVAILABLE:
+    # 汇总支持的模式
+    if RUST_VIDEO_AVAILABLE:
+        status["supported_modes"].extend(["keyframe"])
+    if opencv_available:
+        status["supported_modes"].extend(["fixed_number", "time_interval"])
+    
+    if not status["available"]:
         status.update({
-            "error": "模块未安装或加载失败",
-            "solution": "请安装rust_video模块或检查编译环境",
-            "fallback_enabled": True
+            "error": "没有可用的视频处理实现",
+            "solution": "请安装opencv-python或rust_video模块"
         })
     
     return status
