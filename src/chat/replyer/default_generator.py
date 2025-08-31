@@ -1,3 +1,8 @@
+"""
+默认回复生成器 - 集成SmartPrompt系统
+使用重构后的SmartPrompt系统替换原有的复杂提示词构建逻辑
+移除缓存机制，简化架构
+"""
 import traceback
 import time
 import asyncio
@@ -15,7 +20,7 @@ from src.llm_models.utils_model import LLMRequest
 from src.chat.message_receive.message import UserInfo, Seg, MessageRecv, MessageSending
 from src.chat.message_receive.chat_stream import ChatStream, get_chat_manager
 from src.chat.message_receive.uni_message_sender import HeartFCSender
-from src.chat.utils.timer_calculator import Timer  # <--- Import Timer
+from src.chat.utils.timer_calculator import Timer
 from src.chat.utils.utils import get_chat_type_and_target_info
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.chat.utils.chat_message_builder import (
@@ -207,88 +212,6 @@ class DefaultReplyer:
 
         self.tool_executor = ToolExecutor(chat_id=self.chat_stream.stream_id)
 
-    async def _build_cross_context_block(self, current_chat_id: str, target_user_info: Optional[Dict[str, Any]]) -> str:
-        """构建跨群聊上下文"""
-        if not global_config.cross_context.enable:
-            return ""
-
-        # 找到当前群聊所在的共享组
-        target_group = None
-        current_stream = get_chat_manager().get_stream(current_chat_id)
-        if not current_stream or not current_stream.group_info:
-            return ""
-        current_chat_raw_id = current_stream.group_info.group_id
-
-        for group in global_config.cross_context.groups:
-            if str(current_chat_raw_id) in group.chat_ids:
-                target_group = group
-                break
-
-        if not target_group:
-            return ""
-
-        # 根据prompt_mode选择策略
-        prompt_mode = global_config.personality.prompt_mode
-        other_chat_raw_ids = [chat_id for chat_id in target_group.chat_ids if chat_id != str(current_chat_raw_id)]
-
-        cross_context_messages = []
-
-        if prompt_mode == "normal":
-            # normal模式：获取其他群聊的最近N条消息
-            for chat_raw_id in other_chat_raw_ids:
-                stream_id = get_chat_manager().get_stream_id(current_stream.platform, chat_raw_id, is_group=True)
-                if not stream_id:
-                    continue
-
-                messages = get_raw_msg_before_timestamp_with_chat(
-                    chat_id=stream_id,
-                    timestamp=time.time(),
-                    limit=5,  # 可配置
-                )
-                if messages:
-                    chat_name = get_chat_manager().get_stream_name(stream_id) or stream_id
-                    formatted_messages, _ = build_readable_messages_with_id(messages, timestamp_mode="relative")
-                    cross_context_messages.append(f"[以下是来自“{chat_name}”的近期消息]\n{formatted_messages}")
-
-        elif prompt_mode == "s4u":
-            # s4u模式：获取当前发言用户在其他群聊的消息
-            if target_user_info:
-                user_id = target_user_info.get("user_id")
-
-                if user_id:
-                    for chat_raw_id in other_chat_raw_ids:
-                        stream_id = get_chat_manager().get_stream_id(
-                            current_stream.platform, chat_raw_id, is_group=True
-                        )
-                        if not stream_id:
-                            continue
-
-                        messages = get_raw_msg_before_timestamp_with_chat(
-                            chat_id=stream_id,
-                            timestamp=time.time(),
-                            limit=20,  # 获取更多消息以供筛选
-                        )
-                        user_messages = [msg for msg in messages if msg.get("user_id") == user_id][
-                            -5:
-                        ]  # 筛选并取最近5条
-
-                        if user_messages:
-                            chat_name = get_chat_manager().get_stream_name(stream_id) or stream_id
-                            user_name = (
-                                target_user_info.get("person_name") or target_user_info.get("user_nickname") or user_id
-                            )
-                            formatted_messages, _ = build_readable_messages_with_id(
-                                user_messages, timestamp_mode="relative"
-                            )
-                            cross_context_messages.append(
-                                f"[以下是“{user_name}”在“{chat_name}”的近期发言]\n{formatted_messages}"
-                            )
-
-        if not cross_context_messages:
-            return ""
-
-        return "# 跨群上下文参考\n" + "\n\n".join(cross_context_messages) + "\n"
-
     def _select_weighted_models_config(self) -> Tuple[TaskConfig, float]:
         """使用加权随机选择来挑选一个模型配置"""
         configs = self.model_set
@@ -437,19 +360,7 @@ class DefaultReplyer:
             traceback.print_exc()
             return False, None, prompt if return_prompt else None
 
-    async def build_relation_info(self, sender: str, target: str):
-        if not global_config.relationship.enable_relationship:
-            return ""
-
-        # 获取用户ID
-        person = Person(person_name = sender)
-        if not is_person_known(person_name=sender):
-            logger.warning(f"未找到用户 {sender} 的ID，跳过信息提取")
-            return f"你完全不认识{sender}，不理解ta的相关信息。"
-
-        return person.build_relationship(points_num=5)
-
-    async def build_expression_habits(self, chat_history: str, target: str) -> Tuple[str, List[int]]:
+    async def build_expression_habits(self, chat_history: str, target: str) -> str:
         """构建表达习惯块
 
         Args:
@@ -490,7 +401,8 @@ class DefaultReplyer:
             )
             expression_habits_block += f"{style_habits_str}\n"
 
-        return f"{expression_habits_title}\n{expression_habits_block}", selected_ids
+        if style_habits_str.strip() and grammar_habits_str.strip():
+            expression_habits_title = "你可以参考以下的语言习惯和句法，如果情景合适就使用，不要盲目使用,不要生硬使用，以合理的方式结合到你的回复中。"
 
     async def build_memory_block(self, chat_history: List[Dict[str, Any]], target: str) -> str:
         """构建记忆块
@@ -863,7 +775,7 @@ class DefaultReplyer:
         reply_message: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, List[int]]:
         """
-        构建回复器上下文
+        构建回复器上下文 - 使用重构后的SmartPrompt系统，移除缓存机制
 
         Args:
             extra_info: 额外信息，用于补充上下文
@@ -946,7 +858,7 @@ class DefaultReplyer:
             ),
             self._time_and_run_task(self.get_prompt_info(chat_talking_prompt_short, reply_to), "prompt_info"),
             self._time_and_run_task(
-                PromptUtils.build_cross_context_block(chat_id, target_user_info, current_prompt_mode), "cross_context"
+                PromptUtils.build_cross_context(chat_id, target_user_info, global_config.personality.prompt_mode), "cross_context"
             ),
         )
 
@@ -977,11 +889,6 @@ class DefaultReplyer:
         tool_info = results_dict["tool_info"]
         prompt_info = results_dict["prompt_info"]
         cross_context_block = results_dict["cross_context"]
-
-        # 检查是否为视频分析结果，并注入引导语
-        if target and ("[视频内容]" in target or "好的，我将根据您提供的" in target):
-            video_prompt_injection = "\n请注意，以上内容是你刚刚观看的视频，请以第一人称分享你的观后感，而不是在分析一份报告。"
-            memory_block += video_prompt_injection
 
         # 检查是否为视频分析结果，并注入引导语
         if target and ("[视频内容]" in target or "好的，我将根据您提供的" in target):
@@ -1022,6 +929,7 @@ class DefaultReplyer:
         # 根据配置选择模板
         current_prompt_mode = global_config.personality.prompt_mode
 
+        # 使用重构后的SmartPrompt系统，移除缓存相关参数
         prompt_params = SmartPromptParameters(
             chat_id=chat_id,
             is_group_chat=is_group_chat,
@@ -1032,17 +940,17 @@ class DefaultReplyer:
             available_actions=available_actions,
             enable_tool=enable_tool,
             chat_target_info=self.chat_target_info,
-            current_prompt_mode=current_prompt_mode,
+            prompt_mode=current_prompt_mode,
             message_list_before_now_long=message_list_before_now_long,
             message_list_before_short=message_list_before_short,
             chat_talking_prompt_short=chat_talking_prompt_short,
             target_user_info=target_user_info,
             # 传递已构建的参数
             expression_habits_block=expression_habits_block,
-            relation_info=relation_info,
+            relation_info_block=relation_info,
             memory_block=memory_block,
-            tool_info=tool_info,
-            prompt_info=prompt_info,
+            tool_info_block=tool_info,
+            knowledge_prompt=prompt_info,
             cross_context_block=cross_context_block,
             keywords_reaction_prompt=keywords_reaction_prompt,
             extra_info_block=extra_info_block,
@@ -1162,7 +1070,7 @@ class DefaultReplyer:
 
         template_name = "default_expressor_prompt"
 
-        # 使用重构后的SmartPrompt系统 - Expressor模式
+        # 使用重构后的SmartPrompt系统 - Expressor模式，移除缓存相关参数
         prompt_params = SmartPromptParameters(
             chat_id=chat_id,
             is_group_chat=is_group_chat,
@@ -1170,7 +1078,7 @@ class DefaultReplyer:
             target=raw_reply,  # Expressor模式使用raw_reply作为target
             reply_to=f"{sender}:{target}" if sender and target else reply_to,
             extra_info="",  # Expressor模式不需要额外信息
-            current_prompt_mode="minimal",  # Expressor使用minimal模式
+            prompt_mode="minimal",  # Expressor使用minimal模式
             chat_talking_prompt_short=chat_talking_prompt_half,
             time_block=time_block,
             identity_block=identity_block,
@@ -1180,7 +1088,7 @@ class DefaultReplyer:
             moderation_prompt_block=moderation_prompt_block,
             # 添加已构建的表达习惯和关系信息
             expression_habits_block=expression_habits_block,
-            relation_info=relation_info,
+            relation_info_block=relation_info,
         )
         
         smart_prompt = SmartPrompt(parameters=prompt_params)
@@ -1288,6 +1196,26 @@ class DefaultReplyer:
         except Exception as e:
             logger.error(f"获取知识库内容时发生异常: {str(e)}")
             return ""
+
+    async def build_relation_info(self, reply_to: str = ""):
+        if not global_config.relationship.enable_relationship:
+            return ""
+
+        relationship_fetcher = relationship_fetcher_manager.get_fetcher(self.chat_stream.stream_id)
+        if not reply_to:
+            return ""
+        sender, text = self._parse_reply_target(reply_to)
+        if not sender or not text:
+            return ""
+
+        # 获取用户ID
+        person_info_manager = get_person_info_manager()
+        person_id = person_info_manager.get_person_id_by_person_name(sender)
+        if not person_id:
+            logger.warning(f"未找到用户 {sender} 的ID，跳过信息提取")
+            return f"你完全不认识{sender}，不理解ta的相关信息。"
+
+        return await relationship_fetcher.build_relation_info(person_id, points_num=5)
 
 
 def weighted_sample_no_replacement(items, weights, k) -> list:
