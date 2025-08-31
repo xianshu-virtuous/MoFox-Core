@@ -1037,8 +1037,7 @@ class DefaultReplyer:
         # 根据配置选择模板
         current_prompt_mode = global_config.personality.prompt_mode
 
-        # 使用智能Prompt系统构建上下文
-        # 构建SmartPromptParameters对象
+        # 构建SmartPromptParameters - 包含所有必需参数
         prompt_params = SmartPromptParameters(
             chat_id=chat_id,
             is_group_chat=is_group_chat,
@@ -1069,11 +1068,13 @@ class DefaultReplyer:
             reply_target_block=reply_target_block,
             mood_prompt=mood_prompt,
             action_descriptions=action_descriptions,
-            chat_stream=self.chat_stream,
         )
 
-        # 使用智能Prompt系统构建Prompt
-        smart_prompt = SmartPrompt(prompt_params)
+        # 使用重构后的SmartPrompt系统
+        smart_prompt = SmartPrompt(
+            template_name=None,  # 由current_prompt_mode自动选择
+            parameters=prompt_params
+        )
         prompt_text = await smart_prompt.build_prompt()
 
         return prompt_text
@@ -1176,23 +1177,47 @@ class DefaultReplyer:
 
         template_name = "default_expressor_prompt"
 
-        return await global_prompt_manager.format_prompt(
-            template_name,
+        # 使用重构后的SmartPrompt系统
+        prompt_params = SmartPromptParameters(
+            chat_id=chat_id,
+            is_group_chat=is_group_chat,
+            sender=sender,
+            target="",  # 重构时使用raw_reply
+            reply_to=f"{sender}:{target}" if sender and target else reply_to,
+            extra_info="",  # 重构模式特殊处理
             expression_habits_block=expression_habits_block,
-            relation_info_block=relation_info,
-            chat_target=chat_target_1,
+            relation_info=relation_info,
             time_block=time_block,
-            chat_info=chat_talking_prompt_half,
-            identity=identity_block,
-            chat_target_2=chat_target_2,
+            identity_block=identity_block,
             reply_target_block=reply_target_block,
-            raw_reply=raw_reply,
-            reason=reason,
-            mood_state=mood_prompt,  # 添加情绪状态参数
-            reply_style=global_config.personality.reply_style,
+            mood_prompt=mood_prompt,
             keywords_reaction_prompt=keywords_reaction_prompt,
-            moderation_prompt=moderation_prompt_block,
+            moderation_prompt_block=moderation_prompt_block,
+            current_prompt_mode=global_config.personality.prompt_mode,
+            chat_talking_prompt_short=chat_talking_prompt_half,
         )
+        
+        smart_prompt = SmartPrompt(parameters=prompt_params)
+        
+        # 重构为expressor专用格式
+        expressor_params = {
+            'expression_habits_block': expression_habits_block,
+            'relation_info_block': relation_info,
+            'chat_target': chat_target_1,
+            'time_block': time_block,
+            'chat_info': chat_talking_prompt_half,
+            'identity': identity_block,
+            'chat_target_2': chat_target_2,
+            'reply_target_block': reply_target_block,
+            'raw_reply': raw_reply,
+            'reason': reason,
+            'mood_state': mood_prompt,
+            'reply_style': global_config.personality.reply_style,
+            'keywords_reaction_prompt': keywords_reaction_prompt,
+            'moderation_prompt': moderation_prompt_block,
+        }
+        
+        return await global_prompt_manager.format_prompt("default_expressor_prompt", **expressor_params)
 
     async def _build_single_sending_message(
         self,
