@@ -512,6 +512,8 @@ MODULE_COLORS = {
     "db_migration": "\033[38;5;94m",
     "小彩蛋": "\033[38;5;214m",
     "AioHTTP-Gemini客户端": "\033[38;5;81m",
+    "napcat_adapter": "\033[38;5;67m",  # 柔和的灰蓝色，不刺眼且低调
+    "event_manager": "\033[38;5;79m",  # 柔和的蓝绿色，稍微醒目但不刺眼
 }
 
 # 定义模块别名映射 - 将真实的logger名称映射到显示的别名
@@ -554,9 +556,8 @@ MODULE_ALIASES = {
     # 插件系统扩展
     "plugin_base": "插件基类",
     "base_event_handler": "事件处理",
-    "events_manager": "事件管理",
+    "event_manager": "事件管理器",
     "global_announcement_manager": "全局通知",
-    "event_manager"
     # 工具和依赖管理
     "dependency_config": "依赖配置",
     "dependency_manager": "依赖管理",
@@ -589,6 +590,8 @@ MODULE_ALIASES = {
     "MaiZone.ReadFeedAction": "Mai空间读说说",
     # 网络工具
     "web_surfing_tool": "网络搜索",
+    # napcat ada
+    "napcat_adapter": "Napcat 适配器",
     "tts": "语音合成",
     # mais4u系统扩展
     "s4u_config": "直播配置",
@@ -630,7 +633,6 @@ MODULE_ALIASES = {
     "db_migration": "数据库迁移",
     "小彩蛋": "小彩蛋",
     "AioHTTP-Gemini客户端": "AioHTTP-Gemini客户端",
-    "event_manager": "事件管理器",
 }
 
 RESET_COLOR = "\033[0m"
