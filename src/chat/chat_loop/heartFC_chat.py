@@ -77,12 +77,7 @@ class HeartFChatting:
         """
         is_group_chat = self.context.chat_stream.group_info is not None if self.context.chat_stream else False
         if is_group_chat and global_config.chat.group_chat_mode != "auto":
-            if global_config.chat.group_chat_mode == "focus":
-                self.context.loop_mode = ChatMode.FOCUS
-                self.context.energy_value = 35
-            elif global_config.chat.group_chat_mode == "normal":
-                self.context.loop_mode = ChatMode.NORMAL
-                self.context.energy_value = 15
+            self.context.energy_value = 25
 
     async def start(self):
         """
@@ -241,41 +236,41 @@ class HeartFChatting:
 
                 if current_sleep_state == SleepState.SLEEPING:
                     # 只有在纯粹的 SLEEPING 状态下才跳过消息处理
-                    return has_new_messages
+                    return True
 
                 if current_sleep_state == SleepState.WOKEN_UP:
                     logger.info(f"{self.context.log_prefix} 从睡眠中被唤醒，将处理积压的消息。")
 
             # 根据聊天模式处理新消息
             # 统一使用 _should_process_messages 判断是否应该处理
-            if not self._should_process_messages(recent_messages if has_new_messages else None):
+            should_process,interest_value = await self._should_process_messages(recent_messages if has_new_messages else None)
+            if should_process:
+                earliest_message_data = recent_messages[0]
+                self.last_read_time = earliest_message_data.get("time")
+                await self.cycle_processor.observe(interest_value = interest_value)
+            else:
+                # Normal模式：消息数量不足，等待
+                await asyncio.sleep(0.5)
+                return True
+        
+            if not await self._should_process_messages(recent_messages if has_new_messages else None):
                 return has_new_messages
                 
-            if self.context.loop_mode == ChatMode.FOCUS:
-                # 处理新消息
-                for message in recent_messages:
-                    await self.cycle_processor.observe(message)
-                     
-                # 如果成功观察，增加能量值
-                if has_new_messages:
-                    self.context.energy_value += 1 / global_config.chat.focus_value
-                    logger.info(f"{self.context.log_prefix} 能量值增加，当前能量值：{self.context.energy_value:.1f}")
-                     
-                self._check_focus_exit()
-            elif self.context.loop_mode == ChatMode.NORMAL:
-                self._check_focus_entry(len(recent_messages))
-                # 检查是否有足够的新消息触发处理
-                if new_message_count >= self.context.focus_energy:
-                    earliest_messages_data = recent_messages[0]
-                    self.context.last_read_time = earliest_messages_data.get("time")
-                    for message in recent_messages:
-                        await self.normal_mode_handler.handle_message(message)
+            # 处理新消息
+            for message in recent_messages:
+                await self.cycle_processor.observe(interest_value = interest_value)
+                    
+            # 如果成功观察，增加能量值
+            if has_new_messages:
+                self.context.energy_value += 1 / global_config.chat.focus_value
+                logger.info(f"{self.context.log_prefix} 能量值增加，当前能量值：{self.context.energy_value:.1f}")
+                    
+            self._check_focus_exit()
+
         else:
             # 无新消息时，只进行模式检查，不进行思考循环
-            if self.context.loop_mode == ChatMode.FOCUS:
-                self._check_focus_exit()
-            elif self.context.loop_mode == ChatMode.NORMAL:
-                self._check_focus_entry(0)  # 传入0表示无新消息
+            self._check_focus_exit()
+
 
         # 更新上一帧的睡眠状态
         self.context.was_sleeping = is_sleeping
@@ -319,7 +314,6 @@ class HeartFChatting:
 
         if self.context.energy_value <= 1:  # 如果能量值小于等于1（非强制情况）
             self.context.energy_value = 1  # 将能量值设置为1
-            self.context.loop_mode = ChatMode.NORMAL  # 切换到普通模式
 
     def _check_focus_entry(self, new_message_count: int):
         """
@@ -339,7 +333,6 @@ class HeartFChatting:
         is_group_chat = not is_private_chat
 
         if global_config.chat.force_focus_private and is_private_chat:
-            self.context.loop_mode = ChatMode.FOCUS
             self.context.energy_value = 10
             return
 
@@ -350,14 +343,10 @@ class HeartFChatting:
             if new_message_count > 3 / pow(
                 global_config.chat.focus_value, 0.5
             ):  # 如果新消息数超过阈值（基于专注值计算）
-                self.context.loop_mode = ChatMode.FOCUS  # 进入专注模式
                 self.context.energy_value = (
                     10 + (new_message_count / (3 / pow(global_config.chat.focus_value, 0.5))) * 10
                 )  # 根据消息数量计算能量值
                 return  # 返回，不再检查其他条件
-
-            if self.context.energy_value >= 30:  # 如果能量值达到或超过30
-                self.context.loop_mode = ChatMode.FOCUS  # 进入专注模式
 
     def _handle_wakeup_messages(self, messages):
         """
@@ -419,20 +408,58 @@ class HeartFChatting:
                 logger.info(f"{self.context.log_prefix} 兴趣度充足")
                 self.context.focus_energy = 1
 
-    def _should_process_messages(self, messages: List[Dict[str, Any]] = None) -> bool:
+    async def _should_process_messages(self, new_message: List[Dict[str, Any]]) -> tuple[bool,float]:
         """
         统一判断是否应该处理消息的函数
         根据当前循环模式和消息内容决定是否继续处理
         """   
-        if self.context.loop_mode == ChatMode.FOCUS:
-            if self.context.last_action == "no_reply":
-                if messages:
-                    return self._execute_no_reply(messages)
-                return False
-            return True
+        new_message_count = len(new_message)
+        talk_frequency = global_config.chat.get_current_talk_frequency(self.context.chat_stream.stream_id)
+        modified_exit_count_threshold = self.context.focus_energy / talk_frequency
         
-        return True
+        if new_message_count >= modified_exit_count_threshold:
+            # 记录兴趣度到列表
+            total_interest = 0.0
+            for msg_dict in new_message:
+                interest_value = msg_dict.get("interest_value", 0.0)
+                if msg_dict.get("processed_plain_text", ""):
+                    total_interest += interest_value
             
+            self.recent_interest_records.append(total_interest)
+            
+            logger.info(
+                f"{self.context.log_prefix} 累计消息数量达到{new_message_count}条(>{modified_exit_count_threshold})，结束等待"
+            )
+            return True,total_interest/new_message_count
+
+        # 检查累计兴趣值
+        if new_message_count > 0:
+            accumulated_interest = 0.0
+            for msg_dict in new_message:
+                text = msg_dict.get("processed_plain_text", "")
+                interest_value = msg_dict.get("interest_value", 0.0)
+                if text:
+                    accumulated_interest += interest_value
+            # 只在兴趣值变化时输出log
+            if not hasattr(self, "_last_accumulated_interest") or accumulated_interest != self._last_accumulated_interest:
+                logger.info(f"{self.context.log_prefix} breaking形式当前累计兴趣值: {accumulated_interest:.2f}, 当前聊天频率: {talk_frequency:.2f}")
+                self._last_accumulated_interest = accumulated_interest
+            if accumulated_interest >= 3 / talk_frequency:
+                # 记录兴趣度到列表      
+                self.recent_interest_records.append(accumulated_interest)
+                logger.info(
+                    f"{self.context.log_prefix} 累计兴趣值达到{accumulated_interest:.2f}(>{5 / talk_frequency})，结束等待"
+                )
+                return True,accumulated_interest/new_message_count
+        # 每10秒输出一次等待状态
+        if int(time.time() - self.last_read_time) > 0 and int(time.time() - self.last_read_time) % 10 == 0:
+            logger.info(
+                f"{self.context.log_prefix} 已等待{time.time() - self.last_read_time:.0f}秒，累计{new_message_count}条消息，继续等待..."
+            )
+            await asyncio.sleep(0.5)
+        
+        return False,0.0
+    
     async def _execute_no_reply(self, new_message: List[Dict[str, Any]]) -> bool:
         """执行breaking形式的no_reply（原有逻辑）"""
         new_message_count = len(new_message)

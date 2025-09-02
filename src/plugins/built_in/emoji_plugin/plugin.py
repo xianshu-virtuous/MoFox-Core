@@ -16,7 +16,6 @@ from src.plugin_system.base.config_types import ConfigField
 from src.common.logger import get_logger
 
 # 导入API模块 - 标准Python包方式
-from src.plugins.built_in.core_actions.reply import ReplyAction
 from src.plugins.built_in.core_actions.emoji import EmojiAction
 from src.plugins.built_in.core_actions.anti_injector_manager import AntiInjectorStatusCommand
 
@@ -68,8 +67,6 @@ class CoreActionsPlugin(BasePlugin):
 
         # --- 根据配置注册组件 ---
         components = []
-        if self.get_config("components.enable_reply", True):
-            components.append((ReplyAction.get_action_info(), ReplyAction))
         if self.get_config("components.enable_emoji", True):
             components.append((EmojiAction.get_action_info(), EmojiAction))
         if self.get_config("components.enable_anti_injector_manager", True):

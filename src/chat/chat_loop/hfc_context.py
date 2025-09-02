@@ -41,10 +41,6 @@ class HfcContext:
         self.relationship_builder: Optional[RelationshipBuilder] = None
         self.expression_learner: Optional[ExpressionLearner] = None
 
-        self.loop_mode = ChatMode.NORMAL
-
-        self.last_action = "no_action"
-
         self.energy_value = self.chat_stream.energy_value
         self.sleep_pressure = self.chat_stream.sleep_pressure
         self.was_sleeping = False # 用于检测睡眠状态的切换

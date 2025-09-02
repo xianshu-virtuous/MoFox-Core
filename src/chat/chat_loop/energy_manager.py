@@ -107,21 +107,12 @@ class EnergyManager:
             else:
                 # 清醒时：处理能量衰减
                 is_group_chat = self.context.chat_stream.group_info is not None
-                if is_group_chat and global_config.chat.group_chat_mode != "auto":
-                    if global_config.chat.group_chat_mode == "focus":
-                        self.context.loop_mode = ChatMode.FOCUS
-                        self.context.energy_value = 35
-                    elif global_config.chat.group_chat_mode == "normal":
-                        self.context.loop_mode = ChatMode.NORMAL
-                        self.context.energy_value = 15
-                    continue
+                if is_group_chat:
+                    self.context.energy_value = 25
 
-                if self.context.loop_mode == ChatMode.NORMAL:
-                    self.context.energy_value -= 0.3
-                    self.context.energy_value = max(self.context.energy_value, 0.3)
-                if self.context.loop_mode == ChatMode.FOCUS:
-                    self.context.energy_value -= 0.6
-                    self.context.energy_value = max(self.context.energy_value, 0.3)
+                await asyncio.sleep(12)
+                self.context.energy_value -= 0.5
+                self.context.energy_value = max(self.context.energy_value, 0.3)
 
                 self._log_energy_change("能量值衰减")
                 self.context.save_context_state()

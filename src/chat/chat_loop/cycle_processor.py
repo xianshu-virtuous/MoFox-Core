@@ -49,15 +49,21 @@ class CycleProcessor:
         action_message,
         cycle_timers: Dict[str, float],
         thinking_id,
-        plan_result,
+        actions,
     ) -> Tuple[Dict[str, Any], str, Dict[str, float]]:
         with Timer("回复发送", cycle_timers):
             reply_text = await self.response_handler.send_response(response_set, reply_to_str, loop_start_time, action_message)
 
             # 存储reply action信息
         person_info_manager = get_person_info_manager()
+        
+        # 获取 platform，如果不存在则从 chat_stream 获取，如果还是 None 则使用默认值
+        platform = action_message.get("chat_info_platform")
+        if platform is None:
+            platform = getattr(self.chat_stream, "platform", "unknown")
+        
         person_id = person_info_manager.get_person_id(
-            action_message.get("chat_info_platform", ""),
+            platform,
             action_message.get("user_id", ""),
         )
         person_name = await person_info_manager.get_value(person_id, "person_name")
@@ -76,7 +82,7 @@ class CycleProcessor:
         # 构建循环信息
         loop_info: Dict[str, Any] = {
             "loop_plan_info": {
-                "action_result": plan_result.get("action_result", {}),
+                "action_result": actions,
             },
             "loop_action_info": {
                 "action_taken": True,
@@ -88,12 +94,12 @@ class CycleProcessor:
 
         return loop_info, reply_text, cycle_timers
     
-    async def observe(self, message_data: Optional[Dict[str, Any]] = None) -> bool:
+    async def observe(self,interest_value:float = 0.0) -> bool:
         """
         观察和处理单次思考循环的核心方法
 
         Args:
-            message_data: 可选的消息数据字典，包含用户消息、平台信息等
+            interest_value: 兴趣值
 
         Returns:
             bool: 处理是否成功
@@ -105,13 +111,40 @@ class CycleProcessor:
         - 执行动作规划或直接回复
         - 根据动作类型分发到相应的处理方法
         """
-        if not message_data:
-            message_data = {}
+        action_type = "no_action"
+        reply_text = ""  # 初始化reply_text变量，避免UnboundLocalError
+        reply_to_str = ""  # 初始化reply_to_str变量
+
+        # 根据interest_value计算概率，决定使用哪种planner模式
+        # interest_value越高，越倾向于使用Normal模式
+        import random
+        import math
+        
+        # 使用sigmoid函数将interest_value转换为概率
+        # 当interest_value为0时，概率接近0（使用Focus模式）
+        # 当interest_value很高时，概率接近1（使用Normal模式）
+        def calculate_normal_mode_probability(interest_val: float) -> float:
+            # 使用sigmoid函数，调整参数使概率分布更合理
+            # 当interest_value = 0时，概率约为0.1
+            # 当interest_value = 1时，概率约为0.5
+            # 当interest_value = 2时，概率约为0.8
+            # 当interest_value = 3时，概率约为0.95
+            k = 2.0  # 控制曲线陡峭程度
+            x0 = 1.0  # 控制曲线中心点
+            return 1.0 / (1.0 + math.exp(-k * (interest_val - x0)))
+        
+        normal_mode_probability = calculate_normal_mode_probability(interest_value)
+        
+        # 根据概率决定使用哪种模式
+        if random.random() < normal_mode_probability:
+            mode = ChatMode.NORMAL
+            logger.info(f"{self.log_prefix} 基于兴趣值 {interest_value:.2f}，概率 {normal_mode_probability:.2f}，选择Normal planner模式")
+        else:
+            mode = ChatMode.FOCUS
+            logger.info(f"{self.log_prefix} 基于兴趣值 {interest_value:.2f}，概率 {normal_mode_probability:.2f}，选择Focus planner模式")
 
         cycle_timers, thinking_id = self.cycle_tracker.start_cycle()
-        logger.info(
-            f"{self.context.log_prefix} 开始第{self.context.cycle_counter}次思考[模式：{self.context.loop_mode}]"
-        )
+        logger.info(f"{self.log_prefix} 开始第{self.context.cycle_counter}次思考")
 
         if ENABLE_S4U:
             await send_typing()
@@ -127,75 +160,26 @@ class CycleProcessor:
                 logger.error(f"{self.context.log_prefix} 动作修改失败: {e}")
                 available_actions = {}
 
-        is_mentioned_bot = message_data.get("is_mentioned", False)
-        at_bot_mentioned = (global_config.chat.mentioned_bot_inevitable_reply and is_mentioned_bot) or (
-            global_config.chat.at_bot_inevitable_reply and is_mentioned_bot
-        )
-        
-        # 专注模式下提及bot必定回复
-        if self.context.loop_mode == ChatMode.FOCUS and at_bot_mentioned and "no_reply" in available_actions:
-            available_actions = {k: v for k, v in available_actions.items() if k != "no_reply"}
-
-        # 检查是否在normal模式下没有可用动作（除了reply相关动作）
-        skip_planner = False
-        
-        if self.context.loop_mode == ChatMode.NORMAL:
-            non_reply_actions = {
-                k: v for k, v in available_actions.items() if k not in ["reply", "no_reply", "no_action"]
-            }
-            if not non_reply_actions:
-                skip_planner = True
-                logger.info(f"Normal模式下没有可用动作，直接回复")
-                plan_result = self._get_direct_reply_plan(loop_start_time)
-                target_message = message_data
-
-
-        # Focus模式
-        if not skip_planner:
-            from src.plugin_system.core.event_manager import event_manager
-            from src.plugin_system.base.component_types import EventType
-
-            # 触发 ON_PLAN 事件
-            result = await event_manager.trigger_event(
-                EventType.ON_PLAN, plugin_name="SYSTEM", stream_id=self.context.stream_id
+            # 执行planner
+            planner_info = self.action_planner.get_necessary_info()
+            prompt_info = await self.action_planner.build_planner_prompt(
+                is_group_chat=planner_info[0],
+                chat_target_info=planner_info[1],
+                current_available_actions=planner_info[2],
             )
-            if result and not result.all_continue_process():
-                return
+            from src.plugin_system.core.event_manager import event_manager
+            from src.plugin_system import EventType
+
+            result = await event_manager.trigger_event(EventType.ON_PLAN,plugin_name="SYSTEM", stream_id=self.context.chat_stream)
+            if not result.all_continue_process():
+                raise UserWarning(f"插件{result.get_summary().get('stopped_handlers', '')}于规划前中断了内容生成")
             
             with Timer("规划器", cycle_timers):
-                plan_result, target_message = await self.action_planner.plan(mode=self.context.loop_mode)
-
-        action_result = plan_result.get("action_result", {})
-
-        action_type = action_result.get("action_type", "error")
-        action_data = action_result.get("action_data", {})
-        reasoning = action_result.get("reasoning", "未提供理由")
-        is_parallel = action_result.get("is_parallel", True)
-
-        action_data["loop_start_time"] = loop_start_time
-        action_message = message_data or target_message
-
-        # is_private_chat = self.context.chat_stream.group_info is None if self.context.chat_stream else False
-        
-        # 重构后的动作处理逻辑：先汇总所有动作，然后并行执行
-        actions = []
-
-        # 1. 添加Planner取得的动作
-        actions.append({
-            "action_type": action_type,
-            "reasoning": reasoning,
-            "action_data": action_data,
-            "action_message": action_message,
-            "available_actions": available_actions  # 添加这个字段
-        })
-
-        # 2. 如果不是reply动作且需要并行执行，额外添加reply动作
-        if action_type != "reply" and is_parallel:
-            actions.append({
-                "action_type": "reply",
-                "action_message": action_message,
-                "available_actions": available_actions
-            })
+                actions, _= await self.action_planner.plan(
+                    mode=mode,
+                    loop_start_time=loop_start_time,
+                    available_actions=available_actions,
+                )
 
         async def execute_action(action_info):
             """执行单个动作的通用函数"""
@@ -242,7 +226,6 @@ class CycleProcessor:
                 else:
                     # 执行回复动作
                     reply_to_str = await self._build_reply_to_str(action_info["action_message"])
-                    request_type = "chat.replyer"
                     
                     # 生成回复
                     gather_timeout = global_config.chat.thinking_timeout
@@ -252,7 +235,7 @@ class CycleProcessor:
                                 message_data=action_info["action_message"],
                                 available_actions=action_info["available_actions"],
                                 reply_to=reply_to_str,
-                                request_type=request_type,
+                                request_type="chat.replyer",
                             ),
                             timeout=gather_timeout
                         )
@@ -291,7 +274,7 @@ class CycleProcessor:
                         action_info["action_message"],
                         cycle_timers,
                         thinking_id,
-                        plan_result,
+                        actions,
                     )
                     return {
                         "action_type": "reply",
@@ -301,6 +284,7 @@ class CycleProcessor:
                     }
             except Exception as e:
                 logger.error(f"{self.log_prefix} 执行动作时出错: {e}")
+                logger.error(f"{self.log_prefix} 错误信息: {traceback.format_exc()}")
                 return {
                     "action_type": action_info["action_type"],
                     "success": False,
@@ -310,6 +294,7 @@ class CycleProcessor:
                 }
             
         # 创建所有动作的后台任务
+
         action_tasks = [asyncio.create_task(execute_action(action)) for action in actions]
 
         # 并行执行所有任务
@@ -356,7 +341,7 @@ class CycleProcessor:
             # 没有回复信息，构建纯动作的loop_info
             loop_info = {
                 "loop_plan_info": {
-                    "action_result": plan_result.get("action_result", {}),
+                    "action_result": actions,
                 },
                 "loop_action_info": {
                     "action_taken": action_success,
@@ -366,8 +351,6 @@ class CycleProcessor:
                 },
             }
             reply_text = action_reply_text
-                    
-        self.last_action = action_type
         
         if ENABLE_S4U:
             await stop_typing()
@@ -375,21 +358,15 @@ class CycleProcessor:
         self.context.chat_instance.cycle_tracker.end_cycle(loop_info, cycle_timers)
         self.context.chat_instance.cycle_tracker.print_cycle_info(cycle_timers)
 
-        if self.context.loop_mode == ChatMode.NORMAL:
-            await self.context.chat_instance.willing_manager.after_generate_reply_handle(message_data.get("message_id", ""))
-
+        # await self.willing_manager.after_generate_reply_handle(message_data.get("message_id", ""))
+        action_type = actions[0]["action_type"] if actions else "no_action"
         # 管理no_reply计数器：当执行了非no_reply动作时，重置计数器
-        if action_type != "no_reply" and action_type != "no_action":
+        if action_type != "no_reply":
             # no_reply逻辑已集成到heartFC_chat.py中，直接重置计数器
             self.context.chat_instance.recent_interest_records.clear()
             self.context.no_reply_consecutive = 0
-            logger.info(f"{self.log_prefix} 执行了{action_type}动作，重置no_reply计数器")
+            logger.debug(f"{self.log_prefix} 执行了{action_type}动作，重置no_reply计数器")
             return True
-        elif action_type == "no_action":
-            # 当执行回复动作时，也重置no_reply计数
-            self.context.chat_instance.recent_interest_records.clear()
-            self.context.no_reply_consecutive = 0
-            logger.info(f"{self.log_prefix} 执行了回复动作，重置no_reply计数器")
             
         if action_type == "no_reply":
             self.context.no_reply_consecutive += 1

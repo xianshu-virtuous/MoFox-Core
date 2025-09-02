@@ -162,7 +162,10 @@ class ActionPlanner:
             return "回忆时出现了一些问题。"
 
     async def _build_action_options(
-        self, current_available_actions: Dict[str, ActionInfo], mode: ChatMode, target_prompt: str = ""
+        self,
+        current_available_actions: Dict[str, ActionInfo],
+        mode: ChatMode,
+        target_prompt: str = "",
     ) -> str:
         """
         构建动作选项
@@ -185,12 +188,15 @@ class ActionPlanner:
             param_text = ""
             if action_info.action_parameters:
                 param_text = "\n" + "\n".join(
-                    f'    "{p_name}":"{p_desc}"' for p_name, p_desc in action_info.action_parameters.items()
+                    f'    "{p_name}":"{p_desc}"'
+                    for p_name, p_desc in action_info.action_parameters.items()
                 )
 
             require_text = "\n".join(f"- {req}" for req in action_info.action_require)
 
-            using_action_prompt = await global_prompt_manager.get_prompt_async("action_prompt")
+            using_action_prompt = await global_prompt_manager.get_prompt_async(
+                "action_prompt"
+            )
             action_options_block += using_action_prompt.format(
                 action_name=action_name,
                 action_description=action_info.description,
@@ -200,7 +206,10 @@ class ActionPlanner:
             )
         return action_options_block
 
-    def find_message_by_id(self, message_id: str, message_id_list: list) -> Optional[Dict[str, Any]]:
+    def find_message_by_id(
+        self, message_id: str, message_id_list: list
+    ) -> Optional[Dict[str, Any]]:
+        # sourcery skip: use-next
         """
         根据message_id从message_id_list中查找对应的原始消息
 
@@ -231,7 +240,12 @@ class ActionPlanner:
         # 假设消息列表是按时间顺序排列的，最后一个是最新的
         return message_id_list[-1].get("message")
 
-    async def plan(self, mode: ChatMode = ChatMode.FOCUS) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    async def plan(
+        self,
+        mode: ChatMode = ChatMode.FOCUS,
+        loop_start_time:float = 0.0,
+        available_actions: Optional[Dict[str, ActionInfo]] = None,
+    ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         """
         规划器 (Planner): 使用LLM根据上下文决定做出什么动作。
         """
@@ -297,31 +311,22 @@ class ActionPlanner:
 
                     # 将所有其他属性添加到action_data
                     for key, value in parsed_json.items():
-                        if key not in ["action", "reasoning"]:
+                        if key not in ["action", "reason"]:
                             action_data[key] = value
 
-                    # 非no_reply动作需要target_message_id
+                    # 在FOCUS模式下，非no_reply动作需要target_message_id
                     if action != "no_reply":
                         if target_message_id := parsed_json.get("target_message_id"):
-                            if isinstance(target_message_id, int):
-                                target_message_id = str(target_message_id)
-
-                            if isinstance(target_message_id, str) and not target_message_id.startswith("m"):
-                                target_message_id = f"m{target_message_id}"
                             # 根据target_message_id查找原始消息
                             target_message = self.find_message_by_id(target_message_id, message_id_list)
                             # 如果获取的target_message为None，输出warning并重新plan
                             if target_message is None:
                                 self.plan_retry_count += 1
-                                logger.warning(
-                                    f"{self.log_prefix}无法找到target_message_id '{target_message_id}' 对应的消息，重试次数: {self.plan_retry_count}/{self.max_plan_retries}"
-                                )
-
+                                logger.warning(f"{self.log_prefix}无法找到target_message_id '{target_message_id}' 对应的消息，重试次数: {self.plan_retry_count}/{self.max_plan_retries}")
+                                
                                 # 如果连续三次plan均为None，输出error并选取最新消息
                                 if self.plan_retry_count >= self.max_plan_retries:
-                                    logger.error(
-                                        f"{self.log_prefix}连续{self.max_plan_retries}次plan获取target_message失败，选择最新消息作为target_message"
-                                    )
+                                    logger.error(f"{self.log_prefix}连续{self.max_plan_retries}次plan获取target_message失败，选择最新消息作为target_message")
                                     target_message = self.get_latest_message(message_id_list)
                                     self.plan_retry_count = 0  # 重置计数器
                                 else:
@@ -334,11 +339,8 @@ class ActionPlanner:
                             logger.warning(f"{self.log_prefix}动作'{action}'缺少target_message_id")
                     
                     
-
                     if action == "no_action":
                         reasoning = "normal决定不使用额外动作"
-                    elif mode == ChatMode.PROACTIVE and action == "do_nothing":
-                        pass  # 在PROACTIVE模式下，do_nothing是有效动作
                     elif action != "no_reply" and action != "reply" and action not in current_available_actions:
                         logger.warning(
                             f"{self.log_prefix}LLM 返回了当前不可用或无效的动作: '{action}' (可用: {list(current_available_actions.keys())})，将强制使用 'no_reply'"
@@ -346,68 +348,17 @@ class ActionPlanner:
                         reasoning = f"LLM 返回了当前不可用的动作 '{action}' (可用: {list(current_available_actions.keys())})。原始理由: {reasoning}"
                         action = "no_reply"
 
-                        # 检查no_reply是否可用，如果不可用则使用reply作为终极回退
-                        if "no_reply" not in current_available_actions:
-                            if "reply" in current_available_actions:
-                                action = "reply"
-                                reasoning += " (no_reply不可用，使用reply作为回退)"
-                                logger.warning(f"{self.log_prefix}no_reply不可用，使用reply作为回退")
-                            else:
-                                # 如果连reply都不可用，使用第一个可用的动作
-                                if current_available_actions:
-                                    action = list(current_available_actions.keys())[0]
-                                    reasoning += f" (no_reply和reply都不可用，使用{action}作为回退)"
-                                    logger.warning(f"{self.log_prefix}no_reply和reply都不可用，使用{action}作为回退")
-                                else:
-                                    # 如果没有任何可用动作，这是一个严重错误
-                                    logger.error(f"{self.log_prefix}没有任何可用动作，系统状态异常")
-                                    action = "no_reply"  # 仍然尝试no_reply，让上层处理
-
-                    # 对no_reply动作本身也进行可用性检查
-                    elif action == "no_reply" and "no_reply" not in current_available_actions:
-                        if "reply" in current_available_actions:
-                            action = "reply"
-                            reasoning = f"no_reply不可用，自动回退到reply。原因: {reasoning}"
-                            logger.warning(f"{self.log_prefix}no_reply不可用，自动回退到reply")
-                        elif current_available_actions:
-                            action = list(current_available_actions.keys())[0]
-                            reasoning = f"no_reply不可用，自动回退到{action}。原因: {reasoning}"
-                            logger.warning(f"{self.log_prefix}no_reply不可用，自动回退到{action}")
-                        else:
-                            logger.error(f"{self.log_prefix}没有任何可用动作，保持no_reply让上层处理")
-
                 except Exception as json_e:
                     logger.warning(f"{self.log_prefix}解析LLM响应JSON失败 {json_e}. LLM原始输出: '{llm_content}'")
                     traceback.print_exc()
                     reasoning = f"解析LLM响应JSON失败: {json_e}. 将使用默认动作 'no_reply'."
                     action = "no_reply"
 
-                    # 检查no_reply是否可用
-                    if "no_reply" not in current_available_actions:
-                        if "reply" in current_available_actions:
-                            action = "reply"
-                            reasoning += " (no_reply不可用，使用reply)"
-                        elif current_available_actions:
-                            action = list(current_available_actions.keys())[0]
-                            reasoning += f" (no_reply不可用，使用{action})"
-
         except Exception as outer_e:
             logger.error(f"{self.log_prefix}Planner 处理过程中发生意外错误，规划失败，将执行 no_reply: {outer_e}")
             traceback.print_exc()
             action = "no_reply"
             reasoning = f"Planner 内部处理错误: {outer_e}"
-
-            # 检查no_reply是否可用
-            current_available_actions = self.action_manager.get_using_actions()
-            if "no_reply" not in current_available_actions:
-                if "reply" in current_available_actions:
-                    action = "reply"
-                    reasoning += " (no_reply不可用，使用reply)"
-                elif current_available_actions:
-                    action = list(current_available_actions.keys())[0]
-                    reasoning += f" (no_reply不可用，使用{action})"
-                else:
-                    logger.error(f"{self.log_prefix}严重错误：没有任何可用动作")
 
         is_parallel = False
         if mode == ChatMode.NORMAL and action in current_available_actions:
@@ -422,17 +373,19 @@ class ActionPlanner:
         actions.append({
             "action_type": action,
             "reasoning": reasoning,
-            "timestamp": time.time(),
-            "is_parallel": is_parallel,
-        }
-
-        return (
-            {
-                "action_result": action_result,
-                "action_prompt": prompt,
-            },
-            target_message,
-        )
+            "action_data": action_data,
+            "action_message": target_message,
+            "available_actions": available_actions  # 添加这个字段
+        })
+        
+        if action != "reply" and is_parallel:
+            actions.append({
+                "action_type": "reply",
+                "action_message": target_message,
+                "available_actions": available_actions
+            })
+            
+        return actions,target_message
 
     async def build_planner_prompt(
         self,
@@ -448,15 +401,21 @@ class ActionPlanner:
             time_block = f"当前时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             bot_name = global_config.bot.nickname
             bot_nickname = (
-                f",也有人叫你{','.join(global_config.bot.alias_names)}" if global_config.bot.alias_names else ""
+                f",也有人叫你{','.join(global_config.bot.alias_names)}"
+                if global_config.bot.alias_names
+                else ""
             )
             bot_core_personality = global_config.personality.personality_core
-            identity_block = f"你的名字是{bot_name}{bot_nickname}，你{bot_core_personality}："
+            identity_block = (
+                f"你的名字是{bot_name}{bot_nickname}，你{bot_core_personality}："
+            )
 
             schedule_block = ""
             if global_config.schedule.enable:
                 if current_activity := schedule_manager.get_current_activity():
-                    schedule_block = f"你当前正在：{current_activity},但注意它与群聊的聊天无关。"
+                    schedule_block = (
+                        f"你当前正在：{current_activity},但注意它与群聊的聊天无关。"
+                    )
 
             mood_block = ""
             if global_config.mood.enable_mood:
@@ -466,9 +425,13 @@ class ActionPlanner:
             # --- 根据模式构建不同的Prompt ---
             if mode == ChatMode.PROACTIVE:
                 long_term_memory_block = await self._get_long_term_memory_context()
-                action_options_text = await self._build_action_options(current_available_actions, mode)
+                action_options_text = await self._build_action_options(
+                    current_available_actions, mode
+                )
 
-                prompt_template = await global_prompt_manager.get_prompt_async("proactive_planner_prompt")
+                prompt_template = await global_prompt_manager.get_prompt_async(
+                    "proactive_planner_prompt"
+                )
                 prompt = prompt_template.format(
                     time_block=time_block,
                     identity_block=identity_block,
@@ -501,24 +464,35 @@ class ActionPlanner:
                 limit=5,
             )
 
-            actions_before_now_block = build_readable_actions(actions=actions_before_now)
-            actions_before_now_block = f"你刚刚选择并执行过的action是：\n{actions_before_now_block}"
+            actions_before_now_block = build_readable_actions(
+                actions=actions_before_now
+            )
+            actions_before_now_block = (
+                f"你刚刚选择并执行过的action是：\n{actions_before_now_block}"
+            )
 
-            self.last_obs_time_mark = time.time()
+            if refresh_time:
+                self.last_obs_time_mark = time.time()
+
+            mentioned_bonus = ""
+            if global_config.chat.mentioned_bot_inevitable_reply:
+                mentioned_bonus = "\n- 有人提到你"
+            if global_config.chat.at_bot_inevitable_reply:
+                mentioned_bonus = "\n- 有人提到你，或者at你"
 
             if mode == ChatMode.FOCUS:
-                mentioned_bonus = ""
-                if global_config.chat.mentioned_bot_inevitable_reply:
-                    mentioned_bonus = "\n- 有人提到你"
-                if global_config.chat.at_bot_inevitable_reply:
-                    mentioned_bonus = "\n- 有人提到你，或者at你"
-
                 by_what = "聊天内容"
                 target_prompt = '\n    "target_message_id":"触发action的消息id"'
                 no_action_block = f"""重要说明：
-- 'no_reply' 表示只进行不进行回复，等待合适的回复时机（由系统直接处理）
+- 'no_reply' 表示只进行不进行回复，等待合适的回复时机
 - 当你刚刚发送了消息，没有人回复时，选择no_reply
 - 当你一次发送了太多消息，为了避免打扰聊天节奏，选择no_reply
+
+动作：reply
+动作描述：参与聊天回复，发送文本进行表达
+- 你想要闲聊或者随便附和{mentioned_bonus}
+- 如果你刚刚进行了回复，不要对同一个话题重复回应
+- 不要回复自己发送的消息
 {{
     "action": "no_reply",
     "reason":"不回复的原因"
@@ -527,27 +501,46 @@ class ActionPlanner:
             else:  # NORMAL Mode
                 by_what = "聊天内容和用户的最新消息"
                 target_prompt = ""
-                no_action_block = """重要说明：
+                no_action_block = f"""重要说明：
 - 'reply' 表示只进行普通聊天回复，不执行任何额外动作
 - 其他action表示在普通回复的基础上，执行相应的额外动作
-"""
+
+动作：reply
+动作描述：参与聊天回复，发送文本进行表达
+- 你想要闲聊或者随便附
+- {mentioned_bonus}
+- 如果你刚刚进行了回复，不要对同一个话题重复回应
+- 不要回复自己发送的消息
+{{
+    "action": "reply",
+    "target_message_id":"触发action的消息id",
+    "reason":"回复的原因"
+}}"""
 
             chat_context_description = "你现在正在一个群聊中"
             if not is_group_chat and chat_target_info:
                 chat_target_name = (
-                    chat_target_info.get("person_name") or chat_target_info.get("user_nickname") or "对方"
+                    chat_target_info.get("person_name")
+                    or chat_target_info.get("user_nickname")
+                    or "对方"
                 )
                 chat_context_description = f"你正在和 {chat_target_name} 私聊"
 
-            action_options_block = await self._build_action_options(current_available_actions, mode, target_prompt)
+            action_options_block = await self._build_action_options(
+                current_available_actions, mode, target_prompt
+            )
 
             moderation_prompt_block = "请不要输出违法违规内容，不要输出色情，暴力，政治相关内容，如有敏感内容，请规避。"
 
             custom_prompt_block = ""
             if global_config.custom_prompt.planner_custom_prompt_content:
-                custom_prompt_block = global_config.custom_prompt.planner_custom_prompt_content
+                custom_prompt_block = (
+                    global_config.custom_prompt.planner_custom_prompt_content
+                )
 
-            planner_prompt_template = await global_prompt_manager.get_prompt_async("planner_prompt")
+            planner_prompt_template = await global_prompt_manager.get_prompt_async(
+                "planner_prompt"
+            )
             prompt = planner_prompt_template.format(
                 schedule_block=schedule_block,
                 mood_block=mood_block,
@@ -575,7 +568,9 @@ class ActionPlanner:
         """
         is_group_chat = True
         is_group_chat, chat_target_info = get_chat_type_and_target_info(self.chat_id)
-        logger.debug(f"{self.log_prefix}获取到聊天信息 - 群聊: {is_group_chat}, 目标信息: {chat_target_info}")
+        logger.debug(
+            f"{self.log_prefix}获取到聊天信息 - 群聊: {is_group_chat}, 目标信息: {chat_target_info}"
+        )
 
         current_available_actions_dict = self.action_manager.get_using_actions()
 
@@ -586,9 +581,13 @@ class ActionPlanner:
         current_available_actions = {}
         for action_name in current_available_actions_dict:
             if action_name in all_registered_actions:
-                current_available_actions[action_name] = all_registered_actions[action_name]
+                current_available_actions[action_name] = all_registered_actions[
+                    action_name
+                ]
             else:
-                logger.warning(f"{self.log_prefix}使用中的动作 {action_name} 未在已注册动作中找到")
+                logger.warning(
+                    f"{self.log_prefix}使用中的动作 {action_name} 未在已注册动作中找到"
+                )
 
         # 将no_reply作为系统级特殊动作添加到可用动作中
         # no_reply虽然是系统级决策，但需要让规划器认为它是可用的
