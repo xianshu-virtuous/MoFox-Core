@@ -62,7 +62,7 @@ class HfcContext:
 
         self.focus_energy = 1
         self.no_reply_consecutive = 0
-        
+        self.total_interest = 0.0
         # 引用HeartFChatting实例，以便其他组件可以调用其方法
         self.chat_instance = None
 

@@ -1,5 +1,5 @@
 [inner]
-version = "6.6.0"
+version = "6.7.0"
 
 #----以下是给开发人员阅读的，如果你只是部署了MoFox-Bot，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -104,11 +104,12 @@ learning_strength = 0.5
 [chat] #MoFox-Bot的聊天通用设置
 # 群聊聊天模式设置
 group_chat_mode = "auto" # 群聊聊天模式：auto-自动切换，normal-强制普通模式，focus-强制专注模式
-focus_value = 1 
-# MoFox-Bot的专注思考能力，越高越容易专注，可能消耗更多token,仅限自动切换模式下使用哦
+talk_frequency = 1 
+# MoFox-Bot活跃度，越高，麦麦回复越多
 # 专注时能更好把握发言时机，能够进行持久的连续对话
 
-talk_frequency = 1 # MoFox-Bot活跃度，越高，MoFox-Bot回复越频繁,仅限normal/或者自动切换的normal模式下使用哦
+focus_value = 1 
+# MoFox-Bot的专注思考能力，越高越容易持续连续对话
 
 # 强制私聊专注模式
 force_focus_private = false # 是否强制私聊进入专注模式，开启后私聊将始终保持专注状态
