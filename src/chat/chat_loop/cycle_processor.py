@@ -149,7 +149,7 @@ class CycleProcessor:
         logger.info(f"{self.log_prefix} 开始第{self.context.cycle_counter}次思考")
 
         if ENABLE_S4U:
-            await send_typing()
+            await send_typing(self.context.chat_stream.user_info.user_id)
 
         loop_start_time = time.time()
 

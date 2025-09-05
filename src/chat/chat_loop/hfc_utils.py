@@ -121,7 +121,7 @@ class CycleDetail:
         self.loop_action_info = loop_info["loop_action_info"]
 
 
-async def send_typing():
+async def send_typing(user_id):
     """
     发送打字状态指示
 
@@ -138,6 +138,11 @@ async def send_typing():
         user_info=None,
         group_info=group_info,
     )
+
+    from plugin_system.core.event_manager import event_manager
+    from src.plugins.built_in.napcat_adapter_plugin.event_types import NapcatEvent
+    # 设置正在输入状态
+    await event_manager.trigger_event(NapcatEvent.PERSONAL.SET_INPUT_STATUS,user_id=user_id,event_type=1)
 
     await send_api.custom_to_stream(
         message_type="state", content="typing", stream_id=chat.stream_id, storage_message=False

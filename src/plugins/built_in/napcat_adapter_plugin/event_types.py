@@ -1816,3 +1816,27 @@ class NapcatEvent:
         """
 
     class FILE(Enum): ...
+
+    class PERSONAL(Enum):
+        SET_INPUT_STATUS = "napcat_set_input_status"
+        """
+        设置输入状态
+
+        Args:
+            user_id (Optional[str|int]): 用户id(必需)
+            event_type (Optional[int]): 输入状态id(必需)
+            raw (Optional[dict]): 原始请求体 
+
+        Returns:
+            dict: {
+            "status": "ok",
+            "retcode": 0,
+            "data": {
+                "result": 0,
+                "errMsg": "string"
+            },
+            "message": "string",
+            "wording": "string",
+            "echo": "string"
+        }
+        """

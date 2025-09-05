@@ -2,9 +2,9 @@ import asyncio
 import websockets as Server
 from typing import Optional, Callable, Any
 from src.common.logger import get_logger
+from src.plugin_system.apis import config_api
 
 logger = get_logger("napcat_adapter")
-from .config import global_config
 
 
 class WebSocketManager:
@@ -16,10 +16,12 @@ class WebSocketManager:
         self.is_running = False
         self.reconnect_interval = 5  # 重连间隔（秒）
         self.max_reconnect_attempts = 10  # 最大重连次数
+        self.plugin_config = None
 
-    async def start_connection(self, message_handler: Callable[[Server.ServerConnection], Any]) -> None:
+    async def start_connection(self, message_handler: Callable[[Server.ServerConnection], Any], plugin_config: dict) -> None:
         """根据配置启动 WebSocket 连接"""
-        mode = global_config.napcat_server.mode
+        self.plugin_config = plugin_config
+        mode = config_api.get_plugin_config(plugin_config, "napcat_server.mode")
 
         if mode == "reverse":
             await self._start_reverse_connection(message_handler)
@@ -30,8 +32,8 @@ class WebSocketManager:
 
     async def _start_reverse_connection(self, message_handler: Callable[[Server.ServerConnection], Any]) -> None:
         """启动反向连接（作为服务器）"""
-        host = global_config.napcat_server.host
-        port = global_config.napcat_server.port
+        host = config_api.get_plugin_config(self.plugin_config, "napcat_server.host")
+        port = config_api.get_plugin_config(self.plugin_config, "napcat_server.port")
 
         logger.info(f"正在启动反向连接模式，监听地址: ws://{host}:{port}")
 
@@ -68,9 +70,10 @@ class WebSocketManager:
                 connect_kwargs = {"max_size": 2**26}
 
                 # 如果配置了访问令牌，添加到请求头
-                if global_config.napcat_server.access_token:
+                access_token = config_api.get_plugin_config(self.plugin_config, "napcat_server.access_token")
+                if access_token:
                     connect_kwargs["additional_headers"] = {
-                        "Authorization": f"Bearer {global_config.napcat_server.access_token}"
+                        "Authorization": f"Bearer {access_token}"
                     }
                     logger.info("已添加访问令牌到连接请求头")
 
@@ -112,15 +115,14 @@ class WebSocketManager:
 
     def _get_forward_url(self) -> str:
         """获取正向连接的 URL"""
-        config = global_config.napcat_server
-
         # 如果配置了完整的 URL，直接使用
-        if config.url:
-            return config.url
+        url = config_api.get_plugin_config(self.plugin_config, "napcat_server.url")
+        if url:
+            return url
 
         # 否则根据 host 和 port 构建 URL
-        host = config.host
-        port = config.port
+        host = config_api.get_plugin_config(self.plugin_config, "napcat_server.host")
+        port = config_api.get_plugin_config(self.plugin_config, "napcat_server.port")
         return f"ws://{host}:{port}"
 
     async def stop_connection(self) -> None:

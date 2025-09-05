@@ -2,7 +2,7 @@ import asyncio
 
 from src.common.logger import get_logger
 from ..message_chunker import chunker
-from ..config import global_config
+from src.plugin_system.apis import config_api
 
 logger = get_logger("napcat_adapter")
 from maim_message import MessageBase, Router
@@ -14,9 +14,14 @@ class MessageSending:
     """
 
     maibot_router: Router = None
+    plugin_config = None
 
     def __init__(self):
         pass
+
+    def set_plugin_config(self, plugin_config: dict):
+        """设置插件配置"""
+        self.plugin_config = plugin_config
 
     async def message_send(self, message_base: MessageBase) -> bool:
         """
@@ -52,9 +57,10 @@ class MessageSending:
                         return False
 
                     # 使用配置中的延迟时间
-                    if i < len(chunks) - 1:
-                        delay_seconds = global_config.slicing.delay_ms / 1000.0
-                        logger.debug(f"切片发送延迟: {global_config.slicing.delay_ms}毫秒")
+                    if i < len(chunks) - 1 and self.plugin_config:
+                        delay_ms = config_api.get_plugin_config(self.plugin_config, "slicing.delay_ms", 10)
+                        delay_seconds = delay_ms / 1000.0
+                        logger.debug(f"切片发送延迟: {delay_ms}毫秒")
                         await asyncio.sleep(delay_seconds)
 
                 logger.debug("所有切片发送完成")

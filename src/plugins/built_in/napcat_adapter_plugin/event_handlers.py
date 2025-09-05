@@ -1746,3 +1746,32 @@ class SetGroupSignHandler(BaseEventHandler):
         else:
             logger.error("事件 napcat_set_group_sign 请求失败！")
             return HandlerResult(False, False, {"status": "error"})
+
+# ===PERSONAL===
+class SetInputStatusHandler(BaseEventHandler):
+    handler_name: str = "napcat_set_input_status_handler"
+    handler_description: str = "设置输入状态"
+    weight: int = 100
+    intercept_message: bool = False
+    init_subscribe = [NapcatEvent.PERSONAL.SET_INPUT_STATUS]
+
+    async def execute(self, params: dict):
+        raw = params.get("raw", {})
+        user_id = params.get("user_id", "")
+        event_type = params.get("event_type", 0)
+
+        if params.get("raw", ""):
+            user_id = raw.get("user_id", "")
+            event_type = raw.get("event_type", 0)
+
+        if not user_id or event_type is None:
+            logger.error("事件 napcat_set_input_status 缺少必要参数: user_id 或 event_type")
+            return HandlerResult(False, False, {"status": "error"})
+
+        payload = {"user_id": str(user_id), "event_type": int(event_type)}
+        response = await send_handler.send_message_to_napcat(action="set_input_status", params=payload)
+        if response.get("status", "") == "ok":
+            return HandlerResult(True, True, response)
+        else:
+            logger.error("事件 napcat_set_input_status 请求失败！")
+            return HandlerResult(False, False, {"status": "error"})

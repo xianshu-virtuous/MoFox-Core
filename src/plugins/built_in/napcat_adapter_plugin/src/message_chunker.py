@@ -9,7 +9,7 @@ import uuid
 import asyncio
 import time
 from typing import List, Dict, Any, Optional, Union
-from .config import global_config
+from src.plugin_system.apis import config_api
 
 from src.common.logger import get_logger
 
@@ -20,7 +20,15 @@ class MessageChunker:
     """消息切片器，用于处理大消息的分片发送"""
 
     def __init__(self):
-        self.max_chunk_size = global_config.slicing.max_frame_size * 1024
+        self.max_chunk_size = 64 * 1024  # 默认值，将在设置配置时更新
+        self.plugin_config = None
+
+    def set_plugin_config(self, plugin_config: dict):
+        """设置插件配置"""
+        self.plugin_config = plugin_config
+        if plugin_config:
+            max_frame_size = config_api.get_plugin_config(plugin_config, "slicing.max_frame_size", 64)
+            self.max_chunk_size = max_frame_size * 1024
 
     def should_chunk_message(self, message: Union[str, Dict[str, Any]]) -> bool:
         """判断消息是否需要切片"""
