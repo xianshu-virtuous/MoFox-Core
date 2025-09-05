@@ -37,6 +37,7 @@ def get_classes_in_module(module):
             classes.append(member)
     return classes
 
+
 async def message_recv(server_connection: Server.ServerConnection):
     await message_handler.set_server_connection(server_connection)
     asyncio.create_task(notice_handler.set_server_connection(server_connection))
@@ -47,7 +48,7 @@ async def message_recv(server_connection: Server.ServerConnection):
         try:
             # 首先尝试解析原始消息
             decoded_raw_message: dict = json.loads(raw_message)
-            
+
             # 检查是否是切片消息 (来自 MMC)
             if chunker.is_chunk_message(decoded_raw_message):
                 logger.debug("接收到切片消息，尝试重组")
@@ -61,20 +62,21 @@ async def message_recv(server_connection: Server.ServerConnection):
                     # 切片尚未完整，继续等待更多切片
                     logger.debug("等待更多切片...")
                     continue
-            
+
             # 处理完整消息（可能是重组后的，也可能是原本就完整的）
             post_type = decoded_raw_message.get("post_type")
             if post_type in ["meta_event", "message", "notice"]:
                 await message_queue.put(decoded_raw_message)
             elif post_type is None:
                 await put_response(decoded_raw_message)
-                
+
         except json.JSONDecodeError as e:
             logger.error(f"消息解析失败: {e}")
             logger.debug(f"原始消息: {raw_message[:500]}...")
         except Exception as e:
             logger.error(f"处理消息时出错: {e}")
             logger.debug(f"原始消息: {raw_message[:500]}...")
+
 
 async def message_process():
     """消息处理主循环"""
@@ -84,7 +86,7 @@ async def message_process():
             try:
                 # 使用超时等待，以便能够响应取消请求
                 message = await asyncio.wait_for(message_queue.get(), timeout=1.0)
-                
+
                 post_type = message.get("post_type")
                 if post_type == "message":
                     await message_handler.handle_raw_message(message)
@@ -94,10 +96,10 @@ async def message_process():
                     await notice_handler.handle_notice(message)
                 else:
                     logger.warning(f"未知的post_type: {post_type}")
-                
+
                 message_queue.task_done()
                 await asyncio.sleep(0.05)
-                
+
             except asyncio.TimeoutError:
                 # 超时是正常的，继续循环
                 continue
@@ -112,7 +114,7 @@ async def message_process():
                 except ValueError:
                     pass
                 await asyncio.sleep(0.1)
-                
+
     except asyncio.CancelledError:
         logger.info("消息处理器已停止")
         raise
@@ -132,6 +134,7 @@ async def message_process():
         except Exception as e:
             logger.debug(f"清理消息队列时出错: {e}")
 
+
 async def napcat_server():
     """启动 Napcat WebSocket 连接（支持正向和反向连接）"""
     mode = global_config.napcat_server.mode
@@ -143,63 +146,61 @@ async def napcat_server():
         logger.error(f"启动 WebSocket 连接失败: {e}")
         raise
 
+
 async def graceful_shutdown():
     """优雅关闭所有组件"""
     try:
         logger.info("正在关闭adapter...")
-        
+
         # 停止消息重组器的清理任务
         try:
             await reassembler.stop_cleanup_task()
         except Exception as e:
             logger.warning(f"停止消息重组器清理任务时出错: {e}")
-        
+
         # 停止功能管理器文件监控
         try:
             await features_manager.stop_file_watcher()
         except Exception as e:
             logger.warning(f"停止功能管理器文件监控时出错: {e}")
-        
+
         # 关闭消息处理器（包括消息缓冲器）
         try:
             await message_handler.shutdown()
         except Exception as e:
             logger.warning(f"关闭消息处理器时出错: {e}")
-        
+
         # 关闭 WebSocket 连接
         try:
             await websocket_manager.stop_connection()
         except Exception as e:
             logger.warning(f"关闭WebSocket连接时出错: {e}")
-        
+
         # 关闭 MaiBot 连接
         try:
             await mmc_stop_com()
         except Exception as e:
             logger.warning(f"关闭MaiBot连接时出错: {e}")
-        
+
         # 取消所有剩余任务
         current_task = asyncio.current_task()
         tasks = [t for t in asyncio.all_tasks() if t is not current_task and not t.done()]
-        
+
         if tasks:
             logger.info(f"正在取消 {len(tasks)} 个剩余任务...")
             for task in tasks:
                 task.cancel()
-            
+
             # 等待任务取消完成，忽略 CancelledError
             try:
-                await asyncio.wait_for(
-                    asyncio.gather(*tasks, return_exceptions=True), 
-                    timeout=10
-                )
+                await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=10)
             except asyncio.TimeoutError:
                 logger.warning("部分任务取消超时")
             except Exception as e:
                 logger.debug(f"任务取消过程中的异常（可忽略）: {e}")
-        
+
         logger.info("Adapter已成功关闭")
-        
+
     except Exception as e:
         logger.error(f"Adapter关闭中出现错误: {e}")
     finally:
@@ -213,6 +214,7 @@ async def graceful_shutdown():
                     break
         except Exception:
             pass
+
 
 class LauchNapcatAdapterHandler(BaseEventHandler):
     """自动启动Adapter"""
@@ -245,6 +247,7 @@ class LauchNapcatAdapterHandler(BaseEventHandler):
         asyncio.create_task(message_process())
         asyncio.create_task(check_timeout_response())
 
+
 class StopNapcatAdapterHandler(BaseEventHandler):
     """关闭Adapter"""
 
@@ -257,7 +260,7 @@ class StopNapcatAdapterHandler(BaseEventHandler):
     async def execute(self, kwargs):
         await graceful_shutdown()
         return
-    
+
 
 @register_plugin
 class NapcatAdapterPlugin(BasePlugin):
@@ -295,7 +298,7 @@ class NapcatAdapterPlugin(BasePlugin):
 
     def get_plugin_components(self):
         self.register_events()
-        
+
         components = []
         components.append((LauchNapcatAdapterHandler.get_handler_info(), LauchNapcatAdapterHandler))
         components.append((StopNapcatAdapterHandler.get_handler_info(), StopNapcatAdapterHandler))

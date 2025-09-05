@@ -12,6 +12,7 @@ from src.config.config import global_config
 from src.chat.message_receive.chat_stream import get_chat_manager
 from src.person_info.person_info import get_person_info_manager
 from src.plugin_system.apis import cross_context_api
+
 logger = get_logger("prompt_utils")
 
 
@@ -80,28 +81,28 @@ class PromptUtils:
 
     @staticmethod
     async def build_cross_context(
-            chat_id: str, target_user_info: Optional[Dict[str, Any]], current_prompt_mode: str
-        ) -> str:
-            """
-            构建跨群聊上下文 - 统一实现，完全继承DefaultReplyer功能
-            """
-            if not global_config.cross_context.enable:
-                return ""
-
-            other_chat_raw_ids = cross_context_api.get_context_groups(chat_id)
-            if not other_chat_raw_ids:
-                return ""
-
-            chat_stream = get_chat_manager().get_stream(chat_id)
-            if not chat_stream:
-                return ""
-
-            if current_prompt_mode == "normal":
-                return await cross_context_api.build_cross_context_normal(chat_stream, other_chat_raw_ids)
-            elif current_prompt_mode == "s4u":
-                return await cross_context_api.build_cross_context_s4u(chat_stream, other_chat_raw_ids, target_user_info)
-
+        chat_id: str, target_user_info: Optional[Dict[str, Any]], current_prompt_mode: str
+    ) -> str:
+        """
+        构建跨群聊上下文 - 统一实现，完全继承DefaultReplyer功能
+        """
+        if not global_config.cross_context.enable:
             return ""
+
+        other_chat_raw_ids = cross_context_api.get_context_groups(chat_id)
+        if not other_chat_raw_ids:
+            return ""
+
+        chat_stream = get_chat_manager().get_stream(chat_id)
+        if not chat_stream:
+            return ""
+
+        if current_prompt_mode == "normal":
+            return await cross_context_api.build_cross_context_normal(chat_stream, other_chat_raw_ids)
+        elif current_prompt_mode == "s4u":
+            return await cross_context_api.build_cross_context_s4u(chat_stream, other_chat_raw_ids, target_user_info)
+
+        return ""
 
     @staticmethod
     def parse_reply_target_id(reply_to: str) -> str:

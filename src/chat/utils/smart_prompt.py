@@ -194,7 +194,7 @@ class SmartPromptBuilder:
         core_dialogue, background_dialogue = await self._build_s4u_chat_history_prompts(
             params.message_list_before_now_long,
             params.target_user_info.get("user_id") if params.target_user_info else "",
-            params.sender
+            params.sender,
         )
 
         context_data["core_dialogue_prompt"] = core_dialogue
@@ -245,16 +245,16 @@ class SmartPromptBuilder:
             # 检查最新五条消息中是否包含bot自己说的消息
             latest_5_messages = core_dialogue_list[-5:] if len(core_dialogue_list) >= 5 else core_dialogue_list
             has_bot_message = any(str(msg.get("user_id")) == bot_id for msg in latest_5_messages)
-            
+
             # logger.info(f"最新五条消息：{latest_5_messages}")
             # logger.info(f"最新五条消息中是否包含bot自己说的消息：{has_bot_message}")
-            
+
             # 如果最新五条消息中不包含bot的消息，则返回空字符串
             if not has_bot_message:
                 core_dialogue_prompt = ""
             else:
                 core_dialogue_list = core_dialogue_list[-int(global_config.chat.max_context_size * 2) :]  # 限制消息数量
-                
+
                 core_dialogue_prompt_str = build_readable_messages(
                     core_dialogue_list,
                     replace_bot_name=True,

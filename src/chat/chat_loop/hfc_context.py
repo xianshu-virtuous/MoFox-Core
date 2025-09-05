@@ -44,13 +44,13 @@ class HfcContext:
 
         self.energy_value = self.chat_stream.energy_value
         self.sleep_pressure = self.chat_stream.sleep_pressure
-        self.was_sleeping = False # 用于检测睡眠状态的切换
-        
+        self.was_sleeping = False  # 用于检测睡眠状态的切换
+
         self.last_message_time = time.time()
         self.last_read_time = time.time() - 10
-        
+
         # 从聊天流恢复breaking累积兴趣值
-        self.breaking_accumulated_interest = getattr(self.chat_stream, 'breaking_accumulated_interest', 0.0)
+        self.breaking_accumulated_interest = getattr(self.chat_stream, "breaking_accumulated_interest", 0.0)
 
         self.action_manager = ActionManager()
 

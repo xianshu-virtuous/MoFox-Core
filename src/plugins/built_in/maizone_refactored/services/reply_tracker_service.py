@@ -41,7 +41,7 @@ class ReplyTrackerService:
         if not isinstance(data, dict):
             logger.error("加载的数据不是字典格式")
             return False
-        
+
         for feed_id, comments in data.items():
             if not isinstance(feed_id, str):
                 logger.error(f"无效的说说ID格式: {feed_id}")
@@ -70,12 +70,14 @@ class ReplyTrackerService:
                             logger.warning("回复记录文件为空，将创建新的记录")
                             self.replied_comments = {}
                             return
-                        
+
                         data = json.loads(file_content)
                         if self._validate_data(data):
                             self.replied_comments = data
-                            logger.info(f"已加载 {len(self.replied_comments)} 条说说的回复记录，"
-                                      f"总计 {sum(len(comments) for comments in self.replied_comments.values())} 条评论")
+                            logger.info(
+                                f"已加载 {len(self.replied_comments)} 条说说的回复记录，"
+                                f"总计 {sum(len(comments) for comments in self.replied_comments.values())} 条评论"
+                            )
                         else:
                             logger.error("加载的数据格式无效，将创建新的记录")
                             self.replied_comments = {}
@@ -112,12 +114,12 @@ class ReplyTrackerService:
             self._cleanup_old_records()
 
             # 创建临时文件
-            temp_file = self.reply_record_file.with_suffix('.tmp')
-            
+            temp_file = self.reply_record_file.with_suffix(".tmp")
+
             # 先写入临时文件
             with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(self.replied_comments, f, ensure_ascii=False, indent=2)
-            
+
             # 如果写入成功，重命名为正式文件
             if temp_file.stat().st_size > 0:  # 确保写入成功
                 # 在Windows上，如果目标文件已存在，需要先删除它
@@ -128,7 +130,7 @@ class ReplyTrackerService:
             else:
                 logger.error("临时文件写入失败，文件大小为0")
                 temp_file.unlink()  # 删除空的临时文件
-                
+
         except Exception as e:
             logger.error(f"保存回复记录失败: {e}", exc_info=True)
             # 尝试删除可能存在的临时文件
@@ -204,7 +206,7 @@ class ReplyTrackerService:
 
         # 确保将comment_id转换为字符串格式
         comment_id_str = str(comment_id)
-        
+
         if feed_id not in self.replied_comments:
             self.replied_comments[feed_id] = {}
 

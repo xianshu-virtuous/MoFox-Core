@@ -724,7 +724,7 @@ class EmojiManager:
             if not emoji.is_deleted and emoji.hash == emoji_hash:
                 return emoji
         return None  # 如果循环结束还没找到，则返回 None
-    
+
     async def get_emoji_tag_by_hash(self, emoji_hash: str) -> Optional[str]:
         """根据哈希值获取已注册表情包的描述
 
@@ -755,7 +755,7 @@ class EmojiManager:
         except Exception as e:
             logger.error(f"获取表情包描述失败 (Hash: {emoji_hash}): {str(e)}")
             return None
-        
+
     async def get_emoji_description_by_hash(self, emoji_hash: str) -> Optional[str]:
         """根据哈希值获取已注册表情包的描述
 

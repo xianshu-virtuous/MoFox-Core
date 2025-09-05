@@ -157,7 +157,7 @@ class ResponseHandler:
                 await send_api.text_to_stream(
                     text=data,
                     stream_id=self.context.stream_id,
-                    reply_to_message = message_data,
+                    reply_to_message=message_data,
                     set_reply=need_reply,
                     typing=False,
                 )

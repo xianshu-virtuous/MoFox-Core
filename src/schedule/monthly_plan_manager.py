@@ -76,7 +76,7 @@ class MonthlyPlanManager:
             if len(plans) > max_plans:
                 logger.warning(f"当前月度计划数量 ({len(plans)}) 超出上限 ({max_plans})，将自动删除多余的计划。")
                 # 数据库查询结果已按创建时间降序排序（新的在前），直接截取超出上限的部分进行删除
-                plans_to_delete = plans[:len(plans)-max_plans]
+                plans_to_delete = plans[: len(plans) - max_plans]
                 delete_ids = [p.id for p in plans_to_delete]
                 delete_plans_by_ids(delete_ids)
                 # 重新获取计划列表
@@ -101,7 +101,7 @@ class MonthlyPlanManager:
     async def _generate_monthly_plans_logic(self, target_month: Optional[str] = None) -> bool:
         """
         生成指定月份的月度计划的核心逻辑
-        
+
         :param target_month: 目标月份，格式为 "YYYY-MM"。如果为 None，则为当前月份。
         :return: 是否生成成功
         """
@@ -291,6 +291,8 @@ class MonthlyPlanManager:
 
         except Exception as e:
             logger.error(f" 归档 {target_month} 月度计划时发生错误: {e}")
+
+
 class MonthlyPlanGenerationTask(AsyncTask):
     """每月初自动生成新月度计划的任务"""
 
@@ -327,7 +329,7 @@ class MonthlyPlanGenerationTask(AsyncTask):
                 current_month = next_month.strftime("%Y-%m")
                 logger.info(f" 到达月初，开始生成 {current_month} 的月度计划...")
                 await self.monthly_plan_manager._generate_monthly_plans_logic(current_month)
-                
+
             except asyncio.CancelledError:
                 logger.info(" 每月月度计划生成任务被取消。")
                 break

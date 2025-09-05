@@ -272,8 +272,10 @@ class QZoneService:
             # 检查是否已经在持久化记录中标记为已回复
             if not self.reply_tracker.has_replied(fid, comment_tid):
                 # 记录日志以便追踪
-                logger.debug(f"发现新评论需要回复 - 说说ID: {fid}, 评论ID: {comment_tid}, "
-                           f"评论人: {comment.get('nickname', '')}, 内容: {comment.get('content', '')}")
+                logger.debug(
+                    f"发现新评论需要回复 - 说说ID: {fid}, 评论ID: {comment_tid}, "
+                    f"评论人: {comment.get('nickname', '')}, 内容: {comment.get('content', '')}"
+                )
                 comments_to_reply.append(comment)
 
         if not comments_to_reply:

@@ -91,25 +91,24 @@ class CycleTracker:
 
         # 获取动作类型，兼容新旧格式
         action_type = "未知动作"
-        if hasattr(self, '_current_cycle_detail') and self._current_cycle_detail:
+        if hasattr(self, "_current_cycle_detail") and self._current_cycle_detail:
             loop_plan_info = self._current_cycle_detail.loop_plan_info
             if isinstance(loop_plan_info, dict):
-                action_result = loop_plan_info.get('action_result', {})
+                action_result = loop_plan_info.get("action_result", {})
                 if isinstance(action_result, dict):
                     # 旧格式：action_result是字典
-                    action_type = action_result.get('action_type', '未知动作')
+                    action_type = action_result.get("action_type", "未知动作")
                 elif isinstance(action_result, list) and action_result:
                     # 新格式：action_result是actions列表
-                    action_type = action_result[0].get('action_type', '未知动作')
+                    action_type = action_result[0].get("action_type", "未知动作")
             elif isinstance(loop_plan_info, list) and loop_plan_info:
                 # 直接是actions列表的情况
-                action_type = loop_plan_info[0].get('action_type', '未知动作')
+                action_type = loop_plan_info[0].get("action_type", "未知动作")
 
         if self.context.current_cycle_detail.end_time and self.context.current_cycle_detail.start_time:
             duration = self.context.current_cycle_detail.end_time - self.context.current_cycle_detail.start_time
             logger.info(
                 f"{self.context.log_prefix} 第{self.context.current_cycle_detail.cycle_id}次思考,"
                 f"耗时: {duration:.1f}秒, "
-                f"选择动作: {action_type}"
-                + (f"\n详情: {'; '.join(timer_strings)}" if timer_strings else "")
+                f"选择动作: {action_type}" + (f"\n详情: {'; '.join(timer_strings)}" if timer_strings else "")
             )

@@ -21,7 +21,7 @@ class MessageStorage:
         if isinstance(keywords, list):
             return orjson.dumps(keywords).decode("utf-8")
         return "[]"
-    
+
     @staticmethod
     def _deserialize_keywords(keywords_str: str) -> list:
         """将JSON字符串反序列化为关键词列表"""

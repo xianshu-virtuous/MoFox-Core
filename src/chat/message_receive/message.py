@@ -120,7 +120,7 @@ class MessageRecv(Message):
         self.priority_mode = "interest"
         self.priority_info = None
         self.interest_value: float = 0.0
-        
+
         self.key_words = []
         self.key_words_lite = []
 

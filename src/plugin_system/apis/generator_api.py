@@ -111,10 +111,7 @@ async def generate_reply(
     """
     try:
         # 获取回复器
-        logger.debug("[GeneratorAPI] 开始生成回复")
-        replyer = get_replyer(
-            chat_stream, chat_id, request_type=request_type
-        )
+        replyer = get_replyer(chat_stream, chat_id, request_type=request_type)
         if not replyer:
             logger.error("[GeneratorAPI] 无法获取回复器")
             return False, [], None

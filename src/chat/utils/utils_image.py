@@ -27,16 +27,15 @@ logger = get_logger("chat_image")
 def is_image_message(message: Dict[str, Any]) -> bool:
     """
     判断消息是否为图片消息
-    
+
     Args:
         message: 消息字典
-        
+
     Returns:
         bool: 是否为图片消息
     """
     return message.get("type") == "image" or (
-        isinstance(message.get("content"), dict) and 
-        message["content"].get("type") == "image"
+        isinstance(message.get("content"), dict) and message["content"].get("type") == "image"
     )
 
 
@@ -594,7 +593,6 @@ class ImageManager:
         except Exception as e:
             logger.error(f"处理图片失败: {str(e)}")
             return "", "[图片]"
-
 
 
 # 创建全局单例

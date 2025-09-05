@@ -165,14 +165,16 @@ class ScheduleManager:
                         schedule_str = f"已成功加载今天的日程 ({today_str})：\n"
                         if self.today_schedule:
                             for item in self.today_schedule:
-                                schedule_str += f"  - {item.get('time_range', '未知时间')}: {item.get('activity', '未知活动')}\n"
+                                schedule_str += (
+                                    f"  - {item.get('time_range', '未知时间')}: {item.get('activity', '未知活动')}\n"
+                                )
                         logger.info(schedule_str)
                         return  # 成功加载，直接返回
                     else:
                         logger.warning("数据库中的日程数据格式无效，将重新生成日程")
                 else:
                     logger.info(f"数据库中未找到今天的日程 ({today_str})，将调用 LLM 生成。")
-            
+
             # 仅在需要时生成
             await self.generate_and_save_schedule()
 

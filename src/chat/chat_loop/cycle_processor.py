@@ -32,7 +32,7 @@ class CycleProcessor:
             context: HFC聊天上下文对象，包含聊天流、能量值等信息
             response_handler: 响应处理器，负责生成和发送回复
             cycle_tracker: 循环跟踪器，负责记录和管理每次思考循环的信息
-        """    
+        """
         self.context = context
         self.response_handler = response_handler
         self.cycle_tracker = cycle_tracker
@@ -57,12 +57,12 @@ class CycleProcessor:
 
             # 存储reply action信息
         person_info_manager = get_person_info_manager()
-        
+
         # 获取 platform，如果不存在则从 chat_stream 获取，如果还是 None 则使用默认值
         platform = action_message.get("chat_info_platform")
         if platform is None:
             platform = getattr(self.context.chat_stream, "platform", "unknown")
-        
+
         person_id = person_info_manager.get_person_id(
             platform,
             action_message.get("user_id", ""),
@@ -94,8 +94,8 @@ class CycleProcessor:
         }
 
         return loop_info, reply_text, cycle_timers
-    
-    async def observe(self,interest_value:float = 0.0) -> bool:
+
+    async def observe(self, interest_value: float = 0.0) -> bool:
         """
         观察和处理单次思考循环的核心方法
 
@@ -114,7 +114,7 @@ class CycleProcessor:
         """
         action_type = "no_action"
         reply_text = ""  # 初始化reply_text变量，避免UnboundLocalError
-        
+
         # 使用sigmoid函数将interest_value转换为概率
         # 当interest_value为0时，概率接近0（使用Focus模式）
         # 当interest_value很高时，概率接近1（使用Normal模式）
@@ -127,16 +127,24 @@ class CycleProcessor:
             k = 2.0  # 控制曲线陡峭程度
             x0 = 1.0  # 控制曲线中心点
             return 1.0 / (1.0 + math.exp(-k * (interest_val - x0)))
-        
-        normal_mode_probability = calculate_normal_mode_probability(interest_value) * 0.5 / global_config.chat.get_current_talk_frequency(self.context.stream_id)
-        
+
+        normal_mode_probability = (
+            calculate_normal_mode_probability(interest_value)
+            * 0.5
+            / global_config.chat.get_current_talk_frequency(self.context.stream_id)
+        )
+
         # 根据概率决定使用哪种模式
         if random.random() < normal_mode_probability:
             mode = ChatMode.NORMAL
-            logger.info(f"{self.log_prefix} 基于兴趣值 {interest_value:.2f}，概率 {normal_mode_probability:.2f}，选择Normal planner模式")
+            logger.info(
+                f"{self.log_prefix} 基于兴趣值 {interest_value:.2f}，概率 {normal_mode_probability:.2f}，选择Normal planner模式"
+            )
         else:
             mode = ChatMode.FOCUS
-            logger.info(f"{self.log_prefix} 基于兴趣值 {interest_value:.2f}，概率 {normal_mode_probability:.2f}，选择Focus planner模式")
+            logger.info(
+                f"{self.log_prefix} 基于兴趣值 {interest_value:.2f}，概率 {normal_mode_probability:.2f}，选择Focus planner模式"
+            )
 
         cycle_timers, thinking_id = self.cycle_tracker.start_cycle()
         logger.info(f"{self.log_prefix} 开始第{self.context.cycle_counter}次思考")
@@ -165,12 +173,14 @@ class CycleProcessor:
             from src.plugin_system.core.event_manager import event_manager
             from src.plugin_system import EventType
 
-            result = await event_manager.trigger_event(EventType.ON_PLAN,plugin_name="SYSTEM", stream_id=self.context.chat_stream)
+            result = await event_manager.trigger_event(
+                EventType.ON_PLAN, plugin_name="SYSTEM", stream_id=self.context.chat_stream
+            )
             if not result.all_continue_process():
                 raise UserWarning(f"插件{result.get_summary().get('stopped_handlers', '')}于规划前中断了内容生成")
-            
+
             with Timer("规划器", cycle_timers):
-                actions, _= await self.action_planner.plan(
+                actions, _ = await self.action_planner.plan(
                     mode=mode,
                     loop_start_time=loop_start_time,
                     available_actions=available_actions,
@@ -183,7 +193,7 @@ class CycleProcessor:
                     # 直接处理no_reply逻辑，不再通过动作系统
                     reason = action_info.get("reasoning", "选择不回复")
                     logger.info(f"{self.log_prefix} 选择不回复，原因: {reason}")
-                    
+
                     # 存储no_reply信息到数据库
                     await database_api.store_action_info(
                         chat_stream=self.context.chat_stream,
@@ -194,13 +204,8 @@ class CycleProcessor:
                         action_data={"reason": reason},
                         action_name="no_reply",
                     )
-                    
-                    return {
-                        "action_type": "no_reply",
-                        "success": True,
-                        "reply_text": "",
-                        "command": ""
-                    }
+
+                    return {"action_type": "no_reply", "success": True, "reply_text": "", "command": ""}
                 elif action_info["action_type"] != "reply":
                     # 执行普通动作
                     with Timer("动作执行", cycle_timers):
@@ -210,40 +215,32 @@ class CycleProcessor:
                             action_info["action_data"],
                             cycle_timers,
                             thinking_id,
-                            action_info["action_message"]
+                            action_info["action_message"],
                         )
                     return {
                         "action_type": action_info["action_type"],
                         "success": success,
                         "reply_text": reply_text,
-                        "command": command
+                        "command": command,
                     }
                 else:
                     try:
                         success, response_set, _ = await generator_api.generate_reply(
                             chat_stream=self.context.chat_stream,
-                            reply_message = action_info["action_message"],
+                            reply_message=action_info["action_message"],
                             available_actions=available_actions,
                             enable_tool=global_config.tool.enable_tool,
                             request_type="chat.replyer",
                             from_plugin=False,
-                        )     
+                        )
                         if not success or not response_set:
-                            logger.info(f"对 {action_info['action_message'].get('processed_plain_text')} 的回复生成失败")
-                            return {
-                                "action_type": "reply",
-                                "success": False,
-                                "reply_text": "",
-                                "loop_info": None
-                            }
+                            logger.info(
+                                f"对 {action_info['action_message'].get('processed_plain_text')} 的回复生成失败"
+                            )
+                            return {"action_type": "reply", "success": False, "reply_text": "", "loop_info": None}
                     except asyncio.CancelledError:
                         logger.debug(f"{self.log_prefix} 并行执行：回复生成任务已被取消")
-                        return {
-                            "action_type": "reply",
-                            "success": False,
-                            "reply_text": "",
-                            "loop_info": None
-                        }
+                        return {"action_type": "reply", "success": False, "reply_text": "", "loop_info": None}
 
                     loop_info, reply_text, cycle_timers_reply = await self._send_and_store_reply(
                         response_set,
@@ -253,12 +250,7 @@ class CycleProcessor:
                         thinking_id,
                         actions,
                     )
-                    return {
-                        "action_type": "reply",
-                        "success": True,
-                        "reply_text": reply_text,
-                        "loop_info": loop_info
-                    }
+                    return {"action_type": "reply", "success": True, "reply_text": reply_text, "loop_info": loop_info}
             except Exception as e:
                 logger.error(f"{self.log_prefix} 执行动作时出错: {e}")
                 logger.error(f"{self.log_prefix} 错误信息: {traceback.format_exc()}")
@@ -267,9 +259,9 @@ class CycleProcessor:
                     "success": False,
                     "reply_text": "",
                     "loop_info": None,
-                    "error": str(e)
+                    "error": str(e),
                 }
-            
+
         # 创建所有动作的后台任务
         action_tasks = [asyncio.create_task(execute_action(action)) for action in actions]
 
@@ -282,12 +274,12 @@ class CycleProcessor:
         action_success = False
         action_reply_text = ""
         action_command = ""
-        
+
         for i, result in enumerate(results):
             if isinstance(result, BaseException):
                 logger.error(f"{self.log_prefix} 动作执行异常: {result}")
                 continue
-            
+
             action_info = actions[i]
             if result["action_type"] != "reply":
                 action_success = result["success"]
@@ -327,7 +319,7 @@ class CycleProcessor:
                 },
             }
             reply_text = action_reply_text
-        
+
         if ENABLE_S4U:
             await stop_typing()
 
@@ -342,7 +334,7 @@ class CycleProcessor:
             self.context.no_reply_consecutive = 0
             logger.debug(f"{self.log_prefix} 执行了{action_type}动作，重置no_reply计数器")
             return True
-            
+
         if action_type == "no_reply":
             self.context.no_reply_consecutive += 1
             self.context.chat_instance._determine_form_type()

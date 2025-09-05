@@ -53,7 +53,9 @@ class MaiZoneRefactoredPlugin(BasePlugin):
             "enable_reply": ConfigField(type=bool, default=True, description="完成后是否回复"),
             "ai_image_number": ConfigField(type=int, default=1, description="AI生成图片数量"),
             "image_number": ConfigField(type=int, default=1, description="本地配图数量（1-9张）"),
-            "image_directory": ConfigField(type=str, default=(Path(__file__).parent / "images").as_posix(), description="图片存储目录")
+            "image_directory": ConfigField(
+                type=str, default=(Path(__file__).parent / "images").as_posix(), description="图片存储目录"
+            ),
         },
         "read": {
             "permission": ConfigField(type=list, default=[], description="阅读权限QQ号列表"),
@@ -75,7 +77,9 @@ class MaiZoneRefactoredPlugin(BasePlugin):
             "forbidden_hours_end": ConfigField(type=int, default=6, description="禁止发送的结束小时(24小时制)"),
         },
         "cookie": {
-            "http_fallback_host": ConfigField(type=str, default="127.0.0.1", description="备用Cookie获取服务的主机地址"),
+            "http_fallback_host": ConfigField(
+                type=str, default="127.0.0.1", description="备用Cookie获取服务的主机地址"
+            ),
             "http_fallback_port": ConfigField(type=int, default=9999, description="备用Cookie获取服务的端口"),
             "napcat_token": ConfigField(type=str, default="", description="Napcat服务的认证Token（可选）"),
         },
@@ -95,14 +99,14 @@ class MaiZoneRefactoredPlugin(BasePlugin):
         image_service = ImageService(self.get_config)
         cookie_service = CookieService(self.get_config)
         reply_tracker_service = ReplyTrackerService()
-        
+
         # 使用已创建的 reply_tracker_service 实例
         qzone_service = QZoneService(
-            self.get_config, 
-            content_service, 
-            image_service, 
+            self.get_config,
+            content_service,
+            image_service,
             cookie_service,
-            reply_tracker_service  # 传入已创建的实例
+            reply_tracker_service,  # 传入已创建的实例
         )
         scheduler_service = SchedulerService(self.get_config, qzone_service)
         monitor_service = MonitorService(self.get_config, qzone_service)

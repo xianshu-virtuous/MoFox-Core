@@ -37,8 +37,10 @@ class ProactiveThinker:
         Args:
             trigger_event: 描述触发上下文的事件对象
         """
-        logger.info(f"{self.context.log_prefix} 接收到主动思考事件: "
-                    f"来源='{trigger_event.source}', 原因='{trigger_event.reason}'")
+        logger.info(
+            f"{self.context.log_prefix} 接收到主动思考事件: "
+            f"来源='{trigger_event.source}', 原因='{trigger_event.reason}'"
+        )
 
         try:
             # 1. 根据事件类型执行前置操作
@@ -63,6 +65,7 @@ class ProactiveThinker:
 
         try:
             from src.mood.mood_manager import mood_manager
+
             mood_obj = mood_manager.get_mood_by_chat_id(self.context.stream_id)
             new_mood = None
 
@@ -76,8 +79,10 @@ class ProactiveThinker:
             if new_mood:
                 mood_obj.mood_state = new_mood
                 mood_obj.last_change_time = time.time()
-                logger.info(f"{self.context.log_prefix} 因 '{trigger_event.reason}'，"
-                            f"情绪状态被强制更新为: {mood_obj.mood_state}")
+                logger.info(
+                    f"{self.context.log_prefix} 因 '{trigger_event.reason}'，"
+                    f"情绪状态被强制更新为: {mood_obj.mood_state}"
+                )
 
         except Exception as e:
             logger.error(f"{self.context.log_prefix} 设置失眠情绪时出错: {e}")
@@ -91,19 +96,17 @@ class ProactiveThinker:
         """
         try:
             # 直接调用 planner 的 PROACTIVE 模式
-            actions, target_message = await self.cycle_processor.action_planner.plan(
-                mode=ChatMode.PROACTIVE
-            )
-            
+            actions, target_message = await self.cycle_processor.action_planner.plan(mode=ChatMode.PROACTIVE)
+
             # 获取第一个规划出的动作作为主要决策
             action_result = actions[0] if actions else {}
 
             # 如果决策不是 do_nothing，则执行
             if action_result and action_result.get("action_type") != "do_nothing":
-
                 # 在主动思考时，如果 target_message 为 None，则默认选取最新 message 作为 target_message
                 if target_message is None and self.context.chat_stream and self.context.chat_stream.context:
                     from src.chat.message_receive.message import MessageRecv
+
                     latest_message = self.context.chat_stream.context.get_last_message()
                     if isinstance(latest_message, MessageRecv):
                         user_info = latest_message.message_info.user_info

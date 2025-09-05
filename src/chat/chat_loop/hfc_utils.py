@@ -122,6 +122,7 @@ class CycleDetail:
         self.loop_plan_info = loop_info["loop_plan_info"]
         self.loop_action_info = loop_info["loop_action_info"]
 
+
 async def send_typing():
     """
     发送打字状态指示

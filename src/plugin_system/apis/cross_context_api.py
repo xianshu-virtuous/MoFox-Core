@@ -36,27 +36,19 @@ def get_context_groups(chat_id: str) -> Optional[List[List[str]]]:
         # 检查当前聊天的ID和类型是否在组的chat_ids中
         if [current_type, str(current_chat_raw_id)] in group.chat_ids:
             # 返回组内其他聊天的 [type, id] 列表
-            return [
-                chat_info
-                for chat_info in group.chat_ids
-                if chat_info != [current_type, str(current_chat_raw_id)]
-            ]
+            return [chat_info for chat_info in group.chat_ids if chat_info != [current_type, str(current_chat_raw_id)]]
 
     return None
 
 
-async def build_cross_context_normal(
-    chat_stream: ChatStream, other_chat_infos: List[List[str]]
-) -> str:
+async def build_cross_context_normal(chat_stream: ChatStream, other_chat_infos: List[List[str]]) -> str:
     """
     构建跨群聊/私聊上下文 (Normal模式)
     """
     cross_context_messages = []
     for chat_type, chat_raw_id in other_chat_infos:
         is_group = chat_type == "group"
-        stream_id = get_chat_manager().get_stream_id(
-            chat_stream.platform, chat_raw_id, is_group=is_group
-        )
+        stream_id = get_chat_manager().get_stream_id(chat_stream.platform, chat_raw_id, is_group=is_group)
         if not stream_id:
             continue
 
@@ -68,9 +60,7 @@ async def build_cross_context_normal(
             )
             if messages:
                 chat_name = get_chat_manager().get_stream_name(stream_id) or chat_raw_id
-                formatted_messages, _ = build_readable_messages_with_id(
-                    messages, timestamp_mode="relative"
-                )
+                formatted_messages, _ = build_readable_messages_with_id(messages, timestamp_mode="relative")
                 cross_context_messages.append(f'[以下是来自"{chat_name}"的近期消息]\n{formatted_messages}')
         except Exception as e:
             logger.error(f"获取聊天 {chat_raw_id} 的消息失败: {e}")
@@ -97,9 +87,7 @@ async def build_cross_context_s4u(
         if user_id:
             for chat_type, chat_raw_id in other_chat_infos:
                 is_group = chat_type == "group"
-                stream_id = get_chat_manager().get_stream_id(
-                    chat_stream.platform, chat_raw_id, is_group=is_group
-                )
+                stream_id = get_chat_manager().get_stream_id(chat_stream.platform, chat_raw_id, is_group=is_group)
                 if not stream_id:
                     continue
 
@@ -114,9 +102,7 @@ async def build_cross_context_s4u(
                     if user_messages:
                         chat_name = get_chat_manager().get_stream_name(stream_id) or chat_raw_id
                         user_name = (
-                            target_user_info.get("person_name")
-                            or target_user_info.get("user_nickname")
-                            or user_id
+                            target_user_info.get("person_name") or target_user_info.get("user_nickname") or user_id
                         )
                         formatted_messages, _ = build_readable_messages_with_id(
                             user_messages, timestamp_mode="relative"
@@ -182,9 +168,7 @@ async def get_chat_history_by_group_name(group_name: str) -> str:
             )
             if messages:
                 chat_name = get_chat_manager().get_stream_name(stream_id) or chat_raw_id
-                formatted_messages, _ = build_readable_messages_with_id(
-                    messages, timestamp_mode="relative"
-                )
+                formatted_messages, _ = build_readable_messages_with_id(messages, timestamp_mode="relative")
                 cross_context_messages.append(f'[以下是来自"{chat_name}"的近期消息]\n{formatted_messages}')
         except Exception as e:
             logger.error(f"获取聊天 {chat_raw_id} 的消息失败: {e}")

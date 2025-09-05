@@ -259,7 +259,7 @@ class ChatManager:
                     "user_cardname": model_instance.user_cardname or "",
                 }
                 group_info_data = None
-                if model_instance and getattr(model_instance, 'group_id', None):
+                if model_instance and getattr(model_instance, "group_id", None):
                     group_info_data = {
                         "platform": model_instance.group_platform,
                         "group_id": model_instance.group_id,
@@ -405,7 +405,7 @@ class ChatManager:
                         "user_cardname": model_instance.user_cardname or "",
                     }
                     group_info_data = None
-                    if model_instance and getattr(model_instance, 'group_id', None):
+                    if model_instance and getattr(model_instance, "group_id", None):
                         group_info_data = {
                             "platform": model_instance.group_platform,
                             "group_id": model_instance.group_id,

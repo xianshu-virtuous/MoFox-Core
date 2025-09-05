@@ -743,31 +743,31 @@ class MessageHandler:
         """
         message_data: dict = raw_message.get("data", {})
         json_data = message_data.get("data", "")
-        
+
         # 检查JSON消息格式
         if not message_data or "data" not in message_data:
             logger.warning("JSON消息格式不正确")
             return Seg(type="json", data=json.dumps(message_data))
-        
+
         try:
             nested_data = json.loads(json_data)
-            
+
             # 检查是否是QQ小程序分享消息
             if "app" in nested_data and "com.tencent.miniapp" in str(nested_data.get("app", "")):
                 logger.debug("检测到QQ小程序分享消息，开始提取信息")
-                
+
                 # 提取目标字段
                 extracted_info = {}
-                
+
                 # 提取 meta.detail_1 中的信息
                 meta = nested_data.get("meta", {})
                 detail_1 = meta.get("detail_1", {})
-                
+
                 if detail_1:
                     extracted_info["title"] = detail_1.get("title", "")
                     extracted_info["desc"] = detail_1.get("desc", "")
                     qqdocurl = detail_1.get("qqdocurl", "")
-                    
+
                     # 从qqdocurl中提取b23.tv短链接
                     if qqdocurl and "b23.tv" in qqdocurl:
                         # 查找b23.tv链接的起始位置
@@ -785,26 +785,29 @@ class MessageHandler:
                             extracted_info["short_url"] = qqdocurl
                     else:
                         extracted_info["short_url"] = qqdocurl
-                
+
                 # 如果成功提取到关键信息，返回格式化的文本
                 if extracted_info.get("title") or extracted_info.get("desc") or extracted_info.get("short_url"):
                     content_parts = []
-                    
+
                     if extracted_info.get("title"):
                         content_parts.append(f"来源: {extracted_info['title']}")
-                    
+
                     if extracted_info.get("desc"):
                         content_parts.append(f"标题: {extracted_info['desc']}")
-                    
+
                     if extracted_info.get("short_url"):
                         content_parts.append(f"链接: {extracted_info['short_url']}")
-                    
+
                     formatted_content = "\n".join(content_parts)
-                    return Seg(type="text", data=f"这是一条小程序分享消息，可以根据来源，考虑使用对应解析工具\n{formatted_content}")
-            
+                    return Seg(
+                        type="text",
+                        data=f"这是一条小程序分享消息，可以根据来源，考虑使用对应解析工具\n{formatted_content}",
+                    )
+
             # 如果没有提取到关键信息，返回None
             return None
-                
+
         except json.JSONDecodeError as e:
             logger.error(f"解析JSON消息失败: {e}")
             return None
