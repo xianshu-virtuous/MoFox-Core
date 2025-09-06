@@ -277,10 +277,18 @@ class StopNapcatAdapterHandler(BaseEventHandler):
 @register_plugin
 class NapcatAdapterPlugin(BasePlugin):
     plugin_name = CONSTS.PLUGIN_NAME
-    enable_plugin: bool = True
     dependencies: List[str] = []  # 插件依赖列表
     python_dependencies: List[str] = []  # Python包依赖列表
     config_file_name: str = "config.toml"  # 配置文件名
+
+    @property
+    def enable_plugin(self) -> bool:
+        """通过配置文件动态控制插件启用状态"""
+        # 如果已经通过配置加载了状态，使用配置中的值
+        if hasattr(self, '_is_enabled'):
+            return self._is_enabled
+        # 否则使用默认值（禁用状态）
+        return False
 
     # 配置节描述
     config_section_descriptions = {"plugin": "插件基本信息"}
