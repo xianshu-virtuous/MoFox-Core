@@ -404,7 +404,7 @@ class ActionPlanner:
             identity_block = f"你的名字是{bot_name}{bot_nickname}，你{bot_core_personality}："
 
             schedule_block = ""
-            if global_config.schedule.enable:
+            if global_config.planning_system.schedule_enable:
                 if current_activity := schedule_manager.get_current_activity():
                     schedule_block = f"你当前正在：{current_activity},但注意它与群聊的聊天无关。"
 

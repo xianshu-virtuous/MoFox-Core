@@ -441,6 +441,12 @@ MODULE_COLORS = {
     "manifest_utils": "\033[38;5;39m",  # 蓝色
     "schedule_manager": "\033[38;5;27m",  # 深蓝色
     "monthly_plan_manager": "\033[38;5;171m",
+    "plan_manager": "\033[38;5;171m",
+    "llm_generator": "\033[38;5;171m",
+    "schedule_bridge": "\033[38;5;171m",
+    "sleep_manager": "\033[38;5;171m",
+    "official_configs": "\033[38;5;171m",
+    "mmc_com_layer": "\033[38;5;67m",
     # 聊天和多媒体扩展
     "chat_voice": "\033[38;5;87m",  # 浅青色
     "typo_gen": "\033[38;5;123m",  # 天蓝色
@@ -562,8 +568,14 @@ MODULE_ALIASES = {
     "dependency_config": "依赖配置",
     "dependency_manager": "依赖管理",
     "manifest_utils": "清单工具",
-    "schedule_manager": "计划管理",
-    "monthly_plan_manager": "月度计划",
+    "schedule_manager": "规划系统-日程表管理",
+    "monthly_plan_manager": "规划系统-月度计划",
+    "plan_manager": "规划系统-计划管理",
+    "llm_generator": "规划系统-LLM生成",
+    "schedule_bridge": "计划桥接",
+    "sleep_manager": "睡眠管理",
+    "official_configs": "官方配置",
+    "mmc_com_layer": "MMC通信层",
     # 聊天和多媒体扩展
     "chat_voice": "语音处理",
     "typo_gen": "错字生成",

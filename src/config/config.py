@@ -34,17 +34,16 @@ from src.config.official_configs import (
     VoiceConfig,
     DebugConfig,
     CustomPromptConfig,
-    ScheduleConfig,
     VideoAnalysisConfig,
     DependencyManagementConfig,
     WebSearchConfig,
     AntiPromptInjectionConfig,
     SleepSystemConfig,
-    MonthlyPlanSystemConfig,
     CrossContextConfig,
     PermissionConfig,
     CommandConfig,
     MaizoneIntercomConfig,
+    PlanningSystemConfig,
 )
 
 from .api_ada_configs import (
@@ -393,7 +392,6 @@ class Config(ValidatedConfigBase):
     debug: DebugConfig = Field(..., description="调试配置")
     custom_prompt: CustomPromptConfig = Field(..., description="自定义提示配置")
     voice: VoiceConfig = Field(..., description="语音配置")
-    schedule: ScheduleConfig = Field(..., description="调度配置")
     permission: PermissionConfig = Field(..., description="权限配置")
     command: CommandConfig = Field(..., description="命令系统配置")
 
@@ -409,8 +407,8 @@ class Config(ValidatedConfigBase):
     )
     web_search: WebSearchConfig = Field(default_factory=lambda: WebSearchConfig(), description="网络搜索配置")
     sleep_system: SleepSystemConfig = Field(default_factory=lambda: SleepSystemConfig(), description="睡眠系统配置")
-    monthly_plan_system: MonthlyPlanSystemConfig = Field(
-        default_factory=lambda: MonthlyPlanSystemConfig(), description="月层计划系统配置"
+    planning_system: PlanningSystemConfig = Field(
+        default_factory=lambda: PlanningSystemConfig(), description="规划系统配置"
     )
     cross_context: CrossContextConfig = Field(
         default_factory=lambda: CrossContextConfig(), description="跨群聊上下文共享配置"

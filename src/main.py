@@ -271,7 +271,7 @@ MoFox_Bot(第三方修改版)
         await self.individuality.initialize()
 
         # 初始化月度计划管理器
-        if global_config.monthly_plan_system.enable:
+        if global_config.planning_system.monthly_plan_enable:
             logger.info("正在初始化月度计划管理器...")
             try:
                 await monthly_plan_manager.start_monthly_plan_generation()
@@ -280,7 +280,7 @@ MoFox_Bot(第三方修改版)
                 logger.error(f"月度计划管理器初始化失败: {e}")
 
         # 初始化日程管理器
-        if global_config.schedule.enable:
+        if global_config.planning_system.schedule_enable:
             logger.info("日程表功能已启用，正在初始化管理器...")
             await schedule_manager.load_or_generate_today_schedule()
             await schedule_manager.start_daily_schedule_generation()

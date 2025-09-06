@@ -1,11 +1,11 @@
-# mmc/src/common/database/monthly_plan_db.py
+# mmc/src/schedule/database.py
 
 from typing import List
 from src.common.database.sqlalchemy_models import MonthlyPlan, get_db_session
 from src.common.logger import get_logger
-from src.config.config import global_config  # 需要导入全局配置
+from src.config.config import global_config
 
-logger = get_logger("monthly_plan_db")
+logger = get_logger("schedule_database")
 
 
 def add_new_plans(plans: List[str], month: str):
@@ -25,7 +25,7 @@ def add_new_plans(plans: List[str], month: str):
             )
 
             # 2. 从配置获取上限
-            max_plans = global_config.monthly_plan_system.max_plans_per_month
+            max_plans = global_config.planning_system.max_plans_per_month
 
             # 3. 计算还能添加多少计划
             remaining_slots = max_plans - current_plan_count
@@ -133,17 +133,6 @@ def delete_plans_by_ids(plan_ids: List[int]):
             raise
 
 
-def soft_delete_plans(plan_ids: List[int]):
-    """
-    将指定ID的计划标记为软删除（兼容旧接口）。
-    现在实际上是标记为已完成。
-
-    :param plan_ids: 需要软删除的计划ID列表。
-    """
-    logger.warning("soft_delete_plans 已弃用，请使用 mark_plans_completed")
-    mark_plans_completed(plan_ids)
-
-
 def update_plan_usage(plan_ids: List[int], used_date: str):
     """
     更新计划的使用统计信息。
@@ -157,7 +146,7 @@ def update_plan_usage(plan_ids: List[int], used_date: str):
     with get_db_session() as session:
         try:
             # 获取完成阈值配置，如果不存在则使用默认值
-            completion_threshold = getattr(global_config.monthly_plan_system, "completion_threshold", 3)
+            completion_threshold = getattr(global_config.planning_system, "completion_threshold", 3)
 
             # 批量更新使用次数和最后使用日期
             session.query(MonthlyPlan).filter(MonthlyPlan.id.in_(plan_ids)).update(

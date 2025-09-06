@@ -976,7 +976,7 @@ class DefaultReplyer:
         identity_block = await get_individuality().get_personality_block()
 
         schedule_block = ""
-        if global_config.schedule.enable:
+        if global_config.planning_system.schedule_enable:
             from src.schedule.schedule_manager import schedule_manager
             current_activity = schedule_manager.get_current_activity()
             if current_activity:

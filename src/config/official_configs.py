@@ -518,11 +518,19 @@ class LPMMKnowledgeConfig(ValidatedConfigBase):
     embedding_dimension: int = Field(default=1024, description="嵌入维度")
 
 
-class ScheduleConfig(ValidatedConfigBase):
-    """日程配置类"""
+class PlanningSystemConfig(ValidatedConfigBase):
+    """规划系统配置 (日程与月度计划)"""
 
-    enable: bool = Field(default=True, description="启用")
-    guidelines: Optional[str] = Field(default=None, description="指导方针")
+    # --- 日程生成 (原 ScheduleConfig) ---
+    schedule_enable: bool = Field(True, description="是否启用每日日程生成功能")
+    schedule_guidelines: str = Field("", description="日程生成指导原则")
+
+    # --- 月度计划 (原 MonthlyPlanSystemConfig) ---
+    monthly_plan_enable: bool = Field(True, description="是否启用月度计划系统")
+    monthly_plan_guidelines: str = Field("", description="月度计划生成指导原则")
+    max_plans_per_month: int = Field(10, description="每月最多生成的计划数量")
+    avoid_repetition_days: int = Field(7, description="避免在多少天内重复使用同一个月度计划")
+    completion_threshold: int = Field(3, description="一个月度计划被使用多少次后算作完成")
 
 
 class DependencyManagementConfig(ValidatedConfigBase):
@@ -635,16 +643,6 @@ class SleepSystemConfig(ValidatedConfigBase):
     pre_sleep_prompt: str = Field(
         default="我准备睡觉了，请生成一句简短自然的晚安问候。", description="用于生成睡前消息的提示"
     )
-
-
-class MonthlyPlanSystemConfig(ValidatedConfigBase):
-    """月度计划系统配置类"""
-
-    enable: bool = Field(default=True, description="是否启用本功能")
-    max_plans_per_month: int = Field(default=20, ge=1, description="每个月允许存在的最大计划数量")
-    completion_threshold: int = Field(default=3, ge=1, description="计划使用多少次后自动标记为已完成")
-    avoid_repetition_days: int = Field(default=7, ge=1, description="多少天内不重复抽取同一个计划")
-    guidelines: Optional[str] = Field(default=None, description="月度计划生成的指导原则")
 
 
 class ContextGroup(ValidatedConfigBase):
