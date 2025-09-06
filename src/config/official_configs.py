@@ -609,6 +609,9 @@ class SleepSystemConfig(ValidatedConfigBase):
     """睡眠系统配置类"""
 
     enable: bool = Field(default=True, description="是否启用睡眠系统")
+    sleep_by_schedule: bool = Field(default=True, description="是否根据日程表进行睡觉")
+    fixed_sleep_time: str = Field(default="23:00", description="固定的睡觉时间")
+    fixed_wake_up_time: str = Field(default="07:00", description="固定的起床时间")
     wakeup_threshold: float = Field(default=15.0, ge=1.0, description="唤醒阈值，达到此值时会被唤醒")
     private_message_increment: float = Field(default=3.0, ge=0.1, description="私聊消息增加的唤醒度")
     group_mention_increment: float = Field(default=2.0, ge=0.1, description="群聊艾特增加的唤醒度")

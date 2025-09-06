@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from .sleep_manager.wakeup_manager import WakeUpManager
     from .energy_manager import EnergyManager
     from .heartFC_chat import HeartFChatting
+    from .sleep_manager.sleep_manager import SleepManager
 
 
 class HfcContext:
@@ -61,6 +62,7 @@ class HfcContext:
         # 唤醒度管理器 - 延迟初始化以避免循环导入
         self.wakeup_manager: Optional["WakeUpManager"] = None
         self.energy_manager: Optional["EnergyManager"] = None
+        self.sleep_manager: Optional["SleepManager"] = None
 
         self.focus_energy = 1
         self.no_reply_consecutive = 0

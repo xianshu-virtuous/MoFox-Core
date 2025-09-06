@@ -138,10 +138,13 @@ class WakeUpManager:
             return False
 
         # 只有在休眠且非失眠状态下才累积唤醒度
-        from src.schedule.schedule_manager import schedule_manager
         from mmc.src.chat.chat_loop.sleep_manager.sleep_manager import SleepState
 
-        current_sleep_state = schedule_manager.get_current_sleep_state()
+        sleep_manager = self.context.sleep_manager
+        if not sleep_manager:
+            return False
+
+        current_sleep_state = sleep_manager.get_current_sleep_state()
         if current_sleep_state != SleepState.SLEEPING:
             return False
 
@@ -191,10 +194,9 @@ class WakeUpManager:
 
         mood_manager.set_angry_from_wakeup(self.context.stream_id)
 
-        # 通知日程管理器重置睡眠状态
-        from src.schedule.schedule_manager import schedule_manager
-
-        schedule_manager.reset_sleep_state_after_wakeup()
+        # 通知SleepManager重置睡眠状态
+        if self.context.sleep_manager:
+            self.context.sleep_manager.reset_sleep_state_after_wakeup()
 
         logger.info(f"{self.context.log_prefix} 唤醒度达到阈值({self.wakeup_threshold})，被吵醒进入愤怒状态！")
 

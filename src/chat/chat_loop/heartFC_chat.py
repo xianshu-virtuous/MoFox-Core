@@ -9,8 +9,7 @@ from src.common.logger import get_logger
 from src.config.config import global_config
 from src.person_info.relationship_builder_manager import relationship_builder_manager
 from src.chat.express.expression_learner import expression_learner_manager
-from src.chat.chat_loop.sleep_manager.schedule_bridge import schedule_sleep_bridge
-from src.chat.chat_loop.sleep_manager.sleep_manager import SleepState
+from src.chat.chat_loop.sleep_manager.sleep_manager import SleepManager, SleepState
 from src.plugin_system.apis import message_api
 
 from .hfc_context import HfcContext
@@ -47,10 +46,12 @@ class HeartFChatting:
         self.energy_manager = EnergyManager(self.context)
         self.proactive_thinker = ProactiveThinker(self.context, self.cycle_processor)
         self.wakeup_manager = WakeUpManager(self.context)
+        self.sleep_manager = SleepManager()
 
         # 将唤醒度管理器设置到上下文中
         self.context.wakeup_manager = self.wakeup_manager
         self.context.energy_manager = self.energy_manager
+        self.context.sleep_manager = self.sleep_manager
         # 将HeartFChatting实例设置到上下文中，以便其他组件可以调用其方法
         self.context.chat_instance = self
 
@@ -352,8 +353,8 @@ class HeartFChatting:
         - NORMAL模式：检查进入FOCUS模式的条件，并通过normal_mode_handler处理消息
         """
         # --- 核心状态更新 ---
-        await schedule_sleep_bridge.update_sleep_state(self.wakeup_manager)
-        current_sleep_state = schedule_sleep_bridge.get_current_sleep_state()
+        await self.sleep_manager.update_sleep_state(self.wakeup_manager)
+        current_sleep_state = self.sleep_manager.get_current_sleep_state()
         is_sleeping = current_sleep_state == SleepState.SLEEPING
         is_in_insomnia = current_sleep_state == SleepState.INSOMNIA
 
@@ -383,7 +384,7 @@ class HeartFChatting:
                 self._handle_wakeup_messages(recent_messages)
 
                 # 再次获取最新状态，因为 handle_wakeup 可能导致状态变为 WOKEN_UP
-                current_sleep_state = schedule_sleep_bridge.get_current_sleep_state()
+                current_sleep_state = self.sleep_manager.get_current_sleep_state()
 
                 if current_sleep_state == SleepState.SLEEPING:
                     # 只有在纯粹的 SLEEPING 状态下才跳过消息处理
@@ -429,14 +430,14 @@ class HeartFChatting:
 
         # --- 重新入睡逻辑 ---
         # 如果被吵醒了，并且在一定时间内没有新消息，则尝试重新入睡
-        if schedule_sleep_bridge.get_current_sleep_state() == SleepState.WOKEN_UP and not has_new_messages:
+        if self.sleep_manager.get_current_sleep_state() == SleepState.WOKEN_UP and not has_new_messages:
             re_sleep_delay = global_config.sleep_system.re_sleep_delay_minutes * 60
             # 使用 last_message_time 来判断空闲时间
             if time.time() - self.context.last_message_time > re_sleep_delay:
                 logger.info(
                     f"{self.context.log_prefix} 已被唤醒且超过 {re_sleep_delay / 60} 分钟无新消息，尝试重新入睡。"
                 )
-                schedule_sleep_bridge.reset_sleep_state_after_wakeup()
+                self.sleep_manager.reset_sleep_state_after_wakeup()
 
         # 保存HFC上下文状态
         self.context.save_context_state()
