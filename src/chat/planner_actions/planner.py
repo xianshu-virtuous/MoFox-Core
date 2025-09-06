@@ -582,6 +582,12 @@ class ActionPlanner:
             action, reasoning = "no_reply", f"大脑处理错误: {e}"
 
         # --- 4. 整合大脑和小脑的决策 ---
+        # 如果是私聊且开启了强制回复，则将no_reply强制改为reply
+        if not is_group_chat and global_config.chat.force_reply_private and action == "no_reply":
+            action = "reply"
+            reasoning = "私聊强制回复"
+            logger.info(f"{self.log_prefix}私聊强制回复已触发，将动作从 'no_reply' 修改为 'reply'")
+            
         is_parallel = True
         for info in all_sub_planner_results:
             action_type = info.get("action_type")
