@@ -16,29 +16,48 @@ logger = get_logger("sleep_manager")
 
 
 class SleepManager:
+    """
+    睡眠管理器，核心组件之一，负责管理角色的睡眠周期和状态转换。
+    它实现了一个状态机，根据预设的时间表、睡眠压力和随机因素，
+    在不同的睡眠状态（如清醒、准备入睡、睡眠、失眠）之间进行切换。
+    """
     def __init__(self):
-        self.time_checker = TimeChecker(self)
-        self.today_schedule: Optional[List[Dict[str, Any]]] = None
-        self.last_sleep_log_time = 0
-        self.sleep_log_interval = 35
+        """
+        初始化睡眠管理器。
+        """
+        self.time_checker = TimeChecker(self)  # 时间检查器，用于判断当前是否处于理论睡眠时间
+        self.today_schedule: Optional[List[Dict[str, Any]]] = None  # 当天的日程安排
+        self.last_sleep_log_time = 0  # 上次记录睡眠日志的时间戳
+        self.sleep_log_interval = 35  # 睡眠日志记录间隔（秒）
 
         # --- 统一睡眠状态管理 ---
-        self._current_state: SleepState = SleepState.AWAKE
-        self._sleep_buffer_end_time: Optional[datetime] = None
-        self._total_delayed_minutes_today: int = 0
-        self._last_sleep_check_date: Optional[date] = None
-        self._last_fully_slept_log_time: float = 0
-        self._re_sleep_attempt_time: Optional[datetime] = None
+        self._current_state: SleepState = SleepState.AWAKE  # 当前睡眠状态
+        self._sleep_buffer_end_time: Optional[datetime] = None  # 睡眠缓冲结束时间，用于状态转换
+        self._total_delayed_minutes_today: int = 0  # 今天总共延迟入睡的分钟数
+        self._last_sleep_check_date: Optional[date] = None  # 上次检查睡眠状态的日期
+        self._last_fully_slept_log_time: float = 0  # 上次完全进入睡眠状态的时间戳
+        self._re_sleep_attempt_time: Optional[datetime] = None  # 被吵醒后，尝试重新入睡的时间点
 
+        # 从本地存储加载上一次的睡眠状态
         self._load_sleep_state()
 
     def get_current_sleep_state(self) -> SleepState:
+        """获取当前的睡眠状态。"""
         return self._current_state
 
     def is_sleeping(self) -> bool:
+        """判断当前是否处于正在睡觉的状态。"""
         return self._current_state == SleepState.SLEEPING
 
     async def update_sleep_state(self, wakeup_manager: Optional["WakeUpManager"] = None):
+        """
+        更新睡眠状态的核心方法，实现状态机的主要逻辑。
+        该方法会被周期性调用，以检查并更新当前的睡眠状态。
+
+        Args:
+            wakeup_manager (Optional["WakeUpManager"]): 唤醒管理器，用于获取睡眠压力等上下文信息。
+        """
+        # 如果全局禁用了睡眠系统，则强制设置为清醒状态并返回
         if not global_config.sleep_system.enable:
             if self._current_state != SleepState.AWAKE:
                 logger.debug("睡眠系统禁用，强制设为 AWAKE")
@@ -48,6 +67,7 @@ class SleepManager:
         now = datetime.now()
         today = now.date()
 
+        # 跨天处理：如果日期变化，重置每日相关的睡眠状态
         if self._last_sleep_check_date != today:
             logger.info(f"新的一天 ({today})，重置睡眠状态。")
             self._total_delayed_minutes_today = 0
@@ -56,9 +76,10 @@ class SleepManager:
             self._last_sleep_check_date = today
             self._save_sleep_state()
 
+        # 检查当前是否处于理论上的睡眠时间段
         is_in_theoretical_sleep, activity = self.time_checker.is_in_theoretical_sleep_time(now.time())
 
-        # 状态机处理
+        # --- 状态机核心处理逻辑 ---
         if self._current_state == SleepState.AWAKE:
             if is_in_theoretical_sleep:
                 self._handle_awake_to_sleep(now, activity, wakeup_manager)
@@ -76,14 +97,17 @@ class SleepManager:
             self._handle_woken_up(now, is_in_theoretical_sleep, wakeup_manager)
 
     def _handle_awake_to_sleep(self, now: datetime, activity: Optional[str], wakeup_manager: Optional["WakeUpManager"]):
+        """处理从“清醒”到“准备入睡”的状态转换。"""
         if activity:
             logger.info(f"进入理论休眠时间 '{activity}'，开始进行睡眠决策...")
         else:
             logger.info("进入理论休眠时间，开始进行睡眠决策...")
         
+        # 如果配置了睡前通知，则发送晚安通知
         if wakeup_manager and global_config.sleep_system.enable_pre_sleep_notification:
             asyncio.create_task(NotificationSender.send_goodnight_notification(wakeup_manager.context))
 
+        # 设置一个随机的缓冲时间，模拟入睡前的准备过程
         buffer_seconds = random.randint(1 * 60, 3 * 60)
         self._sleep_buffer_end_time = now + timedelta(seconds=buffer_seconds)
         self._current_state = SleepState.PREPARING_SLEEP
@@ -91,16 +115,20 @@ class SleepManager:
         self._save_sleep_state()
 
     def _handle_preparing_sleep(self, now: datetime, is_in_theoretical_sleep: bool, wakeup_manager: Optional["WakeUpManager"]):
+        """处理“准备入睡”状态下的逻辑。"""
+        # 如果在准备期间离开了理论睡眠时间，则取消入睡
         if not is_in_theoretical_sleep:
             logger.info("准备入睡期间离开理论休眠时间，取消入睡，恢复清醒。")
             self._current_state = SleepState.AWAKE
             self._sleep_buffer_end_time = None
             self._save_sleep_state()
+        # 如果缓冲时间结束，则正式进入睡眠状态
         elif self._sleep_buffer_end_time and now >= self._sleep_buffer_end_time:
             logger.info("睡眠缓冲期结束，正式进入休眠状态。")
             self._current_state = SleepState.SLEEPING
             self._last_fully_slept_log_time = now.timestamp()
             
+            # 设置一个随机的延迟，用于触发“睡后失眠”检查
             delay_minutes_range = global_config.sleep_system.insomnia_trigger_delay_minutes
             delay_minutes = random.randint(delay_minutes_range[0], delay_minutes_range[1])
             self._sleep_buffer_end_time = now + timedelta(minutes=delay_minutes)
@@ -109,40 +137,51 @@ class SleepManager:
             self._save_sleep_state()
 
     def _handle_sleeping(self, now: datetime, is_in_theoretical_sleep: bool, activity: Optional[str], wakeup_manager: Optional["WakeUpManager"]):
+        """处理“正在睡觉”状态下的逻辑。"""
+        # 如果理论睡眠时间结束，则自然醒来
         if not is_in_theoretical_sleep:
             logger.info("理论休眠时间结束，自然醒来。")
             self._current_state = SleepState.AWAKE
             self._save_sleep_state()
+        # 检查是否到了触发“睡后失眠”的时间点
         elif self._sleep_buffer_end_time and now >= self._sleep_buffer_end_time:
             if wakeup_manager:
                 sleep_pressure = wakeup_manager.context.sleep_pressure
                 pressure_threshold = global_config.sleep_system.flexible_sleep_pressure_threshold
+                # 如果睡眠压力低于阈值，则触发失眠
                 if sleep_pressure < pressure_threshold:
                     logger.info(f"睡眠压力 ({sleep_pressure:.1f}) 低于阈值 ({pressure_threshold})，触发睡后失眠。")
                     self._current_state = SleepState.INSOMNIA
                     
+                    # 设置失眠的持续时间
                     duration_minutes_range = global_config.sleep_system.insomnia_duration_minutes
                     duration_minutes = random.randint(duration_minutes_range[0], duration_minutes_range[1])
                     self._sleep_buffer_end_time = now + timedelta(minutes=duration_minutes)
                     
+                    # 发送失眠通知
                     asyncio.create_task(NotificationSender.send_insomnia_notification(wakeup_manager.context))
                     logger.info(f"进入失眠状态，将持续 {duration_minutes} 分钟。")
                 else:
+                    # 睡眠压力正常，不触发失眠，清除检查时间点
                     logger.info(f"睡眠压力 ({sleep_pressure:.1f}) 正常，未触发睡后失眠。")
                     self._sleep_buffer_end_time = None
                 self._save_sleep_state()
         else:
+            # 定期记录睡眠日志
             current_timestamp = now.timestamp()
             if current_timestamp - self.last_sleep_log_time > self.sleep_log_interval and activity:
                 logger.info(f"当前处于休眠活动 '{activity}' 中。")
                 self.last_sleep_log_time = current_timestamp
 
     def _handle_insomnia(self, now: datetime, is_in_theoretical_sleep: bool):
+        """处理“失眠”状态下的逻辑。"""
+        # 如果离开理论睡眠时间，则失眠结束
         if not is_in_theoretical_sleep:
             logger.info("已离开理论休眠时间，失眠结束，恢复清醒。")
             self._current_state = SleepState.AWAKE
             self._sleep_buffer_end_time = None
             self._save_sleep_state()
+        # 如果失眠持续时间已过，则恢复睡眠
         elif self._sleep_buffer_end_time and now >= self._sleep_buffer_end_time:
             logger.info("失眠状态持续时间已过，恢复睡眠。")
             self._current_state = SleepState.SLEEPING
@@ -150,17 +189,21 @@ class SleepManager:
             self._save_sleep_state()
 
     def _handle_woken_up(self, now: datetime, is_in_theoretical_sleep: bool, wakeup_manager: Optional["WakeUpManager"]):
+        """处理“被吵醒”状态下的逻辑。"""
+        # 如果理论睡眠时间结束，则状态自动结束
         if not is_in_theoretical_sleep:
             logger.info("理论休眠时间结束，被吵醒的状态自动结束。")
             self._current_state = SleepState.AWAKE
             self._re_sleep_attempt_time = None
             self._save_sleep_state()
+        # 到了尝试重新入睡的时间点
         elif self._re_sleep_attempt_time and now >= self._re_sleep_attempt_time:
             logger.info("被吵醒后经过一段时间，尝试重新入睡...")
             if wakeup_manager:
                 sleep_pressure = wakeup_manager.context.sleep_pressure
                 pressure_threshold = global_config.sleep_system.flexible_sleep_pressure_threshold
 
+                # 如果睡眠压力足够，则尝试重新入睡
                 if sleep_pressure >= pressure_threshold:
                     logger.info("睡眠压力足够，从被吵醒状态转换到准备入睡。")
                     buffer_seconds = random.randint(3 * 60, 8 * 60)
@@ -168,6 +211,7 @@ class SleepManager:
                     self._current_state = SleepState.PREPARING_SLEEP
                     self._re_sleep_attempt_time = None
                 else:
+                    # 睡眠压力不足，延迟一段时间后再次尝试
                     delay_minutes = 15
                     self._re_sleep_attempt_time = now + timedelta(minutes=delay_minutes)
                     logger.info(
@@ -176,6 +220,10 @@ class SleepManager:
                 self._save_sleep_state()
 
     def reset_sleep_state_after_wakeup(self):
+        """
+        当角色被用户消息等外部因素唤醒时调用此方法。
+        将状态强制转换为 WOKEN_UP，并设置一个延迟，之后会尝试重新入睡。
+        """
         if self._current_state in [SleepState.PREPARING_SLEEP, SleepState.SLEEPING, SleepState.INSOMNIA]:
             logger.info("被唤醒，进入 WOKEN_UP 状态！")
             self._current_state = SleepState.WOKEN_UP
@@ -186,12 +234,15 @@ class SleepManager:
             self._save_sleep_state()
 
     def get_today_schedule(self) -> Optional[List[Dict[str, Any]]]:
+        """获取今天的日程安排。"""
         return self.today_schedule
 
     def update_today_schedule(self, schedule: Optional[List[Dict[str, Any]]]):
+        """更新今天的日程安排。"""
         self.today_schedule = schedule
 
     def _save_sleep_state(self):
+        """将当前所有睡眠相关的状态打包并保存到本地存储。"""
         state_data = {
             "_current_state": self._current_state,
             "_sleep_buffer_end_time": self._sleep_buffer_end_time,
@@ -202,6 +253,7 @@ class SleepManager:
         SleepStateSerializer.save(state_data)
 
     def _load_sleep_state(self):
+        """从本地存储加载并恢复所有睡眠相关的状态。"""
         state_data = SleepStateSerializer.load()
         self._current_state = state_data["_current_state"]
         self._sleep_buffer_end_time = state_data["_sleep_buffer_end_time"]

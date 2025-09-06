@@ -456,8 +456,6 @@ insomnia_chance_normal_pressure = 0.1
 sleep_pressure_increment = 1.5
 # 睡眠时，每分钟衰减的睡眠压力值
 sleep_pressure_decay_rate = 1.5
-insomnia_trigger_delay_minutes = [30, 60] # 入睡后触发失眠判定的延迟时间范围（分钟）
-insomnia_duration_minutes = [15, 45] # 单次失眠状态的持续时间范围（分钟）
 
 # --- 弹性睡眠与睡前消息 ---
 # 是否启用弹性睡眠。启用后，AI不会到点立刻入睡，而是会根据睡眠压力增加5-10分钟的缓冲，并可能因为压力不足而推迟睡眠。
@@ -473,6 +471,11 @@ enable_pre_sleep_notification = false
 pre_sleep_notification_groups = []
 # 用于生成睡前消息的提示。AI会根据这个提示生成一句晚安问候。
 pre_sleep_prompt = "我准备睡觉了，请生成一句简短自然的晚安问候。"
+insomnia_duration_minutes = [30, 60] # 单次失眠状态的持续时间范围（分钟）
+# --- 睡后失眠 ---
+# 入睡后，经过一段延迟后触发失眠判定的延迟时间（分钟），设置为范围以增加随机性
+insomnia_trigger_delay_minutes = [15, 45]
+
 
 [cross_context] # 跨群聊/私聊上下文共享配置
 # 这是总开关，用于一键启用或禁用此功能
