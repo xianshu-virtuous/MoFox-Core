@@ -1,5 +1,6 @@
 import time
 import random
+import asyncio
 from typing import Dict, Any, Tuple
 
 from src.common.logger import get_logger
@@ -59,7 +60,9 @@ class ResponseHandler:
         - 构建并返回完整的循环信息
         - 用于上级方法的状态跟踪
         """
-        reply_text = await self.send_response(response_set, loop_start_time, action_message)
+        reply_text, sent_messages = await self.send_response(response_set, loop_start_time, action_message)
+        if sent_messages:
+            asyncio.create_task(self.handle_typo_correction(sent_messages))
 
         person_info_manager = get_person_info_manager()
 
@@ -100,18 +103,17 @@ class ResponseHandler:
 
         return loop_info, reply_text, cycle_timers
 
-    async def send_response(self, reply_set, thinking_start_time, message_data) -> str:
+    async def send_response(self, reply_set, thinking_start_time, message_data) -> tuple[str, list[dict[str, str]]]:
         """
         发送回复内容的具体实现
 
         Args:
             reply_set: 回复内容集合，包含多个回复段
-            reply_to: 回复目标
             thinking_start_time: 思考开始时间
             message_data: 消息数据
 
         Returns:
-            str: 完整的回复文本
+            tuple[str, list[dict[str, str]]]: (完整的回复文本, 已发送消息列表)
 
         功能说明:
         - 检查是否有新消息需要回复
@@ -128,19 +130,17 @@ class ResponseHandler:
         need_reply = new_message_count >= random.randint(2, 4)
 
         reply_text = ""
+        sent_messages = []
         is_proactive_thinking = message_data.get("message_type") == "proactive_thinking"
 
         first_replied = False
         for reply_seg in reply_set:
-            # 调试日志：验证reply_seg的格式
             logger.debug(f"Processing reply_seg type: {type(reply_seg)}, content: {reply_seg}")
 
-            # 修正：正确处理元组格式 (格式为: (type, content))
-            if isinstance(reply_seg, tuple) and len(reply_seg) >= 2:
-                _, data = reply_seg
+            if reply_seg["type"] == "typo":
+                data = reply_seg["typo"]
             else:
-                # 向下兼容：如果已经是字符串，则直接使用
-                data = str(reply_seg)
+                data = reply_seg["content"]
 
             reply_text += data
 
@@ -149,7 +149,7 @@ class ResponseHandler:
                 continue
 
             if not first_replied:
-                await send_api.text_to_stream(
+                sent_message = await send_api.text_to_stream(
                     text=data,
                     stream_id=self.context.stream_id,
                     reply_to_message=message_data,
@@ -158,12 +158,32 @@ class ResponseHandler:
                 )
                 first_replied = True
             else:
-                await send_api.text_to_stream(
+                sent_message = await send_api.text_to_stream(
                     text=data,
                     stream_id=self.context.stream_id,
                     reply_to_message=None,
                     set_reply=False,
                     typing=True,
                 )
+            if sent_message and reply_seg["type"] == "typo":
+                sent_messages.append(
+                    {
+                        "type": "typo",
+                        "message_id": sent_message,
+                        "original_message": message_data,
+                        "correction": reply_seg["correction"],
+                    }
+                )
 
-        return reply_text
+        return reply_text, sent_messages
+
+    async def handle_typo_correction(self, sent_messages: list[dict[str, Any]]):
+        """处理错别字修正"""
+        for msg in sent_messages:
+            if msg["type"] == "typo":
+                await asyncio.sleep(random.uniform(2, 4))
+                recalled = await send_api.recall_message(str(msg["message_id"]), self.context.stream_id)
+                if recalled:
+                    await send_api.text_to_stream(
+                        str(msg["correction"]), self.context.stream_id, reply_to_message=msg["original_message"]
+                    )
