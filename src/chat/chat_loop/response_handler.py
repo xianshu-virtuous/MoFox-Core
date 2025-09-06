@@ -155,6 +155,8 @@ class ResponseHandler:
             else:
                 data = reply_seg["content"]
 
+            if isinstance(data, list):
+                data = "".join(map(str, data))
             reply_text += data
 
             # 如果是主动思考且内容为“沉默”，则不发送
