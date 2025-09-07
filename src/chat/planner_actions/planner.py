@@ -28,7 +28,6 @@ from src.plugin_system.base.component_types import (
     ChatMode,
     ComponentType,
     ActionActivationType,
-    PlannerType,
 )
 from src.plugin_system.core.component_registry import component_registry
 from src.schedule.schedule_manager import schedule_manager
@@ -498,8 +497,6 @@ class ActionPlanner:
         try:
             sub_planner_actions: Dict[str, ActionInfo] = {}
             for action_name, action_info in available_actions.items():
-                if action_info.planner_type not in [PlannerType.SMALL_BRAIN, PlannerType.ALL]:
-                    continue
 
                 if action_info.activation_type in [ActionActivationType.LLM_JUDGE, ActionActivationType.ALWAYS]:
                     sub_planner_actions[action_name] = action_info
@@ -548,15 +545,10 @@ class ActionPlanner:
         # --- 3. 大脑独立思考是否回复 ---
         action, reasoning, action_data, target_message = "no_reply", "大脑初始化默认", {}, None
         try:
-            big_brain_actions = {
-                name: info
-                for name, info in available_actions.items()
-                if info.planner_type in [PlannerType.BIG_BRAIN, PlannerType.ALL]
-            }
             prompt, _ = await self.build_planner_prompt(
                 is_group_chat=is_group_chat,
                 chat_target_info=chat_target_info,
-                current_available_actions=big_brain_actions,
+                current_available_actions={},
                 mode=mode,
                 chat_content_block_override=chat_content_block,
                 message_id_list_override=message_id_list,
