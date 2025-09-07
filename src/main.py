@@ -8,6 +8,7 @@ from maim_message import MessageServer
 from src.common.remote import TelemetryHeartBeatTask
 from src.manager.async_task_manager import async_task_manager
 from src.chat.utils.statistic import OnlineTimeRecordTask, StatisticOutputTask
+from src.common.remote import TelemetryHeartBeatTask
 from src.chat.emoji_system.emoji_manager import get_emoji_manager
 from src.chat.message_receive.chat_stream import get_chat_manager
 from src.config.config import global_config
