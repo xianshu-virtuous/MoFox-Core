@@ -102,29 +102,38 @@ def init_prompt():
 {actions_before_now_block}
 
 ## 任务
-基于以上所有信息（特别是最近的聊天内容），分析当前情况，决定是否适合主动开启一个**新的、但又与当前氛围相关**的话题。
+你现在要决定是否主动说些什么。就像一个真实的人一样，有时候会突然想起之前聊到的话题，或者对朋友的近况感到好奇，想主动询问或关心一下。
+
+请基于聊天内容，用你的判断力来决定是否要主动发言。不要按照固定规则，而是像人类一样自然地思考：
+- 是否想起了什么之前提到的事情，想问问后来怎么样了？
+- 是否注意到朋友提到了什么值得关心的事情？
+- 是否有什么话题突然想到，觉得现在聊聊很合适？
+- 或者觉得现在保持沉默更好？
 
 ## 可用动作
 动作：proactive_reply
-动作描述：在当前对话的基础上，主动发起一个新的对话，分享一个有趣的想法、见闻或者对未来的计划。
-- 当你觉得可以说些什么来活跃气氛，并且内容与当前聊天氛围不冲突时
-- 当你有一些新的想法或计划想要分享，并且可以自然地衔接当前话题时
+动作描述：主动发起对话，可以是关心朋友、询问近况、延续之前的话题，或分享想法。
+- 当你突然想起之前的话题，想询问进展时
+- 当你想关心朋友的情况时
+- 当你有什么想法想分享时
+- 当你觉得现在是个合适的聊天时机时
 {{
     "action": "proactive_reply",
-    "reason": "决定主动发起对话的具体原因",
-    "topic": "你想要发起对话的主题或内容（需要简洁）"
+    "reason": "你决定主动发言的具体原因",
+    "topic": "你想说的内容主题（简洁描述）"
 }}
 
 动作：do_nothing
-动作描述：保持沉默，不主动发起任何动作或对话。
-- 当你分析了所有信息后，觉得当前不是一个发起互动的好时机时
-- 当最近的聊天内容很连贯，你的插入会打断别人时
+动作描述：保持沉默，不主动发起对话。
+- 当你觉得现在不是合适的时机时
+- 当最近已经说得够多了时
+- 当对话氛围不适合插入时
 {{
     "action": "do_nothing",
-    "reason":"决定保持沉默的具体原因"
+    "reason": "决定保持沉默的原因"
 }}
 
-你必须从上面列出的可用action中选择一个。
+你必须从上面列出的可用action中选择一个。要像真人一样自然地思考和决策。
 请以严格的 JSON 格式输出，且仅包含 JSON 内容：
 """,
         "proactive_planner_prompt",
@@ -497,53 +506,59 @@ class ActionPlanner:
 
         # --- 2. 启动小脑并行思考 ---
         all_sub_planner_results: List[Dict[str, Any]] = []
-        try:
-            sub_planner_actions: Dict[str, ActionInfo] = {}
-            for action_name, action_info in available_actions.items():
+        
+        # PROACTIVE模式下禁用小脑，避免与大脑的主动思考决策冲突
+        if mode != ChatMode.PROACTIVE:
+            try:
+                sub_planner_actions: Dict[str, ActionInfo] = {}
+                for action_name, action_info in available_actions.items():
 
-                if action_info.activation_type in [ActionActivationType.LLM_JUDGE, ActionActivationType.ALWAYS]:
-                    sub_planner_actions[action_name] = action_info
-                elif action_info.activation_type == ActionActivationType.RANDOM:
-                    if random.random() < action_info.random_activation_probability:
+                    if action_info.activation_type in [ActionActivationType.LLM_JUDGE, ActionActivationType.ALWAYS]:
                         sub_planner_actions[action_name] = action_info
-                elif action_info.activation_type == ActionActivationType.KEYWORD:
-                    if any(keyword in chat_content_block_short for keyword in action_info.activation_keywords):
-                        sub_planner_actions[action_name] = action_info
+                    elif action_info.activation_type == ActionActivationType.RANDOM:
+                        if random.random() < action_info.random_activation_probability:
+                            sub_planner_actions[action_name] = action_info
+                    elif action_info.activation_type == ActionActivationType.KEYWORD:
+                        if any(keyword in chat_content_block_short for keyword in action_info.activation_keywords):
+                            sub_planner_actions[action_name] = action_info
 
-            if sub_planner_actions:
-                sub_planner_actions_num = len(sub_planner_actions)
-                planner_size_config = global_config.chat.planner_size
-                sub_planner_size = int(planner_size_config) + (
-                    1 if random.random() < planner_size_config - int(planner_size_config) else 0
-                )
-                sub_planner_num = math.ceil(sub_planner_actions_num / sub_planner_size)
-                logger.info(f"{self.log_prefix}使用{sub_planner_num}个小脑进行思考 (尺寸: {sub_planner_size})")
-
-                action_items = list(sub_planner_actions.items())
-                random.shuffle(action_items)
-                sub_planner_lists = [action_items[i::sub_planner_num] for i in range(sub_planner_num)]
-
-                sub_plan_tasks = [
-                    self.sub_plan(
-                        action_list=action_group,
-                        chat_content_block=chat_content_block_short,
-                        message_id_list=message_id_list_short,
-                        is_group_chat=is_group_chat,
-                        chat_target_info=chat_target_info,
+                if sub_planner_actions:
+                    sub_planner_actions_num = len(sub_planner_actions)
+                    planner_size_config = global_config.chat.planner_size
+                    sub_planner_size = int(planner_size_config) + (
+                        1 if random.random() < planner_size_config - int(planner_size_config) else 0
                     )
-                    for action_group in sub_planner_lists
-                ]
-                sub_plan_results = await asyncio.gather(*sub_plan_tasks)
-                for sub_result in sub_plan_results:
-                    all_sub_planner_results.extend(sub_result)
-                
-                sub_actions_str = ", ".join(
-                    a["action_type"] for a in all_sub_planner_results if a["action_type"] != "no_action"
-                ) or "no_action"
-                logger.info(f"{self.log_prefix}小脑决策: [{sub_actions_str}]")
+                    sub_planner_num = math.ceil(sub_planner_actions_num / sub_planner_size)
+                    logger.info(f"{self.log_prefix}使用{sub_planner_num}个小脑进行思考 (尺寸: {sub_planner_size})")
 
-        except Exception as e:
-            logger.error(f"{self.log_prefix}小脑调度过程中出错: {e}\n{traceback.format_exc()}")
+                    action_items = list(sub_planner_actions.items())
+                    random.shuffle(action_items)
+                    sub_planner_lists = [action_items[i::sub_planner_num] for i in range(sub_planner_num)]
+
+                    sub_plan_tasks = [
+                        self.sub_plan(
+                            action_list=action_group,
+                            chat_content_block=chat_content_block_short,
+                            message_id_list=message_id_list_short,
+                            is_group_chat=is_group_chat,
+                            chat_target_info=chat_target_info,
+                        )
+                        for action_group in sub_planner_lists
+                    ]
+                    sub_plan_results = await asyncio.gather(*sub_plan_tasks)
+                    for sub_result in sub_plan_results:
+                        all_sub_planner_results.extend(sub_result)
+                    
+                    sub_actions_str = ", ".join(
+                        a["action_type"] for a in all_sub_planner_results if a["action_type"] != "no_action"
+                    ) or "no_action"
+                    logger.info(f"{self.log_prefix}小脑决策: [{sub_actions_str}]")
+
+            except Exception as e:
+                logger.error(f"{self.log_prefix}小脑调度过程中出错: {e}\n{traceback.format_exc()}")
+        else:
+            # PROACTIVE模式下小脑保持沉默，让大脑专注于主动思考决策
+            logger.info(f"{self.log_prefix}PROACTIVE模式：小脑保持沉默，主动思考交给大脑决策")
 
         # --- 3. 大脑独立思考是否回复 ---
         action, reasoning, action_data, target_message = "no_reply", "大脑初始化默认", {}, None

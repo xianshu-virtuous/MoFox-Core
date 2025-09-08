@@ -160,12 +160,22 @@ class ProactiveThinker:
             try:
                 web_search_tool = tool_api.get_tool_instance("web_search")
                 if web_search_tool:
-                    tool_args = {"query": topic, "max_results": 10}
-                    # 调用工具，并传递参数
-                    search_result_dict = await web_search_tool.execute(**tool_args)
+                    # 检查工具的execute方法签名，使用正确的参数名
+                    try:
+                        search_result_dict = await web_search_tool.execute(search_query=topic, max_results=10)
+                    except TypeError:
+                        # 如果search_query不工作，尝试其他可能的参数名
+                        try:
+                            search_result_dict = await web_search_tool.execute(keyword=topic, max_results=10)
+                        except TypeError:
+                            # 跳过网络搜索，避免影响主动思考
+                            logger.warning(f"{self.context.log_prefix} 网络搜索工具参数不匹配，跳过搜索")
+                            news_block = "跳过网络搜索。"
+                            search_result_dict = None
+                    
                     if search_result_dict and not search_result_dict.get("error"):
                         news_block = search_result_dict.get("content", "未能提取有效资讯。")
-                    else:
+                    elif search_result_dict:
                         logger.warning(f"{self.context.log_prefix} 网络搜索返回错误: {search_result_dict.get('error')}")
                 else:
                     logger.warning(f"{self.context.log_prefix} 未找到 web_search 工具实例。")
@@ -180,7 +190,49 @@ class ProactiveThinker:
             )
             chat_context_block, _ = build_readable_messages_with_id(messages=message_list)
 
-            # 4. 构建最终的生成提示词
+            # 4. 使用决策模型进行二次确认（节省珍贵的回复模型调用）
+            from src.llm_models.utils_model import LLMRequest
+            from src.config.config import model_config
+            
+            bot_name = global_config.bot.nickname
+            
+            # 构建二次确认提示词
+            confirmation_prompt = f"""# 主动回复二次确认
+
+## 基本信息
+你的名字是{bot_name}，准备主动发起关于"{topic}"的话题。
+
+## 最近的聊天内容
+{chat_context_block}
+
+## 合理判断标准
+请检查以下条件，如果**大部分条件都合理**就可以回复：
+
+1. **时间合理性**：当前时间是否在深夜（凌晨2点-6点）这种不适合主动聊天的时段？
+2. **内容价值**：这个话题"{topic}"是否有意义，不是完全无关紧要的内容？
+3. **重复避免**：你准备说的话题是否与最近2条消息明显重复？
+4. **自然性**：在当前上下文中主动提起这个话题是否自然合理？
+
+## 输出要求
+如果判断应该跳过（比如深夜时段、完全无意义话题、明显重复内容），输出：SKIP_PROACTIVE_REPLY
+其他情况都应该输出：PROCEED_TO_REPLY
+
+请严格按照上述格式输出，不要添加任何解释。"""
+
+            # 使用决策模型进行二次确认
+            planner_llm = LLMRequest(
+                model_set=model_config.model_task_config.planner,
+                request_type="planner"
+            )
+            
+            confirmation_result, _ = await planner_llm.generate_response_async(prompt=confirmation_prompt)
+            
+            # 检查二次确认结果
+            if not confirmation_result or "SKIP_PROACTIVE_REPLY" in confirmation_result:
+                logger.info(f"{self.context.log_prefix} 决策模型二次确认决定跳过主动回复")
+                return
+                
+            # 5. 只有通过二次确认才调用珍贵的回复模型
             bot_name = global_config.bot.nickname
             personality = global_config.personality
             identity_block = (
@@ -200,29 +252,30 @@ class ProactiveThinker:
 ## 你今天的日程安排
 {schedule_block}
 
-## 关于你准备讨论的话题“{topic}”的最新信息
+## 关于你准备讨论的话题"{topic}"的最新信息
 {news_block}
 
 ## 最近的聊天内容
 {chat_context_block}
 
 ## 任务
-你之前决定要发起一个关于“{topic}”的对话。现在，请结合以上所有信息，自然地开启这个话题。
+你现在想要主动说些什么。话题是"{topic}"，但这只是一个参考方向。
+
+根据最近的聊天内容，你可以：
+- 如果是想关心朋友，就自然地询问他们的情况
+- 如果想起了之前的话题，就问问后来怎么样了
+- 如果有什么想分享的想法，就自然地开启话题
+- 如果只是想闲聊，就随意地说些什么
 
 ## 要求
-- 你的发言要听起来像是自发的，而不是在念报告。
-- 巧妙地将日程安排或最新信息融入到你的开场白中。
-- 风格要符合你的角色设定。
-- 直接输出你想要说的内容，不要包含其他额外信息。
+- 像真正的朋友一样，自然地表达关心或好奇
+- 不要过于正式，要口语化和亲切
+- 结合你的角色设定，保持温暖的风格
+- 直接输出你想说的话，不要解释为什么要说
 
-你的回复应该：
-1.  可以分享你的看法、提出相关问题，或者开个合适的玩笑。
-2.  目的是让对话更有趣、更深入。
-3.  不要浮夸，不要夸张修辞，不要输出多余内容(包括前后缀，冒号和引号，括号()，表情包，at或 @等 )。
-最终请输出一条简短、完整且口语化的回复。
+请输出一条简短、自然的主动发言。
 """
 
-            # 5. 调用生成器API并发送
             response_text = await generator_api.generate_response_custom(
                 chat_stream=self.context.chat_stream,
                 prompt=final_prompt,
