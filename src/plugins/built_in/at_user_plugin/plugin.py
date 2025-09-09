@@ -70,15 +70,49 @@ class AtAction(BaseAction):
         if not member_list:
             return False, "群成员列表为空"
 
-        # 使用模糊匹配找到最接近的用户名
-        choices = {member["card"] or member["nickname"]: member["user_id"] for member in member_list}
-        best_match, score = process.extractOne(user_name, choices.keys())
+        # 优化用户匹配逻辑
+        best_match = None
+        user_id = None
+
+        # 1. 完全精确匹配
+        for member in member_list:
+            card = member.get("card", "")
+            nickname = member.get("nickname", "")
+            if user_name == card or user_name == nickname:
+                best_match = card if user_name == card else nickname
+                user_id = member["user_id"]
+                logger.info(f"找到完全精确匹配: '{user_name}' -> '{best_match}' (ID: {user_id})")
+                break
         
-        if score < 30: # 设置一个匹配度阈值
-            logger.info(f"找不到与 '{user_name}' 高度匹配的用户 (最佳匹配: {best_match}, 分数: {score})")
-            return False, "用户不存在"
+        # 2. 包含关系匹配
+        if not best_match:
+            containing_matches = []
+            for member in member_list:
+                card = member.get("card", "")
+                nickname = member.get("nickname", "")
+                if user_name in card:
+                    containing_matches.append((card, member["user_id"]))
+                elif user_name in nickname:
+                    containing_matches.append((nickname, member["user_id"]))
             
-        user_id = choices[best_match]
+            if containing_matches:
+                # 选择最短的匹配项，因为通常更精确
+                best_match, user_id = min(containing_matches, key=lambda x: len(x[0]))
+                logger.info(f"找到包含关系匹配: '{user_name}' -> '{best_match}' (ID: {user_id})")
+
+        # 3. 模糊匹配作为兜底
+        if not best_match:
+            choices = {member["card"] or member["nickname"]: member["user_id"] for member in member_list}
+            fuzzy_match, score = process.extractOne(user_name, choices.keys())
+            if score >= 60: # 维持较高的阈值
+                best_match = fuzzy_match
+                user_id = choices[best_match]
+                logger.info(f"找到模糊匹配: '{user_name}' -> '{best_match}' (ID: {user_id}, Score: {score})")
+        
+        if not best_match:
+            logger.warning(f"所有匹配策略都未能找到用户: '{user_name}'")
+            return False, "用户不存在"
+        
         user_info = {"user_id": user_id, "user_nickname": best_match}
 
         try:
@@ -93,13 +127,17 @@ class AtAction(BaseAction):
                 return False, "聊天流不存在"
             
             replyer = DefaultReplyer(chat_stream)
-            extra_info = f"你需要艾特用户 {user_name} 并回复他们说: {at_message}"
-            
+            # 优化提示词，消除记忆割裂感
+            reminder_task = at_message.replace("定时提醒：", "").strip()
+            extra_info = f"""你之前记下了一个提醒任务：'{reminder_task}'
+现在时间到了，你需要去提醒用户 '{user_name}'。
+请像一个朋友一样，自然地完成这个提醒，而不是生硬地复述任务。"""
+
             success, llm_response, _ = await replyer.generate_reply_with_context(
-                reply_to=f"{user_name}:{at_message}",
+                reply_to=f"是时候提醒'{user_name}'了",  # 内部上下文，更符合执行任务的语境
                 extra_info=extra_info,
                 enable_tool=False,
-                from_plugin=False
+                from_plugin=True  # 标记为插件调用，以便LLM更好地理解上下文
             )
             
             if not success or not llm_response:

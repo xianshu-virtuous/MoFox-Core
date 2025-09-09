@@ -120,75 +120,60 @@ class ProactiveThinker:
             trigger_event (ProactiveTriggerEvent): 触发事件。
         """
         try:
-            # 如果是提醒事件，跳过规划器，直接构建默认动作
+            # 如果是提醒事件，直接使用当前上下文执行at_user动作
             if trigger_event.source == "reminder_system":
                 # 1. 获取上下文信息
                 metadata = trigger_event.metadata or {}
-                action_message = metadata 
                 reminder_content = trigger_event.reason.replace("定时提醒：", "").strip()
 
-                # 2. 确定目标用户名
+                # 2. 使用LLM智能解析目标用户名
                 target_user_name = None
-                match = re.search(r"艾特一下([^,，\s]+)", reminder_content)
-                if match:
-                    target_user_name = match.group(1)
-                else:
-                    from src.person_info.person_info import get_person_info_manager
-                    user_id = metadata.get("user_id")
-                    platform = metadata.get("platform")
-                    if user_id and platform:
-                        person_id = get_person_info_manager().get_person_id(platform, user_id)
-                        target_user_name = await get_person_info_manager().get_value(person_id, "person_name")
+                
+                # 首先尝试从完整的原始信息中解析（如果有的话）
+                full_content = trigger_event.reason
+                logger.info(f"{self.context.log_prefix} 解析提醒内容: '{full_content}'")
+                
+                target_user_name = await self._extract_target_user_with_llm(full_content)
 
                 if not target_user_name:
                     logger.warning(f"无法从提醒 '{reminder_content}' 中确定目标用户，回退")
-                    raise Exception("无法确定目标用户")
-
-                # 3. 构建动作
-                action_result = {
-                    "action_type": "at_user",
-                    "reasoning": "执行定时提醒",
-                    "action_data": {
-                        "user_name": target_user_name,
-                        "at_message": reminder_content
-                    },
-                    "action_message": action_message
-                }
-
-                # 4. 执行或回退
-                try:
-                    original_chat_id = metadata.get("chat_id")
-                    if not original_chat_id:
-                        if trigger_event.related_message_id:
-                            db_message = await db_get(Messages, {"message_id": trigger_event.related_message_id}, single_result=True) or {}
-                            original_chat_id = db_message.get("chat_id")
-
-                    if not original_chat_id:
-                        raise Exception("提醒事件中缺少chat_id")
-
-                    from src.chat.heart_flow.heartflow import heartflow
-                    subflow = await heartflow.get_or_create_subheartflow(original_chat_id)
-                    if not subflow:
-                        raise Exception(f"无法为chat_id {original_chat_id} 获取subflow")
-                    
-                    success, _, _ = await subflow.heart_fc_instance.cycle_processor._handle_action(
-                        action=action_result["action_type"],
-                        reasoning=action_result["reasoning"],
-                        action_data=action_result["action_data"],
-                        cycle_timers={},
-                        thinking_id="",
-                        action_message=action_result["action_message"],
-                    )
-                    if not success:
-                        raise Exception("at_user action failed")
-                except Exception as e:
-                    logger.warning(f"{self.context.log_prefix} at_user动作执行失败: {e}，回退到proactive_reply")
+                    # 回退到生成普通提醒消息
                     fallback_action = {
                         "action_type": "proactive_reply",
-                        "action_data": {"topic": trigger_event.reason},
-                        "action_message": action_message
+                        "action_data": {"topic": f"定时提醒：{reminder_content}"},
+                        "action_message": metadata
                     }
-                    await self._generate_proactive_content_and_send(fallback_action, trigger_event)
+                    await self._generate_reminder_proactive_reply(fallback_action, trigger_event, reminder_content)
+                    return
+
+                # 3. 直接使用当前上下文的cycle_processor执行at_user动作
+                try:
+                    success, _, _ = await self.cycle_processor._handle_action(
+                        action="at_user",
+                        reasoning="执行定时提醒",
+                        action_data={
+                            "user_name": target_user_name,
+                            "at_message": reminder_content
+                        },
+                        cycle_timers={},
+                        thinking_id="",
+                        action_message=metadata,
+                    )
+                    if success:
+                        logger.info(f"{self.context.log_prefix} 成功执行定时提醒艾特用户 {target_user_name}")
+                        return
+                    else:
+                        raise Exception("at_user action failed")
+                except Exception as e:
+                    logger.warning(f"{self.context.log_prefix} at_user动作执行失败: {e}，回退到专用提醒回复")
+                    # 回退到专用的定时提醒回复
+                    fallback_action = {
+                        "action_type": "proactive_reply",
+                        "action_data": {"topic": f"定时提醒：{reminder_content}"},
+                        "action_message": metadata
+                    }
+                    await self._generate_reminder_proactive_reply(fallback_action, trigger_event, reminder_content)
+                    return
 
             else:
                 # 对于其他来源的主动思考，正常调用规划器
@@ -213,6 +198,145 @@ class ProactiveThinker:
         except Exception as e:
             logger.error(f"{self.context.log_prefix} 主动思考执行异常: {e}")
             logger.error(traceback.format_exc())
+    async def _extract_target_user_with_llm(self, reminder_content: str) -> str:
+        """
+        使用LLM从提醒内容中提取目标用户名
+
+        Args:
+            reminder_content: 完整的提醒内容
+
+        Returns:
+            提取出的用户名，如果找不到则返回None
+        """
+        try:
+            from src.llm_models.utils_model import LLMRequest
+            from src.config.config import model_config
+
+            bot_name = global_config.bot.nickname
+            user_extraction_prompt = f'''
+从以下提醒消息中提取需要被提醒的目标用户名。
+
+**重要认知**：你的名字是"{bot_name}"。当消息中提到"{bot_name}"时，通常是在称呼你，而不是要提醒的目标。你需要找出除了你自己之外的那个目标用户。
+
+提醒消息: "{reminder_content}"
+
+规则:
+1. 用户名通常在"提醒"、"艾特"、"叫"等动词后面。
+2. **绝对不能**提取你自己的名字("{bot_name}")作为目标。
+3. 只提取最关键的人名，不要包含多余的词语（比如时间、动作）。
+4. 如果消息中除了你自己的名字外，没有明确提到其他目标用户名，请回答"无"。
+
+示例:
+- 消息: "定时提醒：{bot_name}，提醒阿范一分钟后去写模组" -> "阿范"
+- 消息: "定时提醒：一分钟后提醒一闪喝水" -> "一闪"
+- 消息: "定时提醒：艾特绿皮" -> "绿皮"
+- 消息: "定时提醒：喝水" -> "无"
+- 消息: "定时提醒：{bot_name}，记得休息" -> "无"
+
+请直接输出提取到的用户名，如果不存在则输出"无"。
+'''
+
+            llm_request = LLMRequest(
+                model_set=model_config.model_task_config.utils_small,
+                request_type="reminder_user_extraction"
+            )
+
+            response, _ = await llm_request.generate_response_async(prompt=user_extraction_prompt)
+
+            if response and response.strip() != "无":
+                logger.info(f"LLM成功提取目标用户: '{response.strip()}'")
+                return response.strip()
+            else:
+                logger.warning(f"LLM未能从 '{reminder_content}' 中提取目标用户")
+                return None
+
+        except Exception as e:
+            logger.error(f"使用LLM提取用户名时出错: {e}")
+            return None
+
+    async def _generate_reminder_proactive_reply(self, action_result: Dict[str, Any], trigger_event: ProactiveTriggerEvent, reminder_content: str):
+        """
+        为定时提醒事件生成专用的主动回复
+        
+        Args:
+            action_result: 动作结果
+            trigger_event: 触发事件
+            reminder_content: 提醒内容
+        """
+        try:
+            logger.info(f"{self.context.log_prefix} 生成定时提醒专用回复: '{reminder_content}'")
+
+            # 获取基本信息
+            bot_name = global_config.bot.nickname
+            personality = global_config.personality
+            identity_block = (
+                f"你的名字是{bot_name}。\n"
+                f"关于你：{personality.personality_core}，并且{personality.personality_side}。\n"
+                f"你的身份是{personality.identity}，平时说话风格是{personality.reply_style}。"
+            )
+            mood_block = f"你现在的心情是：{mood_manager.get_mood_by_chat_id(self.context.stream_id).mood_state}"
+
+            # 获取日程信息
+            schedule_block = "你今天没有日程安排。"
+            if global_config.planning_system.schedule_enable:
+                if current_activity := schedule_manager.get_current_activity():
+                    schedule_block = f"你当前正在：{current_activity}。"
+
+            # 为定时提醒定制的专用提示词
+            reminder_prompt = f"""
+## 你的角色
+{identity_block}
+
+## 你的心情
+{mood_block}
+
+## 你今天的日程安排
+{schedule_block}
+
+## 定时提醒任务
+你收到了一个定时提醒："{reminder_content}"
+这是一个自动触发的提醒事件，你需要根据提醒内容发送一条友好的提醒消息。
+
+## 任务要求
+- 这是一个定时提醒，要体现出你的贴心和关怀
+- 根据提醒内容的具体情况（如"喝水"、"休息"等）给出相应的提醒
+- 保持你一贯的温暖、俏皮风格
+- 可以加上一些鼓励或关心的话语
+- 直接输出提醒消息，不要解释为什么要提醒
+
+请生成一条温暖贴心的提醒消息。
+"""
+
+            response_text = await generator_api.generate_response_custom(
+                chat_stream=self.context.chat_stream,
+                prompt=reminder_prompt,
+                request_type="chat.replyer.reminder",
+            )
+
+            if response_text:
+                response_set = process_human_text(
+                    content=response_text,
+                    enable_splitter=global_config.response_splitter.enable,
+                    enable_chinese_typo=global_config.chinese_typo.enable,
+                )
+                await self.cycle_processor.response_handler.send_response(
+                    response_set, time.time(), action_result.get("action_message")
+                )
+                await store_action_info(
+                    chat_stream=self.context.chat_stream,
+                    action_name="reminder_reply",
+                    action_data={"reminder_content": reminder_content, "response": response_text},
+                    action_prompt_display=f"定时提醒回复: {reminder_content}",
+                    action_done=True,
+                )
+                logger.info(f"{self.context.log_prefix} 成功发送定时提醒回复: {response_text}")
+            else:
+                logger.error(f"{self.context.log_prefix} 定时提醒回复生成失败。")
+
+        except Exception as e:
+            logger.error(f"{self.context.log_prefix} 生成定时提醒回复时异常: {e}")
+            logger.error(traceback.format_exc())
+
 
     async def _get_reminder_context(self, message_id: str) -> str:
         """获取提醒消息的上下文"""

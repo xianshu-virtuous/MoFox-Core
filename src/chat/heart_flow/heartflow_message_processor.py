@@ -139,9 +139,13 @@ class HeartFCMessageReceiver:
                             from src.chat.chat_loop.proactive.events import ProactiveTriggerEvent
                             
                             reminder_content = metadata.get('content', '提醒时间到了')
+                            # 使用原始消息内容作为reason，如果没有则使用处理后的内容
+                            original_message = metadata.get('original_message', '')
+                            reason_content = original_message if original_message else reminder_content
+                            
                             event = ProactiveTriggerEvent(
                                 source="reminder_system",
-                                reason=f"定时提醒：{reminder_content}",
+                                reason=f"定时提醒：{reason_content}",
                                 metadata=metadata,
                                 related_message_id=metadata.get("original_message_id")
                            )
@@ -179,7 +183,8 @@ class HeartFCMessageReceiver:
                         "content": reminder_event.content,
                         "confidence": reminder_event.confidence,
                         "created_at": datetime.now().isoformat(),
-                        "original_message_id": message.message_info.message_id
+                        "original_message_id": message.message_info.message_id,
+                        "original_message": message.processed_plain_text  # 保存完整的原始消息
                     }
                     
                     success = await event_scheduler.schedule_event(

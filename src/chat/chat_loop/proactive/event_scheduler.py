@@ -205,7 +205,7 @@ async def schedule_reminder(
     )
 
 
-async def _execute_reminder_callback(subheartflow_id: str, reminder_text: str):
+async def _execute_reminder_callback(subheartflow_id: str, reminder_text: str, original_message: str = None):
     """执行提醒回调函数"""
     try:
         # 获取对应的subheartflow实例
@@ -219,11 +219,15 @@ async def _execute_reminder_callback(subheartflow_id: str, reminder_text: str):
         # 创建主动思考事件，触发完整的思考流程
         from src.chat.chat_loop.proactive.events import ProactiveTriggerEvent
         
+        # 使用原始消息来构造reason，如果没有原始消息则使用处理后的内容
+        reason_content = original_message if original_message else reminder_text
+        
         event = ProactiveTriggerEvent(
             source="reminder_system",
-            reason=f"定时提醒：{reminder_text}",
+            reason=f"定时提醒：{reason_content}",  # 这里传递完整的原始消息
             metadata={
                 "reminder_text": reminder_text,
+                "original_message": original_message,
                 "trigger_time": datetime.now().isoformat()
             }
         )
@@ -231,7 +235,7 @@ async def _execute_reminder_callback(subheartflow_id: str, reminder_text: str):
         # 通过subflow的HeartFChatting实例触发主动思考
         await subflow.heart_fc_instance.proactive_thinker.think(event)
         
-        logger.info(f"已触发提醒的主动思考，内容: {reminder_text}")
+        logger.info(f"已触发提醒的主动思考，内容: {reminder_text},没有传递那条消息吗？{original_message}")
         
     except Exception as e:
         logger.error(f"执行提醒回调时发生错误: {e}")
