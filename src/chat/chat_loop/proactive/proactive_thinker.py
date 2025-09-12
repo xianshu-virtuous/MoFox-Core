@@ -1,7 +1,5 @@
 import time
 import traceback
-import orjson
-import re
 from typing import TYPE_CHECKING, Dict, Any
 
 from src.common.logger import get_logger
@@ -12,7 +10,6 @@ from src.plugin_system.apis import generator_api
 from src.plugin_system.apis.generator_api import process_human_text
 from src.schedule.schedule_manager import schedule_manager
 from src.plugin_system import tool_api
-from src.plugin_system.base.component_types import ComponentType
 from src.config.config import global_config
 from src.chat.utils.chat_message_builder import get_raw_msg_before_timestamp_with_chat, build_readable_messages_with_id
 from src.mood.mood_manager import mood_manager

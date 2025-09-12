@@ -8,6 +8,7 @@ from src.common.logger import get_logger
 from src.chat.message_receive.chat_stream import ChatStream
 from src.plugin_system.base.component_types import ActionActivationType, ChatMode, ActionInfo, ComponentType, ChatType
 from src.plugin_system.apis import send_api, database_api, message_api
+from src.plugin_system.core.component_registry import component_registry
 
 
 logger = get_logger("base_action")
@@ -384,6 +385,60 @@ class BaseAction(ABC):
         except Exception as e:
             logger.error(f"{self.log_prefix} 发送命令时出错: {e}")
             return False
+
+    async def call_action(self, action_name: str, action_data: Optional[dict] = None) -> Tuple[bool, str]:
+        """
+        在当前Action中调用另一个Action。
+
+        Args:
+            action_name (str): 要调用的Action的名称。
+            action_data (Optional[dict], optional): 传递给被调用Action的动作数据。如果为None，则使用当前Action的action_data。
+
+        Returns:
+            Tuple[bool, str]: 被调用Action的执行结果 (is_success, message)。
+        """
+        log_prefix = f"{self.log_prefix} [call_action -> {action_name}]"
+        logger.info(f"{log_prefix} 尝试调用Action: {action_name}")
+
+        try:
+            # 1. 从注册中心获取Action类
+            action_class = component_registry.get_component_class(action_name, ComponentType.ACTION)
+            if not action_class:
+                logger.error(f"{log_prefix} 未找到Action: {action_name}")
+                return False, f"未找到Action: {action_name}"
+
+            # 2. 准备实例化参数
+            # 复用当前Action的大部分上下文信息
+            called_action_data = action_data if action_data is not None else self.action_data
+            
+            component_info = component_registry.get_component_info(action_name, ComponentType.ACTION)
+            if not component_info:
+                logger.warning(f"{log_prefix} 未找到Action组件信息: {action_name}")
+                return False, f"未找到Action组件信息: {action_name}"
+
+            plugin_config = component_registry.get_plugin_config(component_info.plugin_name)
+
+            # 3. 实例化被调用的Action
+            action_instance = action_class(
+                action_data=called_action_data,
+                reasoning=f"Called by {self.action_name}",
+                cycle_timers=self.cycle_timers,
+                thinking_id=self.thinking_id,
+                chat_stream=self.chat_stream,
+                log_prefix=log_prefix,
+                plugin_config=plugin_config,
+                action_message=self.action_message,
+            )
+
+            # 4. 执行Action
+            logger.debug(f"{log_prefix} 开始执行...")
+            result = await action_instance.execute()
+            logger.info(f"{log_prefix} 执行完成，结果: {result}")
+            return result
+
+        except Exception as e:
+            logger.error(f"{log_prefix} 调用时发生错误: {e}", exc_info=True)
+            return False, f"调用Action '{action_name}' 时发生错误: {e}"
 
     @classmethod
     def get_action_info(cls) -> "ActionInfo":
