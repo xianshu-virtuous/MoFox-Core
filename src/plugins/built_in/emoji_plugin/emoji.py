@@ -165,7 +165,9 @@ class EmojiAction(BaseAction):
 
             if not success:
                 logger.error(f"{self.log_prefix} 表情包发送失败")
+                await self.store_action_info(action_build_into_prompt = True,action_prompt_display =f"发送了一个{chosen_emotion}的表情包,但失败了",action_done= False)
                 return False, "表情包发送失败"
+            await self.store_action_info(action_build_into_prompt = True,action_prompt_display =f"发送了一个{chosen_emotion}的表情包",action_done= True)
 
             return True, f"发送表情包: {emoji_description}"
 
