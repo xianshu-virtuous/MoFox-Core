@@ -42,8 +42,8 @@ from src.config.official_configs import (
     CrossContextConfig,
     PermissionConfig,
     CommandConfig,
-    MaizoneIntercomConfig,
     PlanningSystemConfig,
+    ServerConfig,
 )
 
 from .api_ada_configs import (
@@ -413,9 +413,7 @@ class Config(ValidatedConfigBase):
     cross_context: CrossContextConfig = Field(
         default_factory=lambda: CrossContextConfig(), description="跨群聊上下文共享配置"
     )
-    maizone_intercom: MaizoneIntercomConfig = Field(
-        default_factory=lambda: MaizoneIntercomConfig(), description="Maizone互通组配置"
-    )
+    server: ServerConfig = Field(default_factory=lambda: ServerConfig(), description="主服务器配置")
 
 
 class APIAdapterConfig(ValidatedConfigBase):

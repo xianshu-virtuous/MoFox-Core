@@ -2,7 +2,7 @@ from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware  # 新增导入
 from typing import Optional
 from uvicorn import Config, Server as UvicornServer
-import os
+from src.config.config import global_config
 from rich.traceback import install
 
 install(extra_lines=3)
@@ -98,5 +98,5 @@ def get_global_server() -> Server:
     """获取全局服务器实例"""
     global global_server
     if global_server is None:
-        global_server = Server(host=os.environ["HOST"], port=int(os.environ["PORT"]))
+        global_server = Server(host=global_config.server.host,port=int(global_config.server.port),)
     return global_server

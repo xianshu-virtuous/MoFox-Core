@@ -494,6 +494,13 @@ class ExperimentalConfig(ValidatedConfigBase):
     pfc_chatting: bool = Field(default=False, description="启用PFC聊天")
 
 
+class ServerConfig(ValidatedConfigBase):
+    """主服务器配置类"""
+
+    host: str = Field(default="127.0.0.1", description="主服务器监听地址")
+    port: int = Field(default=8080, description="主服务器监听端口")
+
+
 class MaimMessageConfig(ValidatedConfigBase):
     """maim_message配置类"""
 
@@ -676,15 +683,6 @@ class CrossContextConfig(ValidatedConfigBase):
 
     enable: bool = Field(default=False, description="是否启用跨群聊上下文共享功能")
     groups: List[ContextGroup] = Field(default_factory=list, description="上下文共享组列表")
-
-
-class MaizoneIntercomConfig(ValidatedConfigBase):
-    """Maizone互通组配置"""
-
-    enable: bool = Field(default=False, description="是否启用Maizone互通组功能")
-    groups: List[ContextGroup] = Field(default_factory=list, description="Maizone互通组列表")
-
-
 class CommandConfig(ValidatedConfigBase):
     """命令系统配置类"""
 

@@ -7,16 +7,8 @@ import time
 import platform
 import traceback
 from pathlib import Path
-from dotenv import load_dotenv
 from rich.traceback import install
 from colorama import init, Fore
-
-if os.path.exists(".env"):
-    load_dotenv(".env", override=True)
-    print("成功加载环境变量配置")
-else:
-    print("未找到.env文件，请确保程序所需的环境变量被正确设置")
-    raise FileNotFoundError(".env 文件不存在，请创建并配置所需的环境变量")
 
 # maim_message imports for console input
 
@@ -45,7 +37,6 @@ logger.info(f"已设置工作目录为: {script_dir}")
 
 confirm_logger = get_logger("confirm")
 # 获取没有加载env时的环境变量
-env_mask = {key: os.getenv(key) for key in os.environ}
 
 uvicorn_server = None
 driver = None
