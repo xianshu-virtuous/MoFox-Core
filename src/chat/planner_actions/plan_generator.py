@@ -58,7 +58,6 @@ class PlanGenerator:
             target_info = TargetPersonInfo(**chat_target_info_dict)
 
         available_actions = self._get_available_actions()
-
         chat_history_raw = get_raw_msg_before_timestamp_with_chat(
             chat_id=self.chat_id,
             timestamp=time.time(),
