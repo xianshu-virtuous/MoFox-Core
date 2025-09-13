@@ -180,7 +180,7 @@ class CycleProcessor:
         cycle_timers, thinking_id = self.cycle_tracker.start_cycle()
         logger.info(f"{self.log_prefix} 开始第{self.context.cycle_counter}次思考")
 
-        if ENABLE_S4U:
+        if ENABLE_S4U and self.context.chat_stream and self.context.chat_stream.user_info:
             await send_typing(self.context.chat_stream.user_info.user_id)
 
         loop_start_time = time.time()
@@ -194,30 +194,17 @@ class CycleProcessor:
                 logger.error(f"{self.context.log_prefix} 动作修改失败: {e}")
                 available_actions = {}
 
-            # 执行planner
-            planner_info = self.action_planner.get_necessary_info()
-            prompt_info = await self.action_planner.build_planner_prompt(
-                is_group_chat=planner_info[0],
-                chat_target_info=planner_info[1],
-                current_available_actions=planner_info[2],
-            )
-            from src.plugin_system.core.event_manager import event_manager
-            from src.plugin_system import EventType
-
-            # 触发规划前事件
-            result = await event_manager.trigger_event(
-                EventType.ON_PLAN, permission_group="SYSTEM", stream_id=self.context.chat_stream
-            )
-            if not result.all_continue_process():
-                raise UserWarning(f"插件{result.get_summary().get('stopped_handlers', '')}于规划前中断了内容生成")
-
             # 规划动作
-            with Timer("规划器", cycle_timers):
-                actions, _ = await self.action_planner.plan(
-                    mode=mode,
-                    loop_start_time=loop_start_time,
-                    available_actions=available_actions,
-                )
+        from src.plugin_system.core.event_manager import event_manager
+        from src.plugin_system import EventType
+        
+        result = await event_manager.trigger_event(
+                        EventType.ON_PLAN, permission_group="SYSTEM", stream_id=self.context.chat_stream
+                    )
+        if not result.all_continue_process():
+            raise UserWarning(f"插件{result.get_summary().get('stopped_handlers', '')}于规划前中断了内容生成")
+        with Timer("规划器", cycle_timers):
+            actions, _ = await self.action_planner.plan(mode=mode)
 
         async def execute_action(action_info):
             """执行单个动作的通用函数"""
@@ -373,7 +360,7 @@ class CycleProcessor:
         self.context.chat_instance.cycle_tracker.end_cycle(loop_info, cycle_timers)
         self.context.chat_instance.cycle_tracker.print_cycle_info(cycle_timers)
 
-        action_type = actions[0]["action_type"] if actions else "no_action"
+        action_type = actions["action_type"] if actions else "no_action"
         return action_type
 
     async def _handle_action(
@@ -424,7 +411,7 @@ class CycleProcessor:
                 if "reply" in available_actions:
                     fallback_action = "reply"
                 elif available_actions:
-                    fallback_action = list(available_actions.keys())[0]
+                    fallback_action = list(available_actions.keys())
 
                 if fallback_action and fallback_action != action:
                     logger.info(f"{self.context.log_prefix} 使用回退动作: {fallback_action}")
