@@ -757,7 +757,7 @@ class Prompt:
             "cross_context_block": context_data.get("cross_context_block", ""),
             "identity": self.parameters.identity_block or context_data.get("identity", ""),
             "action_descriptions": self.parameters.action_descriptions or context_data.get("action_descriptions", ""),
-            "sender_name": self.parameters.sender,
+            "sender_name": self.parameters.sender or "未知用户",
             "mood_state": self.parameters.mood_prompt or context_data.get("mood_state", ""),
             "background_dialogue_prompt": context_data.get("background_dialogue_prompt", ""),
             "time_block": context_data.get("time_block", ""),

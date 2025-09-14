@@ -82,6 +82,15 @@ class ActionPlanner:
         )
         
         final_actions_dict = [asdict(act) for act in final_actions]
-        final_target_message_dict = asdict(final_target_message) if final_target_message else None
+        # action_message现在可能是字典而不是dataclass实例，需要特殊处理
+        if final_target_message:
+            if hasattr(final_target_message, '__dataclass_fields__'):
+                # 如果是dataclass实例，使用asdict转换
+                final_target_message_dict = asdict(final_target_message)
+            else:
+                # 如果已经是字典，直接使用
+                final_target_message_dict = final_target_message
+        else:
+            final_target_message_dict = None
 
         return final_actions_dict, final_target_message_dict

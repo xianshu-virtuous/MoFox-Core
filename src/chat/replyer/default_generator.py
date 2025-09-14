@@ -594,6 +594,9 @@ class DefaultReplyer:
     def _parse_reply_target(self, target_message: str) -> Tuple[str, str]:
         """解析回复目标消息 - 使用共享工具"""
         from src.chat.utils.prompt import Prompt
+        if target_message is None:
+            logger.warning("target_message为None，返回默认值")
+            return "未知用户", "(无消息内容)"
         return Prompt.parse_reply_target(target_message)
 
     async def build_keywords_reaction_prompt(self, target: Optional[str]) -> str:
@@ -872,6 +875,13 @@ class DefaultReplyer:
             )
             person_name = await person_info_manager.get_value(person_id, "person_name")
             
+            # 如果person_name为None，使用fallback值
+            if person_name is None:
+                # 尝试从reply_message获取用户名
+                fallback_name = reply_message.get("user_nickname") or reply_message.get("user_id", "未知用户")
+                logger.warning(f"无法获取person_name，使用fallback: {fallback_name}")
+                person_name = str(fallback_name)
+            
             # 检查是否是bot自己的名字，如果是则替换为"(你)"
             bot_user_id = str(global_config.bot.qq_account)
             current_user_id = person_info_manager.get_value_sync(person_id, "user_id")
@@ -883,6 +893,14 @@ class DefaultReplyer:
                 # 如果不是bot自己，直接使用person_name
                 sender = person_name
             target = reply_message.get("processed_plain_text")
+
+        # 最终的空值检查，确保sender和target不为None
+        if sender is None:
+            logger.warning("sender为None，使用默认值'未知用户'")
+            sender = "未知用户"
+        if target is None:
+            logger.warning("target为None，使用默认值'(无消息内容)'")
+            target = "(无消息内容)"
 
         person_info_manager = get_person_info_manager()
         person_id = person_info_manager.get_person_id_by_person_name(sender)
@@ -1111,6 +1129,14 @@ class DefaultReplyer:
             target = reply_message.get("target")
         else:
             sender, target = self._parse_reply_target(reply_to)
+
+        # 添加空值检查，确保sender和target不为None
+        if sender is None:
+            logger.warning("build_rewrite_context: sender为None，使用默认值'未知用户'")
+            sender = "未知用户"
+        if target is None:
+            logger.warning("build_rewrite_context: target为None，使用默认值'(无消息内容)'")
+            target = "(无消息内容)"
 
         # 添加情绪状态获取
         if global_config.mood.enable_mood:

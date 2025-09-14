@@ -263,7 +263,15 @@ class PlanFilter:
                     target_message_dict = self._get_latest_message(message_id_list)
 
                 if target_message_dict:
+                    # 直接使用字典作为action_message，避免DatabaseMessages对象创建失败
                     target_message_obj = target_message_dict
+                else:
+                    # 如果找不到目标消息，对于reply动作来说这是必需的，应该记录警告
+                    if action == "reply":
+                        logger.warning(f"reply动作找不到目标消息，target_message_id: {action_json.get('target_message_id')}")
+                        # 将reply动作改为no_action，避免后续执行时出错
+                        action = "no_action"
+                        reasoning = f"找不到目标消息进行回复。原始理由: {reasoning}"
 
             available_action_names = list(plan.available_actions.keys())
             if action not in ["no_action", "no_reply", "reply", "do_nothing", "proactive_reply"] and action not in available_action_names:

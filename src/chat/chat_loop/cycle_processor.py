@@ -302,8 +302,18 @@ class CycleProcessor:
                 if not action_message:
                     logger.warning(f"{self.log_prefix} reply 动作缺少 action_message，跳过")
                     continue
+                
+                # 检查是否是空的DatabaseMessages对象
+                if hasattr(action_message, 'chat_info') and hasattr(action_message.chat_info, 'user_info'):
+                    target_user_id = action_message.chat_info.user_info.user_id
+                else:
+                    # 如果是字典格式，使用原来的方式
+                    target_user_id = action_message.get("chat_info_user_id", "")
+                
+                if not target_user_id:
+                    logger.warning(f"{self.log_prefix} reply 动作的 action_message 缺少用户ID，跳过")
+                    continue
 
-                target_user_id = action_message.get("chat_info_user_id","")
                 if target_user_id == global_config.bot.qq_account and not global_config.chat.allow_reply_self:
                     logger.warning("选取的reply的目标为bot自己，跳过reply action")
                     continue
