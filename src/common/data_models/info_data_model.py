@@ -26,18 +26,30 @@ class ActionPlannerInfo(BaseDataModel):
 
 
 @dataclass
+class InterestScore(BaseDataModel):
+    """兴趣度评分结果"""
+    message_id: str
+    total_score: float
+    interest_match_score: float
+    relationship_score: float
+    mentioned_score: float
+    time_factor_score: float
+    details: Dict[str, str]
+
+
+@dataclass
 class Plan(BaseDataModel):
     """
     统一规划数据模型
     """
     chat_id: str
     mode: "ChatMode"
-    
+
     # Generator 填充
     available_actions: Dict[str, "ActionInfo"] = field(default_factory=dict)
     chat_history: List["DatabaseMessages"] = field(default_factory=list)
     target_info: Optional[TargetPersonInfo] = None
-    
+
     # Filter 填充
     llm_prompt: Optional[str] = None
     decided_actions: Optional[List[ActionPlannerInfo]] = None
