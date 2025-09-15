@@ -13,8 +13,8 @@ from src.plugin_system import (
     register_plugin,
     ActionActivationType,
 )
-from src.plugin_system.apis import send_api
-from src.plugin_system.base.component_types import ChatType
+from src.plugin_system.apis import send_api, llm_api
+from src.plugin_system.base.component_types import ChatType, ComponentType
 
 logger = get_logger(__name__)
 
@@ -72,25 +72,40 @@ class RemindAction(BaseAction):
     # === 基本信息 ===
     action_name = "set_reminder"
     action_description = "根据用户的对话内容，智能地设置一个未来的提醒事项。"
-    activation_type = ActionActivationType.LLM_JUDGE
-    chat_type_allow = ChatType.ALL
+    
+    @staticmethod
+    def get_action_info() -> ActionInfo:
+        return ActionInfo(
+            name="set_reminder",
+            component_type=ComponentType.ACTION,
+            activation_type=ActionActivationType.KEYWORD,
+            activation_keywords=["提醒", "叫我", "记得", "别忘了"]
+        )
 
     # === LLM 判断与参数提取 ===
     llm_judge_prompt = """
-    判断用户是否意图设置一个未来的提醒。
-    - 必须包含明确的时间点或时间段（如“十分钟后”、“明天下午3点”、“周五”）。
-    - 必须包含一个需要被提醒的事件。
-    - 可能会包含需要提醒的特定人物。
-    - 如果只是普通的聊天或询问时间，则不应触发。
+    你是一个严格的提醒意图分类器。你的任务是判断用户是否明确意图设置一个未来的提醒。这是一个最高优先级的任务。
+    
+    **规则：**
+    1.  必须包含一个明确的、指向未来的时间点或时间段（例如：“十分钟后”、“明天下午3点”、“周五”、“待会儿”、“一分钟后”）。
+    2.  必须包含一个需要被提醒的具体事件或动作（例如：“开会”、“喝水”、“睡觉”、“去吃饭”）。
+    3.  如果文本同时满足规则1和2，你必须，且只能回答“是”。
+    4.  任何不满足上述两个核心规则的文本，都回答“否”。
 
-    示例:
-    - "半小时后提醒我开会" -> 是
-    - "明天下午三点叫张三来一下" -> 是
-    - "别忘了周五把报告交了" -> 是
-    - "现在几点了？" -> 否
-    - "我明天下午有空" -> 否
+    **正面示例（必须回答“是”）：**
+    - "半小时后提醒我开会"
+    - "两分钟后叫我喝水"
+    - "爱莉，提醒一闪一分钟后去睡觉"
+    - "别忘了周五把报告交了"
+    - "待会儿记得和我说一声"
 
-    请只回答"是"或"否"。
+    **负面示例（必须回答“否”）：**
+    - "现在几点了？" (只是询问时间)
+    - "我明天下午有空" (陈述事实，没有要求提醒)
+    - "提醒呢？" (询问提醒状态，而不是设置新提醒)
+    - "我记得了" (表示自己记住了，而不是让bot记住)
+
+    请严格按照规则进行分类，只回答"是"或"否"。
     """
     action_parameters = {
         "user_name": "需要被提醒的人的称呼或名字，如果没有明确指定给某人，则默认为'自己'",
@@ -118,9 +133,45 @@ class RemindAction(BaseAction):
         # 1. 解析时间
         try:
             assert isinstance(remind_time_str, str)
-            target_time = parse_datetime(remind_time_str, fuzzy=True)
+            # 优先尝试直接解析
+            try:
+                target_time = parse_datetime(remind_time_str, fuzzy=True)
+            except Exception:
+                # 如果直接解析失败，调用 LLM 进行转换
+                logger.info(f"[ReminderPlugin] 直接解析时间 '{remind_time_str}' 失败，尝试使用 LLM 进行转换...")
+                
+                # 获取所有可用的模型配置
+                available_models = llm_api.get_available_models()
+                if "planner" not in available_models:
+                    raise ValueError("未找到 'planner' 决策模型配置，无法解析时间")
+                
+                # 明确使用 'planner' 模型
+                model_to_use = available_models["planner"]
+
+                # 在执行时动态获取当前时间
+                current_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                prompt = (
+                    f"请将以下自然语言时间短语转换为一个未来的、标准的 'YYYY-MM-DD HH:MM:SS' 格式。"
+                    f"请只输出转换后的时间字符串，不要包含任何其他说明或文字。\n"
+                    f"作为参考，当前时间是: {current_time_str}\n"
+                    f"需要转换的时间短语是: '{remind_time_str}'"
+                )
+                
+                success, response, _, _ = await llm_api.generate_with_model(
+                    prompt, 
+                    model_config=model_to_use,
+                    request_type="plugin.reminder.time_parser"
+                )
+                
+                if not success or not response:
+                    raise ValueError(f"LLM未能返回有效的时间字符串: {response}")
+
+                converted_time_str = response.strip()
+                logger.info(f"[ReminderPlugin] LLM 转换结果: '{converted_time_str}'")
+                target_time = parse_datetime(converted_time_str, fuzzy=False)
+
         except Exception as e:
-            logger.error(f"[ReminderPlugin] 无法解析时间字符串 '{remind_time_str}': {e}")
+            logger.error(f"[ReminderPlugin] 无法解析或转换时间字符串 '{remind_time_str}': {e}", exc_info=True)
             await self.send_text(f"抱歉，我无法理解您说的时间 '{remind_time_str}'，提醒设置失败。")
             return False, f"无法解析时间 '{remind_time_str}'"
 
