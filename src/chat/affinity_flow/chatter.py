@@ -47,14 +47,24 @@ class AffinityFlowChatter:
         处理单个消息
 
         Args:
-            message_data: 消息数据字典
+            message_data: 消息数据字典，包含：
+            - message_info: 消息基本信息
+            - processed_plain_text: 处理后的纯文本
+            - context_messages: 上下文消息（历史+未读）
+            - unread_messages: 未读消息列表
 
         Returns:
             处理结果字典
         """
         try:
-            # 使用增强版规划器处理消息
-            actions, target_message = await self.planner.plan(mode=ChatMode.FOCUS)
+            # 提取未读消息用于兴趣度计算
+            unread_messages = message_data.get("unread_messages", [])
+
+            # 使用增强版规划器处理消息，传递未读消息用于兴趣度计算
+            actions, target_message = await self.planner.plan(
+                mode=ChatMode.FOCUS,
+                unread_messages=unread_messages
+            )
             self.stats["plans_created"] += 1
 
             # 执行动作（如果规划器返回了动作）
@@ -75,10 +85,11 @@ class AffinityFlowChatter:
                 "plan_created": True,
                 "actions_count": len(actions) if actions else 0,
                 "has_target_message": target_message is not None,
+                "unread_messages_processed": len(unread_messages),
                 **execution_result,
             }
 
-            logger.info(f"聊天流 {self.stream_id} 消息处理成功: 动作数={result['actions_count']}")
+            logger.info(f"聊天流 {self.stream_id} 消息处理成功: 动作数={result['actions_count']}, 未读消息={result['unread_messages_processed']}")
 
             return result
 

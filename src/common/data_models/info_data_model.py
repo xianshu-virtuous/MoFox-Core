@@ -33,7 +33,6 @@ class InterestScore(BaseDataModel):
     interest_match_score: float
     relationship_score: float
     mentioned_score: float
-    time_factor_score: float
     details: Dict[str, str]
 
 

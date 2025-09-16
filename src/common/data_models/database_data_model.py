@@ -79,6 +79,7 @@ class DatabaseMessages(BaseDataModel):
         is_command: bool = False,
         is_notify: bool = False,
         selected_expressions: Optional[str] = None,
+        is_read: bool = False,
         user_id: str = "",
         user_nickname: str = "",
         user_cardname: Optional[str] = None,
@@ -122,6 +123,7 @@ class DatabaseMessages(BaseDataModel):
         self.is_notify = is_notify
 
         self.selected_expressions = selected_expressions
+        self.is_read = is_read
 
         self.group_info: Optional[DatabaseGroupInfo] = None
         self.user_info = DatabaseUserInfo(
@@ -188,6 +190,7 @@ class DatabaseMessages(BaseDataModel):
             "is_command": self.is_command,
             "is_notify": self.is_notify,
             "selected_expressions": self.selected_expressions,
+            "is_read": self.is_read,
             "user_id": self.user_info.user_id,
             "user_nickname": self.user_info.user_nickname,
             "user_cardname": self.user_info.user_cardname,

@@ -11,12 +11,12 @@ from src.mood.mood_manager import mood_manager  # 导入情绪管理器
 from src.chat.message_receive.chat_stream import get_chat_manager, ChatStream
 from src.chat.message_receive.message import MessageRecv, MessageRecvS4U
 from src.chat.message_receive.storage import MessageStorage
-from src.chat.affinity_flow.afc_manager import afc_manager
+from src.chat.message_manager import message_manager
 from src.chat.utils.prompt import Prompt, global_prompt_manager
 from src.plugin_system.core import component_registry, event_manager, global_announcement_manager
 from src.plugin_system.base import BaseCommand, EventType
 from src.mais4u.mais4u_chat.s4u_msg_processor import S4UMessageProcessor
-
+from src.chat.utils.utils import is_mentioned_bot_in_message
 # 导入反注入系统
 from src.chat.antipromptinjector import initialize_anti_injector
 
@@ -80,8 +80,10 @@ class ChatBot:
         # 初始化反注入系统
         self._initialize_anti_injector()
 
-    @staticmethod
-    def _initialize_anti_injector():
+        # 启动消息管理器
+        self._message_manager_started = False
+
+    def _initialize_anti_injector(self):
         """初始化反注入系统"""
         try:
             initialize_anti_injector()
@@ -98,6 +100,12 @@ class ChatBot:
         """确保所有任务已启动"""
         if not self._started:
             logger.debug("确保ChatBot所有任务已启动")
+
+            # 启动消息管理器
+            if not self._message_manager_started:
+                await message_manager.start()
+                self._message_manager_started = True
+                logger.info("消息管理器已启动")
 
             self._started = True
 
@@ -404,7 +412,8 @@ class ChatBot:
             # print(message_data)
             # logger.debug(str(message_data))
             message = MessageRecv(message_data)
-            
+
+            message.is_mentioned, _ = is_mentioned_bot_in_message(message)
             group_info = message.message_info.group_info
             user_info = message.message_info.user_info
             if message.message_info.additional_config:
@@ -469,13 +478,45 @@ class ChatBot:
                 template_group_name = None
 
             async def preprocess():
-                # 使用亲和力流系统处理消息
-                message_data = {
-                    "message_info": message.message_info.__dict__,
-                    "processed_plain_text": message.processed_plain_text,
-                    "chat_stream": message.chat_stream.__dict__ if message.chat_stream else None
-                }
-                await afc_manager.process_message(message.chat_stream.stream_id, message_data)
+                # 使用消息管理器处理消息
+                from src.common.data_models.database_data_model import DatabaseMessages
+
+                # 创建数据库消息对象
+                db_message = DatabaseMessages(
+                    message_id=message.message_info.message_id,
+                    time=message.message_info.time,
+                    chat_id=message.chat_stream.stream_id,
+                    processed_plain_text=message.processed_plain_text,
+                    display_message=message.processed_plain_text,
+                    is_mentioned=message.is_mentioned,
+                    is_at=message.is_at,
+                    is_emoji=message.is_emoji,
+                    is_picid=message.is_picid,
+                    is_command=message.is_command,
+                    is_notify=message.is_notify,
+                    user_id=message.message_info.user_info.user_id,
+                    user_nickname=message.message_info.user_info.user_nickname,
+                    user_cardname=message.message_info.user_info.user_cardname,
+                    user_platform=message.message_info.user_info.platform,
+                    chat_info_stream_id=message.chat_stream.stream_id,
+                    chat_info_platform=message.chat_stream.platform,
+                    chat_info_create_time=message.chat_stream.create_time,
+                    chat_info_last_active_time=message.chat_stream.last_active_time,
+                    chat_info_user_id=message.chat_stream.user_info.user_id,
+                    chat_info_user_nickname=message.chat_stream.user_info.user_nickname,
+                    chat_info_user_cardname=message.chat_stream.user_info.user_cardname,
+                    chat_info_user_platform=message.chat_stream.user_info.platform
+                )
+
+                # 如果是群聊，添加群组信息
+                if message.chat_stream.group_info:
+                    db_message.chat_info_group_id = message.chat_stream.group_info.group_id
+                    db_message.chat_info_group_name = message.chat_stream.group_info.group_name
+                    db_message.chat_info_group_platform = message.chat_stream.group_info.platform
+
+                # 添加消息到消息管理器
+                message_manager.add_message(message.chat_stream.stream_id, db_message)
+                logger.debug(f"消息已添加到消息管理器: {message.chat_stream.stream_id}")
 
             if template_group_name:
                 async with global_prompt_manager.async_message_scope(template_group_name):

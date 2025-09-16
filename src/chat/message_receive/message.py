@@ -123,7 +123,7 @@ class MessageRecv(Message):
         self.is_video = False
         self.is_mentioned = None
         self.is_notify = False
-
+        self.is_at = False
         self.is_command = False
 
         self.priority_mode = "interest"

@@ -2,7 +2,6 @@
 主规划器入口，负责协调 PlanGenerator, PlanFilter, 和 PlanExecutor。
 集成兴趣度评分系统和用户关系追踪机制，实现智能化的聊天决策。
 """
-import time
 from dataclasses import asdict
 from typing import Dict, List, Optional, Tuple
 
@@ -65,13 +64,13 @@ class ActionPlanner:
             "other_actions_executed": 0,
         }
 
-    async def plan(self, mode: ChatMode = ChatMode.FOCUS) -> Tuple[List[Dict], Optional[Dict]]:
+    async def plan(self, mode: ChatMode = ChatMode.FOCUS, unread_messages: List[Dict] = None) -> Tuple[List[Dict], Optional[Dict]]:
         """
         执行完整的增强版规划流程。
 
         Args:
             mode (ChatMode): 当前的聊天模式，默认为 FOCUS。
-            use_enhanced (bool): 是否使用增强功能，默认为 True。
+            unread_messages (List[Dict]): 未读消息列表，用于兴趣度计算。
 
         Returns:
             Tuple[List[Dict], Optional[Dict]]: 一个元组，包含：
@@ -81,7 +80,7 @@ class ActionPlanner:
         try:
             self.planner_stats["total_plans"] += 1
 
-            return await self._enhanced_plan_flow(mode)
+            return await self._enhanced_plan_flow(mode, unread_messages or [])
 
 
         except Exception as e:
@@ -89,17 +88,17 @@ class ActionPlanner:
             self.planner_stats["failed_plans"] += 1
             return [], None
 
-    async def _enhanced_plan_flow(self, mode: ChatMode) -> Tuple[List[Dict], Optional[Dict]]:
+    async def _enhanced_plan_flow(self, mode: ChatMode, unread_messages: List[Dict]) -> Tuple[List[Dict], Optional[Dict]]:
         """执行增强版规划流程"""
         try:
             # 1. 生成初始 Plan
             initial_plan = await self.generator.generate(mode)
 
-            # 2. 兴趣度评分
-            if initial_plan.chat_history:
+            # 2. 兴趣度评分 - 只对未读消息进行评分
+            if unread_messages:
                 bot_nickname = global_config.bot.nickname
                 interest_scores = self.interest_scoring.calculate_interest_scores(
-                    initial_plan.chat_history, bot_nickname
+                    unread_messages, bot_nickname
                 )
 
                 # 3. 根据兴趣度调整可用动作
@@ -132,18 +131,12 @@ class ActionPlanner:
             logger.error(f"增强版规划流程出错: {e}")
             self.planner_stats["failed_plans"] += 1
             return [], None
-
-        except Exception as e:
-            logger.error(f"增强版规划流程出错: {e}")
-            self.planner_stats["failed_plans"] += 1
-            return [], None
         
     def _update_stats_from_execution_result(self, execution_result: Dict[str, any]):
         """根据执行结果更新规划器统计"""
         if not execution_result:
             return
-            
-        executed_count = execution_result.get("executed_count", 0)
+
         successful_count = execution_result.get("successful_count", 0)
         
         # 更新成功执行计数

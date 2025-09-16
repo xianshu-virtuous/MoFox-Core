@@ -121,10 +121,23 @@ class MainSystem:
     def _cleanup():
         """清理资源"""
         try:
+            # 停止消息管理器
+            from src.chat.message_manager import message_manager
+            import asyncio
+
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(message_manager.stop())
+            else:
+                loop.run_until_complete(message_manager.stop())
+            logger.info("🛑 消息管理器已停止")
+        except Exception as e:
+            logger.error(f"停止消息管理器时出错: {e}")
+
+        try:
             # 停止消息重组器
             from src.plugin_system.core.event_manager import event_manager
             from src.plugin_system import EventType
-            import asyncio
             asyncio.run(event_manager.trigger_event(EventType.ON_STOP,permission_group="SYSTEM"))
             from src.utils.message_chunker import reassembler
 
@@ -283,6 +296,11 @@ MoFox_Bot(第三方修改版)
 
         await reassembler.start_cleanup_task()
         logger.info("消息重组器已启动")
+
+        # 启动消息管理器
+        from src.chat.message_manager import message_manager
+        await message_manager.start()
+        logger.info("消息管理器已启动")
 
         # 初始化个体特征
         await self.individuality.initialize()

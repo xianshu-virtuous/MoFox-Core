@@ -29,10 +29,9 @@ class InterestScoringSystem:
 
         # 评分权重
         self.score_weights = {
-            "interest_match": 0.4,    # 兴趣匹配度权重
+            "interest_match": 0.5,    # 兴趣匹配度权重
             "relationship": 0.3,      # 关系分权重
             "mentioned": 0.2,         # 是否提及bot权重
-            "time_factor": 0.1,       # 时间因子权重
         }
 
         # 评分阈值
@@ -68,24 +67,19 @@ class InterestScoringSystem:
         relationship_score = self._calculate_relationship_score(message.user_info.user_id)
 
         # 3. 计算提及分数
-        mentioned_score = self._calculate_mentioned_score(message.processed_plain_text, bot_nickname)
-
-        # 4. 计算时间因子
-        time_factor_score = self._calculate_time_factor_score(message.time)
+        mentioned_score = self._calculate_mentioned_score(message, bot_nickname)
 
         # 5. 计算总分
         total_score = (
             interest_match_score * self.score_weights["interest_match"] +
             relationship_score * self.score_weights["relationship"] +
-            mentioned_score * self.score_weights["mentioned"] +
-            time_factor_score * self.score_weights["time_factor"]
+            mentioned_score * self.score_weights["mentioned"]
         )
 
         details = {
             "interest_match": f"兴趣匹配度: {interest_match_score:.2f}",
             "relationship": f"关系分: {relationship_score:.2f}",
             "mentioned": f"提及分数: {mentioned_score:.2f}",
-            "time_factor": f"时间因子: {time_factor_score:.2f}",
         }
 
         return InterestScore(
@@ -94,7 +88,6 @@ class InterestScoringSystem:
             interest_match_score=interest_match_score,
             relationship_score=relationship_score,
             mentioned_score=mentioned_score,
-            time_factor_score=time_factor_score,
             details=details
         )
 
@@ -132,39 +125,16 @@ class InterestScoringSystem:
             return min(relationship_value, 1.0)
         return 0.3  # 默认新用户的基础分
 
-    def _calculate_mentioned_score(self, content: str, bot_nickname: str) -> float:
+    def _calculate_mentioned_score(self, msg: DatabaseMessages, bot_nickname: str) -> float:
         """计算提及分数"""
-        if not content:
+        if not msg.processed_plain_text:
             return 0.0
 
-        content_lower = content.lower()
-        bot_name_lower = bot_nickname.lower()
-
-        if bot_name_lower in content_lower:
+        if msg.is_mentioned or (bot_nickname and bot_nickname in msg.processed_plain_text):
             return 1.0
-
-        # 检查是否被@提及
-        if "@" in content and any(alias.lower() in content_lower for alias in global_config.bot.alias_names or []):
-            return 1.0
-
+        
         return 0.0
-
-    def _calculate_time_factor_score(self, timestamp: float) -> float:
-        """计算时间因子分数"""
-        message_time = datetime.fromtimestamp(timestamp)
-        current_time = datetime.now()
-        time_diff_hours = (current_time - message_time).total_seconds() / 3600
-
-        # 24小时内消息时间因子为1.0，之后逐渐衰减
-        if time_diff_hours <= 24:
-            return 1.0
-        elif time_diff_hours <= 72:  # 3天内
-            return 0.8
-        elif time_diff_hours <= 168:  # 7天内
-            return 0.6
-        else:
-            return 0.3
-
+    
     def should_reply(self, score: InterestScore) -> bool:
         """判断是否应该回复"""
         base_threshold = self.reply_threshold
