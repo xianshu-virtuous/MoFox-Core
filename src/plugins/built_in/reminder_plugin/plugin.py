@@ -51,12 +51,12 @@ class ReminderTask(AsyncTask):
             )
 
             if success and reply_set:
-                for _, text in reply_set:
+                for i, (_, text) in enumerate(reply_set):
                     if self.is_group:
-                        message_payload = [
-                            {"type": "at", "data": {"qq": self.target_user_id}},
-                            {"type": "text", "data": {"text": f" {text}"}}
-                        ]
+                        message_payload = []
+                        if i == 0:
+                            message_payload.append({"type": "at", "data": {"qq": self.target_user_id}})
+                        message_payload.append({"type": "text", "data": {"text": f" {text}"}})
                         await send_api.adapter_command_to_stream(
                             action="send_group_msg",
                             params={"group_id": self.group_id, "message": message_payload},
