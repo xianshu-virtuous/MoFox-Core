@@ -795,10 +795,36 @@ class ModuleColoredConsoleRenderer:
             event_content = str(event)
 
         # 在full模式下为消息内容着色
-        if self._colors and self._enable_full_content_colors and module_color:
-            event_content = f"{module_color}{event_content}{RESET_COLOR}"
-
-        parts.append(event_content)
+        if self._colors and self._enable_full_content_colors:
+            # 检查是否包含“内心思考:”
+            if "内心思考:" in event_content:
+                # 使用明亮的粉色
+                thought_color = "\033[38;5;218m"
+                # 分割消息内容
+                prefix, thought = event_content.split("内心思考:", 1)
+                
+                # 前缀部分（“决定进行回复，”）使用模块颜色
+                if module_color:
+                    prefix_colored = f"{module_color}{prefix.strip()}{RESET_COLOR}"
+                else:
+                    prefix_colored = prefix.strip()
+                
+                # “内心思考”部分换行并使用专属颜色
+                thought_colored = f"\n\n{thought_color}内心思考:{thought.strip()}{RESET_COLOR}\n"
+                
+                # 重新组合
+                # parts.append(prefix_colored + thought_colored)
+                # 将前缀和思考内容作为独立的part添加，避免它们之间出现多余的空格
+                parts.append(prefix_colored)
+                parts.append(thought_colored)
+                
+            elif module_color:
+                event_content = f"{module_color}{event_content}{RESET_COLOR}"
+                parts.append(event_content)
+            else:
+                parts.append(event_content)
+        else:
+            parts.append(event_content)
 
         # 处理其他字段
         extras = []

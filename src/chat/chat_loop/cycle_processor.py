@@ -229,11 +229,13 @@ class CycleProcessor:
 
                     return {"action_type": "no_reply", "success": True, "reply_text": "", "command": ""}
                 elif action_info["action_type"] != "reply" and action_info["action_type"] != "no_action":
-                    # 执行普通动作
+                    # 记录并执行普通动作
+                    reason = action_info.get("reasoning", f"执行动作 {action_info['action_type']}")
+                    logger.info(f"{self.log_prefix} 决定执行动作 '{action_info['action_type']}'，内心思考: {reason}")
                     with Timer("动作执行", cycle_timers):
                         success, reply_text, command = await self._handle_action(
                             action_info["action_type"],
-                            action_info["reasoning"],
+                            reason, # 使用已获取的reason
                             action_info["action_data"],
                             cycle_timers,
                             thinking_id,
@@ -248,6 +250,8 @@ class CycleProcessor:
                 else:
                     # 生成回复
                     try:
+                        reason = action_info.get("reasoning", "决定进行回复")
+                        logger.info(f"{self.log_prefix} 决定进行回复，内心思考: {reason}")
                         success, response_set, _ = await generator_api.generate_reply(
                             chat_stream=self.context.chat_stream,
                             reply_message=action_info["action_message"],

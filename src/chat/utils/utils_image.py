@@ -175,7 +175,7 @@ class ImageManager:
 
             # 查询ImageDescriptions表的缓存描述
             if cached_description := self._get_description_from_db(image_hash, "emoji"):
-                logger.info(f"[缓存命中] 使用ImageDescriptions表中的描述: {cached_description[:50]}...")
+                logger.info(f"[缓存命中] 使用ImageDescriptions表中的描述: {cached_description}...")
                 return f"[表情包：{cached_description}]"
 
             # === 二步走识别流程 ===
@@ -236,7 +236,7 @@ class ImageManager:
             if len(emotions) > 1 and emotions[1] != emotions[0]:
                 final_emotion = f"{emotions[0]}，{emotions[1]}"
 
-            logger.info(f"[emoji识别] 详细描述: {detailed_description[:50]}... -> 情感标签: {final_emotion}")
+            logger.info(f"[emoji识别] 详细描述: {detailed_description}... -> 情感标签: {final_emotion}")
 
             if cached_description := self._get_description_from_db(image_hash, "emoji"):
                 logger.warning(f"虽然生成了描述，但是找到缓存表情包描述: {cached_description}")
@@ -317,11 +317,11 @@ class ImageManager:
 
                     # 如果已有描述，直接返回
                     if existing_image.description:
-                        logger.debug(f"[缓存命中] 使用Images表中的图片描述: {existing_image.description[:50]}...")
+                        logger.debug(f"[缓存命中] 使用Images表中的图片描述: {existing_image.description}...")
                         return f"[图片：{existing_image.description}]"
 
             if cached_description := self._get_description_from_db(image_hash, "image"):
-                logger.debug(f"[缓存命中] 使用ImageDescriptions表中的描述: {cached_description[:50]}...")
+                logger.debug(f"[缓存命中] 使用ImageDescriptions表中的描述: {cached_description}...")
                 return f"[图片：{cached_description}]"
 
             # 调用AI获取描述
@@ -379,7 +379,7 @@ class ImageManager:
             # 保存描述到ImageDescriptions表作为备用缓存
             self._save_description_to_db(image_hash, description, "image")
 
-            logger.info(f"[VLM完成] 图片描述生成: {description[:50]}...")
+            logger.info(f"[VLM完成] 图片描述生成: {description}...")
             return f"[图片：{description}]"
         except Exception as e:
             logger.error(f"获取图片描述失败: {str(e)}")

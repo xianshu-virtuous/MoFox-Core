@@ -19,37 +19,63 @@ def _sync_db_get(model_class, filters=None, order_by=None, limit=None, single_re
     """同步版本的db_get，用于在线程池中调用"""
     import asyncio
 
+    # sourcery skip: use-contextlib-suppress
+    """
+    一个线程安全的、同步的db_get包装器。
+    用于从非异步的线程（如线程池）中安全地调用异步的db_get函数。
+    """
+    import asyncio
+    from concurrent.futures import Future
+    import threading
+
+    main_loop = None
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # 如果事件循环正在运行，创建新的事件循环
-            import threading
-
-            result = None
-            exception = None
-
-            def run_in_thread():
-                nonlocal result, exception
-                try:
-                    new_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(new_loop)
-                    result = new_loop.run_until_complete(db_get(model_class, filters, limit, order_by, single_result))
-                    new_loop.close()
-                except Exception as e:
-                    exception = e
-
-            thread = threading.Thread(target=run_in_thread)
-            thread.start()
-            thread.join()
-
-            if exception:
-                raise exception
-            return result
-        else:
-            return loop.run_until_complete(db_get(model_class, filters, limit, order_by, single_result))
+        main_loop = asyncio.get_running_loop()
     except RuntimeError:
-        # 没有事件循环，创建一个新的
-        return asyncio.run(db_get(model_class, filters, limit, order_by, single_result))
+        # 如果在主线程中，但事件循环没有运行，就获取它
+        main_loop = asyncio.get_event_loop_policy().get_event_loop()
+
+    # 如果当前线程不是主线程（即事件循环所在的线程）
+    if threading.current_thread() is not threading.main_thread():
+        future = asyncio.run_coroutine_threadsafe(
+            db_get(model_class, filters, limit, order_by, single_result), main_loop
+        )
+        try:
+            # 设置超时以防止永久阻塞
+            return future.result(timeout=30)
+        except Exception as e:
+            logger.error(f"在 _sync_db_get 的子线程中发生错误: {e}")
+            return None
+    else:
+        # 如果就在主线程，检查循环是否正在运行
+        if main_loop.is_running():
+            # 不应该在正在运行的循环上调用 run_until_complete
+            # 这种情况很复杂，理论上不应该发生在一个设计良好的应用中
+            # 但如果发生了，我们尝试用 create_task 和同步等待的方式处理
+            # 注意：这可能会导致死锁，如果主循环也在等待这个结果
+            logger.warning("在正在运行的主事件循环中同步调用了异步函数，这可能导致死锁。")
+            future = Future()
+
+            async def task_wrapper():
+                try:
+                    result = await db_get(model_class, filters, limit, order_by, single_result)
+                    future.set_result(result)
+                except Exception as e_inner:
+                    future.set_exception(e_inner)
+            
+            asyncio.create_task(task_wrapper())
+            try:
+                return future.result(timeout=30)
+            except Exception as e:
+                logger.error(f"在 _sync_db_get 的主线程（运行中）中发生错误: {e}")
+                return None
+        else:
+            # 如果主循环没有运行，我们可以安全地使用它来运行我们的任务
+            try:
+                return main_loop.run_until_complete(db_get(model_class, filters, limit, order_by, single_result))
+            except Exception as e:
+                logger.error(f"在 _sync_db_get 的主线程（未运行）中发生错误: {e}")
+                return None
 
 
 # 统计数据的键
