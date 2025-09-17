@@ -35,8 +35,8 @@ class InterestScoringSystem:
 
         # 连续不回复概率提升
         self.no_reply_count = 0
-        self.max_no_reply_count = 5
-        self.probability_boost_per_no_reply = 0.15  # 每次不回复增加15%概率
+        self.max_no_reply_count = 15
+        self.probability_boost_per_no_reply = 0.01  # 每次不回复增加15%概率
 
         # 用户关系数据
         self.user_relationships: Dict[str, float] = {}  # user_id -> relationship_score
@@ -148,7 +148,7 @@ class InterestScoringSystem:
                 logger.debug(f"   🔢 匹配详情: {match_result.match_scores}")
 
                 # 返回匹配分数，考虑置信度
-                final_score = match_result.overall_score * match_result.confidence
+                final_score = match_result.overall_score * 1.15 * match_result.confidence
                 logger.debug(f"⚖️  最终分数(总分×置信度): {final_score:.3f}")
                 return final_score
             else:
@@ -226,7 +226,7 @@ class InterestScoringSystem:
             return 0.0
 
         if msg.is_mentioned or (bot_nickname and bot_nickname in msg.processed_plain_text):
-            return 1.0
+            return 3.0
         
         return 0.0
     
@@ -258,6 +258,7 @@ class InterestScoringSystem:
         logger.debug(f"   🎯 有效阈值: {effective_threshold:.3f}")
 
         # 做出决策
+        score.total_score = score.total_score * 1
         should_reply = score.total_score >= effective_threshold
         decision = "✅ 应该回复" if should_reply else "❌ 不回复"
 

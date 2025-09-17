@@ -611,6 +611,19 @@ class BotInterestManager:
 
             logger.info("✅ 兴趣标签已成功保存到数据库")
 
+            # 验证保存是否成功
+            with get_db_session() as session:
+                saved_record = session.query(DBBotPersonalityInterests).filter(
+                    DBBotPersonalityInterests.personality_id == interests.personality_id
+                ).first()
+                session.commit()
+                if saved_record:
+                    logger.info(f"✅ 验证成功：数据库中存在personality_id为 {interests.personality_id} 的记录")
+                    logger.info(f"   版本: {saved_record.version}")
+                    logger.info(f"   最后更新: {saved_record.last_updated}")
+                else:
+                    logger.error(f"❌ 验证失败：数据库中未找到personality_id为 {interests.personality_id} 的记录")
+
         except Exception as e:
             logger.error(f"❌ 保存兴趣标签到数据库失败: {e}")
             logger.error("🔍 错误详情:")

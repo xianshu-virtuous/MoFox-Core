@@ -478,7 +478,17 @@ class ChatBot:
                 template_group_name = None
 
             async def preprocess():
-                # 使用消息管理器处理消息
+                # 存储消息到数据库
+                from .storage import MessageStorage
+
+                try:
+                    await MessageStorage.store_message(message, message.chat_stream)
+                    logger.debug(f"消息已存储到数据库: {message.message_info.message_id}")
+                except Exception as e:
+                    logger.error(f"存储消息到数据库失败: {e}")
+                    traceback.print_exc()
+
+                # 使用消息管理器处理消息（保持原有功能）
                 from src.common.data_models.database_data_model import DatabaseMessages
 
                 # 创建数据库消息对象

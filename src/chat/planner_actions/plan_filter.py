@@ -51,8 +51,11 @@ class PlanFilter:
             llm_content, _ = await self.planner_llm.generate_response_async(prompt=prompt)
 
             if llm_content:
-                logger.info(f"规划器原始返回: {llm_content}")
-                parsed_json = orjson.loads(repair_json(llm_content))
+                logger.debug(f"墨墨在这里加了日志 -> LLM a原始返回: {llm_content}")
+                try:
+                    parsed_json = orjson.loads(repair_json(llm_content))
+                except orjson.JSONDecodeError:
+                    prased_json = {"action": "no_action", "reason": "返回内容无法解析为JSON"}
                 logger.debug(f"墨墨在这里加了日志 -> 解析后的 JSON: {parsed_json}")
                 
                 if isinstance(parsed_json, dict):
