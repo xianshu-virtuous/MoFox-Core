@@ -1,5 +1,5 @@
 [inner]
-version = "1.3.4"
+version = "1.3.5"
 
 # 配置文件版本号迭代规则同bot_config.toml
 
@@ -191,6 +191,11 @@ temperature = 0.1                   # 低温度确保检测结果稳定
 max_tokens = 200                    # 检测结果不需要太长的输出
 
 [model_task_config.monthly_plan_generator] # 月层计划生成模型
+model_list = ["siliconflow-deepseek-v3"]
+temperature = 0.7
+max_tokens = 1000
+
+[model_task_config.relationship_tracker] # 用户关系追踪模型
 model_list = ["siliconflow-deepseek-v3"]
 temperature = 0.7
 max_tokens = 1000

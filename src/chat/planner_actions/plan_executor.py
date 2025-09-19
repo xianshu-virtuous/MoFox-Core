@@ -2,6 +2,7 @@
 PlanExecutor: 接收 Plan 对象并执行其中的所有动作。
 集成用户关系追踪机制，自动记录交互并更新关系。
 """
+
 import asyncio
 import time
 from typing import Dict, List
@@ -94,7 +95,9 @@ class PlanExecutor:
         self.execution_stats["successful_executions"] += successful_count
         self.execution_stats["failed_executions"] += len(execution_results) - successful_count
 
-        logger.info(f"动作执行完成: 总数={len(plan.decided_actions)}, 成功={successful_count}, 失败={len(execution_results) - successful_count}")
+        logger.info(
+            f"动作执行完成: 总数={len(plan.decided_actions)}, 成功={successful_count}, 失败={len(execution_results) - successful_count}"
+        )
 
         return {
             "executed_count": len(plan.decided_actions),
@@ -123,7 +126,7 @@ class PlanExecutor:
         try:
             logger.info(f"执行回复动作: {action_info.action_type}, 原因: {action_info.reasoning}")
 
-            if action_info.action_message.get("user_id","") == str(global_config.bot.qq_account):
+            if action_info.action_message.get("user_id", "") == str(global_config.bot.qq_account):
                 logger.warning("尝试回复自己，跳过此动作以防止死循环。")
                 return {
                     "action_type": action_info.action_type,
@@ -143,8 +146,7 @@ class PlanExecutor:
 
             # 通过动作管理器执行回复
             reply_content = await self.action_manager.execute_action(
-                action_name=action_info.action_type,
-                **action_params
+                action_name=action_info.action_type, **action_params
             )
 
             success = True
@@ -185,13 +187,15 @@ class PlanExecutor:
             for i, result in enumerate(executed_results):
                 if isinstance(result, Exception):
                     logger.error(f"执行动作 {other_actions[i].action_type} 时发生异常: {result}")
-                    results.append({
-                        "action_type": other_actions[i].action_type,
-                        "success": False,
-                        "error_message": str(result),
-                        "execution_time": 0,
-                        "reasoning": other_actions[i].reasoning,
-                    })
+                    results.append(
+                        {
+                            "action_type": other_actions[i].action_type,
+                            "success": False,
+                            "error_message": str(result),
+                            "execution_time": 0,
+                            "reasoning": other_actions[i].reasoning,
+                        }
+                    )
                 else:
                     results.append(result)
 
@@ -215,10 +219,7 @@ class PlanExecutor:
             }
 
             # 通过动作管理器执行动作
-            await self.action_manager.execute_action(
-                action_name=action_info.action_type,
-                **action_params
-            )
+            await self.action_manager.execute_action(action_name=action_info.action_type, **action_params)
 
             success = True
             logger.info(f"其他动作执行成功: {action_info.action_type}")
@@ -239,30 +240,49 @@ class PlanExecutor:
         }
 
     async def _track_user_interaction(self, action_info: ActionPlannerInfo, plan: Plan, reply_content: str):
-        """追踪用户交互"""
+        """追踪用户交互 - 集成回复后关系追踪"""
         try:
             if not action_info.action_message:
                 return
 
-            # 获取用户信息
-            user_id = action_info.action_message.user_id
-            user_name = action_info.action_message.user_nickname or user_id
-            user_message = action_info.action_message.content
+            # 获取用户信息 - 处理对象和字典两种情况
+            if hasattr(action_info.action_message, "user_id"):
+                # 对象情况
+                user_id = action_info.action_message.user_id
+                user_name = getattr(action_info.action_message, "user_nickname", user_id) or user_id
+                user_message = getattr(action_info.action_message, "content", "")
+            else:
+                # 字典情况
+                user_id = action_info.action_message.get("user_id", "")
+                user_name = action_info.action_message.get("user_nickname", user_id) or user_id
+                user_message = action_info.action_message.get("content", "")
 
-            # 如果有设置关系追踪器，添加交互记录
+            if not user_id:
+                logger.debug("跳过追踪：缺少用户ID")
+                return
+
+            # 如果有设置关系追踪器，执行回复后关系追踪
             if self.relationship_tracker:
+                # 记录基础交互信息（保持向后兼容）
                 self.relationship_tracker.add_interaction(
                     user_id=user_id,
                     user_name=user_name,
                     user_message=user_message,
                     bot_reply=reply_content,
-                    reply_timestamp=time.time()
+                    reply_timestamp=time.time(),
                 )
 
-                logger.debug(f"已添加用户交互追踪: {user_id}")
+                # 执行新的回复后关系追踪
+                await self.relationship_tracker.track_reply_relationship(
+                    user_id=user_id, user_name=user_name, bot_reply_content=reply_content, reply_timestamp=time.time()
+                )
+
+                logger.debug(f"已执行用户交互追踪: {user_id}")
 
         except Exception as e:
             logger.error(f"追踪用户交互时出错: {e}")
+            logger.debug(f"action_message类型: {type(action_info.action_message)}")
+            logger.debug(f"action_message内容: {action_info.action_message}")
 
     def get_execution_stats(self) -> Dict[str, any]:
         """获取执行统计信息"""

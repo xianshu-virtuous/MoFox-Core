@@ -3,6 +3,7 @@
 基于多维度评分机制，包括兴趣匹配度、用户关系分、提及度和时间因子
 现在使用embedding计算智能兴趣匹配
 """
+
 import traceback
 from typing import Dict, List, Any
 
@@ -24,24 +25,26 @@ class InterestScoringSystem:
 
         # 评分权重
         self.score_weights = {
-            "interest_match": 0.5,    # 兴趣匹配度权重
-            "relationship": 0.3,      # 关系分权重
-            "mentioned": 0.2,         # 是否提及bot权重
+            "interest_match": 0.5,  # 兴趣匹配度权重
+            "relationship": 0.3,  # 关系分权重
+            "mentioned": 0.2,  # 是否提及bot权重
         }
 
         # 评分阈值
-        self.reply_threshold = 0.56    # 默认回复阈值
-        self.mention_threshold = 0.3   # 提及阈值
+        self.reply_threshold = 0.62  # 默认回复阈值
+        self.mention_threshold = 0.3  # 提及阈值
 
         # 连续不回复概率提升
         self.no_reply_count = 0
-        self.max_no_reply_count = 20
-        self.probability_boost_per_no_reply = 0.02  # 每次不回复增加5%概率
+        self.max_no_reply_count = 10
+        self.probability_boost_per_no_reply = 0.01  # 每次不回复增加5%概率
 
         # 用户关系数据
         self.user_relationships: Dict[str, float] = {}  # user_id -> relationship_score
 
-    async def calculate_interest_scores(self, messages: List[DatabaseMessages], bot_nickname: str) -> List[InterestScore]:
+    async def calculate_interest_scores(
+        self, messages: List[DatabaseMessages], bot_nickname: str
+    ) -> List[InterestScore]:
         """计算消息的兴趣度评分"""
         logger.info("🚀 开始计算消息兴趣度评分...")
         logger.info(f"📨 收到 {len(messages)} 条消息")
@@ -87,9 +90,9 @@ class InterestScoringSystem:
         # 4. 计算总分
         logger.debug("🧮 计算加权总分...")
         total_score = (
-            interest_match_score * self.score_weights["interest_match"] +
-            relationship_score * self.score_weights["relationship"] +
-            mentioned_score * self.score_weights["mentioned"]
+            interest_match_score * self.score_weights["interest_match"]
+            + relationship_score * self.score_weights["relationship"]
+            + mentioned_score * self.score_weights["mentioned"]
         )
 
         details = {
@@ -108,7 +111,7 @@ class InterestScoringSystem:
             interest_match_score=interest_match_score,
             relationship_score=relationship_score,
             mentioned_score=mentioned_score,
-            details=details
+            details=details,
         )
 
     async def _calculate_interest_match_score(self, content: str, keywords: List[str] = None) -> float:
@@ -150,7 +153,9 @@ class InterestScoringSystem:
                 # 返回匹配分数，考虑置信度和匹配标签数量
                 match_count_bonus = min(len(match_result.matched_tags) * 0.05, 0.3)  # 每多匹配一个标签+0.05，最高+0.3
                 final_score = match_result.overall_score * 1.15 * match_result.confidence + match_count_bonus
-                logger.debug(f"⚖️  最终分数计算: 总分({match_result.overall_score:.3f}) × 1.3 × 置信度({match_result.confidence:.3f}) + 标签数量奖励({match_count_bonus:.3f}) = {final_score:.3f}")
+                logger.debug(
+                    f"⚖️  最终分数计算: 总分({match_result.overall_score:.3f}) × 1.3 × 置信度({match_result.confidence:.3f}) + 标签数量奖励({match_count_bonus:.3f}) = {final_score:.3f}"
+                )
                 return final_score
             else:
                 logger.warning("⚠️ 智能兴趣匹配未返回结果")
@@ -171,6 +176,7 @@ class InterestScoringSystem:
         if message.key_words:
             try:
                 import orjson
+
                 keywords = orjson.loads(message.key_words)
                 if not isinstance(keywords, list):
                     keywords = []
@@ -181,6 +187,7 @@ class InterestScoringSystem:
         if not keywords and message.key_words_lite:
             try:
                 import orjson
+
                 keywords = orjson.loads(message.key_words_lite)
                 if not isinstance(keywords, list):
                     keywords = []
@@ -198,16 +205,18 @@ class InterestScoringSystem:
         import re
 
         # 清理文本
-        content = re.sub(r'[^\w\s\u4e00-\u9fff]', ' ', content)  # 保留中文、英文、数字
+        content = re.sub(r"[^\w\s\u4e00-\u9fff]", " ", content)  # 保留中文、英文、数字
         words = content.split()
 
         # 过滤和关键词提取
         keywords = []
         for word in words:
             word = word.strip()
-            if (len(word) >= 2 and  # 至少2个字符
-                word.isalnum() and  # 字母数字
-                not word.isdigit()):  # 不是纯数字
+            if (
+                len(word) >= 2  # 至少2个字符
+                and word.isalnum()  # 字母数字
+                and not word.isdigit()
+            ):  # 不是纯数字
                 keywords.append(word.lower())
 
         # 去重并限制数量
@@ -215,11 +224,37 @@ class InterestScoringSystem:
         return unique_keywords[:10]  # 返回前10个唯一关键词
 
     def _calculate_relationship_score(self, user_id: str) -> float:
-        """计算关系分"""
+        """计算关系分 - 从数据库获取关系分"""
+        # 优先使用内存中的关系分
         if user_id in self.user_relationships:
             relationship_value = self.user_relationships[user_id]
             return min(relationship_value, 1.0)
-        return 0.3  # 默认新用户的基础分
+
+        # 如果内存中没有，尝试从关系追踪器获取
+        if hasattr(self, "relationship_tracker") and self.relationship_tracker:
+            try:
+                relationship_score = self.relationship_tracker.get_user_relationship_score(user_id)
+                # 同时更新内存缓存
+                self.user_relationships[user_id] = relationship_score
+                return relationship_score
+            except Exception as e:
+                logger.warning(f"从关系追踪器获取关系分失败: {e}")
+        else:
+            # 尝试从全局关系追踪器获取
+            try:
+                from src.chat.affinity_flow.relationship_integration import get_relationship_tracker
+
+                global_tracker = get_relationship_tracker()
+                if global_tracker:
+                    relationship_score = global_tracker.get_user_relationship_score(user_id)
+                    # 同时更新内存缓存
+                    self.user_relationships[user_id] = relationship_score
+                    return relationship_score
+            except Exception as e:
+                logger.warning(f"从全局关系追踪器获取关系分失败: {e}")
+
+        # 默认新用户的基础分
+        return 0.3
 
     def _calculate_mentioned_score(self, msg: DatabaseMessages, bot_nickname: str) -> float:
         """计算提及分数"""
@@ -228,9 +263,9 @@ class InterestScoringSystem:
 
         if msg.is_mentioned or (bot_nickname and bot_nickname in msg.processed_plain_text):
             return 1.0
-        
+
         return 0.0
-    
+
     def should_reply(self, score: InterestScore) -> bool:
         """判断是否应该回复"""
         logger.info("🤔 评估是否应该回复...")
@@ -312,7 +347,6 @@ class InterestScoringSystem:
             "user_relationships": len(self.user_relationships),
         }
 
-
     def reset_stats(self):
         """重置统计信息"""
         self.no_reply_count = 0
@@ -345,7 +379,9 @@ class InterestScoringSystem:
         return {
             "use_smart_matching": self.use_smart_matching,
             "smart_system_initialized": bot_interest_manager.is_initialized,
-            "smart_system_stats": bot_interest_manager.get_interest_stats() if bot_interest_manager.is_initialized else None
+            "smart_system_stats": bot_interest_manager.get_interest_stats()
+            if bot_interest_manager.is_initialized
+            else None,
         }
 
 

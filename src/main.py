@@ -7,6 +7,9 @@ import time
 from maim_message import MessageServer
 from rich.traceback import install
 
+from src.common.remote import TelemetryHeartBeatTask
+from src.manager.async_task_manager import async_task_manager
+from src.chat.utils.statistic import OnlineTimeRecordTask, StatisticOutputTask
 from src.chat.emoji_system.emoji_manager import get_emoji_manager
 from src.chat.memory_system.Hippocampus import hippocampus_manager
 from src.chat.message_receive.bot import chat_bot
@@ -256,6 +259,14 @@ MoFox_Bot(第三方修改版)
         # 初始化表情管理器
         get_emoji_manager().initialize()
         logger.info("表情包管理器初始化成功")
+
+        # 初始化回复后关系追踪系统
+        from src.chat.affinity_flow.relationship_integration import initialize_relationship_tracking
+        relationship_tracker = initialize_relationship_tracking()
+        if relationship_tracker:
+            logger.info("回复后关系追踪系统初始化成功")
+        else:
+            logger.warning("回复后关系追踪系统初始化失败")
 
         # 启动情绪管理器
         await mood_manager.start()

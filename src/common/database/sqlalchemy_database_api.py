@@ -30,6 +30,7 @@ from src.common.database.sqlalchemy_models import (
     Schedule,
     MaiZoneScheduleStatus,
     CacheEntries,
+    UserRelationships,
 )
 from src.common.logger import get_logger
 
@@ -54,6 +55,7 @@ MODEL_MAPPING = {
     "Schedule": Schedule,
     "MaiZoneScheduleStatus": MaiZoneScheduleStatus,
     "CacheEntries": CacheEntries,
+    "UserRelationships": UserRelationships,
 }
 
 

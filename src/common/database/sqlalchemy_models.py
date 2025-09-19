@@ -691,7 +691,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             raise RuntimeError("Database session not initialized")
         session = SessionLocal()
         yield session
-        #session.commit()
+        # session.commit()
     except Exception:
         if session:
             await session.rollback()
@@ -742,4 +742,24 @@ class UserPermissions(Base):
         Index("idx_user_platform_id", "platform", "user_id"),
         Index("idx_user_permission", "platform", "user_id", "permission_node"),
         Index("idx_permission_granted", "permission_node", "granted"),
+    )
+
+
+class UserRelationships(Base):
+    """用户关系模型 - 存储用户与bot的关系数据"""
+
+    __tablename__ = "user_relationships"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(get_string_field(100), nullable=False, unique=True, index=True)  # 用户ID
+    user_name = Column(get_string_field(100), nullable=True)  # 用户名
+    relationship_text = Column(Text, nullable=True)  # 关系印象描述
+    relationship_score = Column(Float, nullable=False, default=0.3)  # 关系分数(0-1)
+    last_updated = Column(Float, nullable=False, default=time.time)  # 最后更新时间
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)  # 创建时间
+
+    __table_args__ = (
+        Index("idx_user_relationship_id", "user_id"),
+        Index("idx_relationship_score", "relationship_score"),
+        Index("idx_relationship_updated", "last_updated"),
     )

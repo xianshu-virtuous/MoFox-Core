@@ -137,7 +137,7 @@ class ModelTaskConfig(ValidatedConfigBase):
     monthly_plan_generator: TaskConfig = Field(..., description="月层计划生成模型配置")
     emoji_vlm: TaskConfig = Field(..., description="表情包识别模型配置")
     anti_injection: TaskConfig = Field(..., description="反注入检测专用模型配置")
-
+    relationship_tracker: TaskConfig = Field(..., description="关系追踪模型配置")
     # 处理配置文件中命名不一致的问题
     utils_video: TaskConfig = Field(..., description="视频分析模型配置（兼容配置文件中的命名）")
 

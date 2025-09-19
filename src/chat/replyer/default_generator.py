@@ -728,12 +728,28 @@ class DefaultReplyer:
                         msg_id = msg.message_id
                         msg_time = time.strftime('%H:%M:%S', time.localtime(msg.time))
                         msg_content = msg.processed_plain_text
-
+                        
+                        # 使用与已读历史消息相同的方法获取用户名
+                        from src.person_info.person_info import PersonInfoManager, get_person_info_manager
+                        
+                        # 获取用户信息
+                        user_info = getattr(msg, 'user_info', {})
+                        platform = getattr(user_info, 'platform', '') or getattr(msg, 'platform', '')
+                        user_id = getattr(user_info, 'user_id', '') or getattr(msg, 'user_id', '')
+                        
+                        # 获取用户名
+                        if platform and user_id:
+                            person_id = PersonInfoManager.get_person_id(platform, user_id)
+                            person_info_manager = get_person_info_manager()
+                            sender_name = person_info_manager.get_value_sync(person_id, "person_name") or "未知用户"
+                        else:
+                            sender_name = "未知用户"
+    
                         # 添加兴趣度信息
                         interest_score = interest_scores.get(msg_id, 0.0)
                         interest_text = f" [兴趣度: {interest_score:.3f}]" if interest_score > 0 else ""
-
-                        unread_lines.append(f"{msg_time}: {msg_content}{interest_text}")
+    
+                        unread_lines.append(f"{msg_time} {sender_name}: {msg_content}{interest_text}")
 
                     unread_history_prompt_str = "\n".join(unread_lines)
                     unread_history_prompt = f"这是未读历史消息，包含兴趣度评分，请优先对兴趣值高的消息做出动作：\n{unread_history_prompt_str}"
@@ -811,12 +827,28 @@ class DefaultReplyer:
                 msg_id = msg.get("message_id", "")
                 msg_time = time.strftime('%H:%M:%S', time.localtime(msg.get("time", time.time())))
                 msg_content = msg.get("processed_plain_text", "")
+                
+                # 使用与已读历史消息相同的方法获取用户名
+                from src.person_info.person_info import PersonInfoManager, get_person_info_manager
+                
+                # 获取用户信息
+                user_info = msg.get("user_info", {})
+                platform = user_info.get("platform") or msg.get("platform", "")
+                user_id = user_info.get("user_id") or msg.get("user_id", "")
+                
+                # 获取用户名
+                if platform and user_id:
+                    person_id = PersonInfoManager.get_person_id(platform, user_id)
+                    person_info_manager = get_person_info_manager()
+                    sender_name = person_info_manager.get_value_sync(person_id, "person_name") or "未知用户"
+                else:
+                    sender_name = "未知用户"
 
                 # 添加兴趣度信息
                 interest_score = interest_scores.get(msg_id, 0.0)
                 interest_text = f" [兴趣度: {interest_score:.3f}]" if interest_score > 0 else ""
 
-                unread_lines.append(f"{msg_time}: {msg_content}{interest_text}")
+                unread_lines.append(f"{msg_time} {sender_name}: {msg_content}{interest_text}")
 
             unread_history_prompt_str = "\n".join(unread_lines)
             unread_history_prompt = f"这是未读历史消息，包含兴趣度评分，请优先对兴趣值高的消息做出动作：\n{unread_history_prompt_str}"

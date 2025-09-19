@@ -2,6 +2,7 @@
 主规划器入口，负责协调 PlanGenerator, PlanFilter, 和 PlanExecutor。
 集成兴趣度评分系统和用户关系追踪机制，实现智能化的聊天决策。
 """
+
 from dataclasses import asdict
 from typing import Dict, List, Optional, Tuple
 
@@ -17,9 +18,10 @@ from src.config.config import global_config
 from src.plugin_system.base.component_types import ChatMode
 import src.chat.planner_actions.planner_prompts #noga  # noqa: F401
 # 导入提示词模块以确保其被初始化
-from src.chat.planner_actions import planner_prompts #noqa
+from src.chat.planner_actions import planner_prompts  # noqa
 
 logger = get_logger("planner")
+
 
 class ActionPlanner:
     """
@@ -49,8 +51,25 @@ class ActionPlanner:
         # 初始化兴趣度评分系统
         self.interest_scoring = InterestScoringSystem()
 
-        # 初始化用户关系追踪器
-        self.relationship_tracker = UserRelationshipTracker(self.interest_scoring)
+        # 尝试获取全局关系追踪器，如果没有则创建新的
+        try:
+            from src.chat.affinity_flow.relationship_integration import get_relationship_tracker
+
+            global_relationship_tracker = get_relationship_tracker()
+            if global_relationship_tracker:
+                # 使用全局关系追踪器
+                self.relationship_tracker = global_relationship_tracker
+                # 设置兴趣度评分系统的关系追踪器引用
+                self.interest_scoring.relationship_tracker = self.relationship_tracker
+                logger.info("使用全局关系追踪器")
+            else:
+                # 创建新的关系追踪器
+                self.relationship_tracker = UserRelationshipTracker(self.interest_scoring)
+                logger.info("创建新的关系追踪器实例")
+        except Exception as e:
+            logger.warning(f"获取全局关系追踪器失败: {e}")
+            # 创建新的关系追踪器
+            self.relationship_tracker = UserRelationshipTracker(self.interest_scoring)
 
         # 设置执行器的关系追踪器
         self.executor.set_relationship_tracker(self.relationship_tracker)
@@ -64,7 +83,9 @@ class ActionPlanner:
             "other_actions_executed": 0,
         }
 
-    async def plan(self, mode: ChatMode = ChatMode.FOCUS, message_data: dict = None) -> Tuple[List[Dict], Optional[Dict]]:
+    async def plan(
+        self, mode: ChatMode = ChatMode.FOCUS, message_data: dict = None
+    ) -> Tuple[List[Dict], Optional[Dict]]:
         """
         执行完整的增强版规划流程。
 
@@ -86,13 +107,14 @@ class ActionPlanner:
 
             return await self._enhanced_plan_flow(mode, unread_messages or [])
 
-
         except Exception as e:
             logger.error(f"规划流程出错: {e}")
             self.planner_stats["failed_plans"] += 1
             return [], None
 
-    async def _enhanced_plan_flow(self, mode: ChatMode, unread_messages: List[Dict]) -> Tuple[List[Dict], Optional[Dict]]:
+    async def _enhanced_plan_flow(
+        self, mode: ChatMode, unread_messages: List[Dict]
+    ) -> Tuple[List[Dict], Optional[Dict]]:
         """执行增强版规划流程"""
         try:
             # 1. 生成初始 Plan
@@ -101,9 +123,7 @@ class ActionPlanner:
             # 2. 兴趣度评分 - 只对未读消息进行评分
             if unread_messages:
                 bot_nickname = global_config.bot.nickname
-                interest_scores = await self.interest_scoring.calculate_interest_scores(
-                    unread_messages, bot_nickname
-                )
+                interest_scores = await self.interest_scoring.calculate_interest_scores(unread_messages, bot_nickname)
 
                 # 3. 根据兴趣度调整可用动作
                 if interest_scores:
@@ -123,6 +143,7 @@ class ActionPlanner:
                 logger.info(f"📊 最低要求: 阈值({base_threshold:.3f}) × 0.8 = {threshold_requirement:.3f}")
                 # 直接返回 no_action
                 from src.common.data_models.info_data_model import ActionPlannerInfo
+
                 no_action = ActionPlannerInfo(
                     action_type="no_action",
                     reasoning=f"兴趣度评分 {score:.3f} 未达阈值80% {threshold_requirement:.3f}",
@@ -133,7 +154,7 @@ class ActionPlanner:
                 filtered_plan.decided_actions = [no_action]
             else:
                 # 4. 筛选 Plan
-                filtered_plan = await self.filter.filter(reply_not_available,initial_plan)
+                filtered_plan = await self.filter.filter(reply_not_available, initial_plan)
 
             # 检查filtered_plan是否有reply动作，以便记录reply action
             has_reply_action = False
@@ -158,42 +179,40 @@ class ActionPlanner:
             logger.error(f"增强版规划流程出错: {e}")
             self.planner_stats["failed_plans"] += 1
             return [], None
-        
+
     def _update_stats_from_execution_result(self, execution_result: Dict[str, any]):
         """根据执行结果更新规划器统计"""
         if not execution_result:
             return
 
         successful_count = execution_result.get("successful_count", 0)
-        
+
         # 更新成功执行计数
         self.planner_stats["successful_plans"] += successful_count
-        
+
         # 统计回复动作和其他动作
         reply_count = 0
         other_count = 0
-        
+
         for result in execution_result.get("results", []):
             action_type = result.get("action_type", "")
             if action_type in ["reply", "proactive_reply"]:
                 reply_count += 1
             else:
                 other_count += 1
-        
+
         self.planner_stats["replies_generated"] += reply_count
         self.planner_stats["other_actions_executed"] += other_count
 
     def _build_return_result(self, plan: Plan) -> Tuple[List[Dict], Optional[Dict]]:
         """构建返回结果"""
         final_actions = plan.decided_actions or []
-        final_target_message = next(
-            (act.action_message for act in final_actions if act.action_message), None
-        )
+        final_target_message = next((act.action_message for act in final_actions if act.action_message), None)
 
         final_actions_dict = [asdict(act) for act in final_actions]
 
         if final_target_message:
-            if hasattr(final_target_message, '__dataclass_fields__'):
+            if hasattr(final_target_message, "__dataclass_fields__"):
                 final_target_message_dict = asdict(final_target_message)
             else:
                 final_target_message_dict = final_target_message
