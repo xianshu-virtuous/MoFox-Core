@@ -907,7 +907,7 @@ class DefaultReplyer:
             target = "(无消息内容)"
 
         person_info_manager = get_person_info_manager()
-        person_id = person_info_manager.get_person_id_by_person_name(sender)
+        person_id = await person_info_manager.get_person_id_by_person_name(sender)
         platform = chat_stream.platform
 
         target = replace_user_references_sync(target, chat_stream.platform, replace_bot_name=True)
@@ -936,7 +936,7 @@ class DefaultReplyer:
         # 获取目标用户信息，用于s4u模式
         target_user_info = None
         if sender:
-            target_user_info = person_info_manager.get_person_info_by_name(sender)
+            target_user_info = await person_info_manager.get_person_info_by_name(sender)
             
         from src.chat.utils.prompt import Prompt
         # 并行执行六个构建任务

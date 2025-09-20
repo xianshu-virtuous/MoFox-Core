@@ -53,14 +53,14 @@ async def build_cross_context_normal(chat_stream: ChatStream, other_chat_infos: 
             continue
 
         try:
-            messages = get_raw_msg_before_timestamp_with_chat(
+            messages = await get_raw_msg_before_timestamp_with_chat(
                 chat_id=stream_id,
                 timestamp=time.time(),
                 limit=5,  # 可配置
             )
             if messages:
                 chat_name = get_chat_manager().get_stream_name(stream_id) or chat_raw_id
-                formatted_messages, _ = build_readable_messages_with_id(messages, timestamp_mode="relative")
+                formatted_messages, _ = await build_readable_messages_with_id(messages, timestamp_mode="relative")
                 cross_context_messages.append(f'[以下是来自"{chat_name}"的近期消息]\n{formatted_messages}')
         except Exception as e:
             logger.error(f"获取聊天 {chat_raw_id} 的消息失败: {e}")
@@ -92,7 +92,7 @@ async def build_cross_context_s4u(
                     continue
 
                 try:
-                    messages = get_raw_msg_before_timestamp_with_chat(
+                    messages = await get_raw_msg_before_timestamp_with_chat(
                         chat_id=stream_id,
                         timestamp=time.time(),
                         limit=20,  # 获取更多消息以供筛选
@@ -104,7 +104,7 @@ async def build_cross_context_s4u(
                         user_name = (
                             target_user_info.get("person_name") or target_user_info.get("user_nickname") or user_id
                         )
-                        formatted_messages, _ = build_readable_messages_with_id(
+                        formatted_messages, _ = await build_readable_messages_with_id(
                             user_messages, timestamp_mode="relative"
                         )
                         cross_context_messages.append(
@@ -161,14 +161,14 @@ async def get_chat_history_by_group_name(group_name: str) -> str:
         stream_id = found_stream.stream_id
 
         try:
-            messages = get_raw_msg_before_timestamp_with_chat(
+            messages = await get_raw_msg_before_timestamp_with_chat(
                 chat_id=stream_id,
                 timestamp=time.time(),
                 limit=5,  # 可配置
             )
             if messages:
                 chat_name = get_chat_manager().get_stream_name(stream_id) or chat_raw_id
-                formatted_messages, _ = build_readable_messages_with_id(messages, timestamp_mode="relative")
+                formatted_messages, _ = await build_readable_messages_with_id(messages, timestamp_mode="relative")
                 cross_context_messages.append(f'[以下是来自"{chat_name}"的近期消息]\n{formatted_messages}')
         except Exception as e:
             logger.error(f"获取聊天 {chat_raw_id} 的消息失败: {e}")
