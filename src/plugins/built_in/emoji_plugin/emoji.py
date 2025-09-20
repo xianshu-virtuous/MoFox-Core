@@ -77,7 +77,7 @@ class EmojiAction(BaseAction):
 
             # 3. 根据历史记录筛选表情
             try:
-                recent_emojis_desc = get_recent_emojis(self.chat_id, limit=10)
+                recent_emojis_desc = await get_recent_emojis(self.chat_id, limit=10)
                 if recent_emojis_desc:
                     filtered_emojis = [emoji for emoji in all_emojis_obj if emoji.description not in recent_emojis_desc]
                     if filtered_emojis:
@@ -122,7 +122,7 @@ class EmojiAction(BaseAction):
                     emoji_base64, emoji_description = random.choice(all_emojis_data)
                 else:
                     # 获取最近的5条消息内容用于判断
-                    recent_messages = message_api.get_recent_messages(chat_id=self.chat_id, limit=5)
+                    recent_messages = await message_api.get_recent_messages(chat_id=self.chat_id, limit=5)
                     messages_text = ""
                     if recent_messages:
                         messages_text = await message_api.build_readable_messages(
@@ -181,7 +181,7 @@ class EmojiAction(BaseAction):
             elif global_config.emoji.emoji_selection_mode == "description":
                 # --- 详细描述选择模式 ---
                 # 获取最近的5条消息内容用于判断
-                recent_messages = message_api.get_recent_messages(chat_id=self.chat_id, limit=5)
+                recent_messages = await message_api.get_recent_messages(chat_id=self.chat_id, limit=5)
                 messages_text = ""
                 if recent_messages:
                     messages_text = await message_api.build_readable_messages(
@@ -260,7 +260,7 @@ class EmojiAction(BaseAction):
 
             # 发送成功后，记录到历史
             try:
-                add_emoji_to_history(self.chat_id, emoji_description)
+                await add_emoji_to_history(self.chat_id, emoji_description)
             except Exception as e:
                 logger.error(f"{self.log_prefix} 添加表情到历史记录时出错: {e}")
             

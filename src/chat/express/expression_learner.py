@@ -145,7 +145,7 @@ class ExpressionLearner:
         Returns:
             bool: 是否成功触发学习
         """
-        if not self.should_trigger_learning():
+        if not await self.should_trigger_learning():
             return False
 
         try:

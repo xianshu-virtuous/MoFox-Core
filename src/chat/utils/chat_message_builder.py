@@ -1227,7 +1227,7 @@ async def build_anonymous_messages(messages: List[Dict[str, Any]]) -> str:
 
     # 在最前面添加图片映射信息
     final_output_lines = []
-    pic_mapping_info = build_pic_mapping_info(pic_id_mapping)
+    pic_mapping_info = await build_pic_mapping_info(pic_id_mapping)
     if pic_mapping_info:
         final_output_lines.append(pic_mapping_info)
         final_output_lines.append("\n\n")
