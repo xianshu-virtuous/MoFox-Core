@@ -126,7 +126,13 @@ class PlanExecutor:
         try:
             logger.info(f"执行回复动作: {action_info.action_type}, 原因: {action_info.reasoning}")
 
-            if action_info.action_message.get("user_id", "") == str(global_config.bot.qq_account):
+            # 获取用户ID - 兼容对象和字典
+            if hasattr(action_info.action_message, "user_info"):
+                user_id = action_info.action_message.user_info.user_id
+            else:
+                user_id = action_info.action_message.get("user_info", {}).get("user_id")
+
+            if user_id == str(global_config.bot.qq_account):
                 logger.warning("尝试回复自己，跳过此动作以防止死循环。")
                 return {
                     "action_type": action_info.action_type,
@@ -246,15 +252,17 @@ class PlanExecutor:
                 return
 
             # 获取用户信息 - 处理对象和字典两种情况
-            if hasattr(action_info.action_message, "user_id"):
+            if hasattr(action_info.action_message, "user_info"):
                 # 对象情况
-                user_id = action_info.action_message.user_id
-                user_name = getattr(action_info.action_message, "user_nickname", user_id) or user_id
-                user_message = getattr(action_info.action_message, "content", "")
+                user_info = action_info.action_message.user_info
+                user_id = user_info.user_id
+                user_name = user_info.user_nickname or user_id
+                user_message = action_info.action_message.content
             else:
                 # 字典情况
-                user_id = action_info.action_message.get("user_id", "")
-                user_name = action_info.action_message.get("user_nickname", user_id) or user_id
+                user_info = action_info.action_message.get("user_info", {})
+                user_id = user_info.get("user_id")
+                user_name = user_info.get("user_nickname") or user_id
                 user_message = action_info.action_message.get("content", "")
 
             if not user_id:
