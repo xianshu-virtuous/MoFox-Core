@@ -1032,7 +1032,26 @@ class DefaultReplyer:
             # 兼容旧的reply_to
             sender, target = self._parse_reply_target(reply_to)
         else:
-            # 需求：遍历最近消息，找到第一条 user_id != bot_id 的消息作为目标；找不到则静默退出
+            # 获取 platform，如果不存在则从 chat_stream 获取，如果还是 None 则使用默认值
+            if reply_message is None:
+                logger.warning("reply_message 为 None，无法构建prompt")
+                return ""
+            platform = reply_message.get("chat_info_platform")
+            person_id = person_info_manager.get_person_id(
+                platform,  # type: ignore
+                reply_message.get("user_id"),  # type: ignore
+            )
+            person_name = await person_info_manager.get_value(person_id, "person_name")
+            
+            # 如果person_name为None，使用fallback值
+            if person_name is None:
+                # 尝试从reply_message获取用户名
+                fallback_name = reply_message.get("user_nickname") or reply_message.get("user_id", "未知用户")
+                logger.warning(f"未知用户，将存储用户信息:{fallback_name}")
+                person_name = str(fallback_name)
+                person_info_manager.set_value(person_id, "person_name", fallback_name)
+            
+            # 检查是否是bot自己的名字，如果是则替换为"(你)"
             bot_user_id = str(global_config.bot.qq_account)
             # 优先使用传入的 reply_message 如果它不是 bot
             candidate_msg = None

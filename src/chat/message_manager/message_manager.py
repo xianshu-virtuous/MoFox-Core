@@ -134,9 +134,7 @@ class MessageManager:
                         self._clear_all_unread_messages(context)
                         
                 except Exception as e:
-                    # 发生异常时，清除所有未读消息，防止意外关闭等导致消息一直未读
                     logger.error(f"处理聊天流 {stream_id} 时发生异常，将清除所有未读消息: {e}")
-                    self._clear_all_unread_messages(context)
                     raise
 
             logger.debug(f"聊天流 {stream_id} 消息处理完成")

@@ -263,9 +263,6 @@ class PlanFilter:
 
             # 获取聊天流的上下文
             stream_context = message_manager.stream_contexts.get(plan.chat_id)
-            if not stream_context:
-                # 如果没有找到对应的上下文，使用兼容性处理
-                return await self._fallback_build_history_blocks(plan)
 
             # 获取真正的已读和未读消息
             read_messages = stream_context.history_messages  # 已读消息存储在history_messages中

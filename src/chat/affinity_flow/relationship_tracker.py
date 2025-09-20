@@ -114,20 +114,49 @@ class UserRelationshipTracker:
     async def _update_user_relationship(self, interaction: Dict) -> Optional[Dict]:
         """更新单个用户的关系"""
         try:
+            # 获取bot人设信息
+            from src.individuality.individuality import Individuality
+            individuality = Individuality()
+            bot_personality = await individuality.get_personality_block()
+
             prompt = f"""
-分析以下用户交互，更新用户关系：
+你现在是一个有着特定性格和身份的AI助手。你的人设是：{bot_personality}
+
+请以你独特的性格视角，严格按现实逻辑分析以下用户交互，更新用户关系：
 
 用户ID: {interaction["user_id"]}
 用户名: {interaction["user_name"]}
 用户消息: {interaction["user_message"]}
-Bot回复: {interaction["bot_reply"]}
+你的回复: {interaction["bot_reply"]}
 当前关系分: {interaction["current_relationship_score"]}
+
+【重要】关系分数档次定义：
+- 0.0-0.2：陌生人/初次认识 - 仅礼貌性交流
+- 0.2-0.4：普通网友 - 有基本互动但不熟悉
+- 0.4-0.6：熟悉网友 - 经常交流，有一定了解
+- 0.6-0.8：朋友 - 可以分享心情，互相关心
+- 0.8-1.0：好朋友/知己 - 深度信任，亲密无间
+
+【严格要求】：
+1. 加分必须符合现实关系发展逻辑 - 不能因为对方态度好就盲目加分到不符合当前关系档次的分数
+2. 关系提升需要足够的互动积累和时间验证
+3. 即使是朋友关系，单次互动加分通常不超过0.05-0.1
+4. 关系描述要详细具体，包括：
+   - 用户性格特点观察
+   - 印象深刻的互动记忆
+   - 你们关系的具体状态描述
+
+根据你的人设性格，思考：
+1. 以你的性格，你会如何看待这次互动？
+2. 用户的行为是否符合你性格的喜好？
+3. 这次互动是否真的让你们的关系提升了一个档次？为什么？
+4. 有什么特别值得记住的互动细节？
 
 请以JSON格式返回更新结果：
 {{
-    "new_relationship_score": 0.0~1.0的数值,
-    "reasoning": "更新理由",
-    "interaction_summary": "交互总结"
+    "new_relationship_score": 0.0~1.0的数值（必须符合现实逻辑）,
+    "reasoning": "从你的性格角度说明更新理由，重点说明是否符合现实关系发展逻辑",
+    "interaction_summary": "基于你性格的交互总结，包含印象深刻的互动记忆"
 }}
 """
 
@@ -470,36 +499,59 @@ Bot回复: {interaction["bot_reply"]}
             # 构建分析提示
             user_reactions_text = "\n".join([f"- {msg.processed_plain_text}" for msg in user_reactions])
 
+            # 获取bot人设信息
+            from src.individuality.individuality import Individuality
+            individuality = Individuality()
+            bot_personality = await individuality.get_personality_block()
+
             prompt = f"""
-分析以下用户交互，更新用户关系印象和分数：
+你现在是一个有着特定性格和身份的AI助手。你的人设是：{bot_personality}
+
+请以你独特的性格视角，严格按现实逻辑分析以下用户交互，更新用户关系印象和分数：
 
 用户信息:
 - 用户ID: {user_id}
 - 用户名: {user_name}
 
-上次Bot回复: {last_bot_reply.processed_plain_text}
+你上次的回复: {last_bot_reply.processed_plain_text}
 
 用户反应消息:
 {user_reactions_text}
 
-当前Bot回复: {current_reply}
+你当前的回复: {current_reply}
 
 当前关系印象: {current_text}
 当前关系分数: {current_score:.3f}
 
-请根据用户的反应和对话内容，分析用户性格特点、与Bot的互动模式，然后更新关系印象和分数。
+【重要】关系分数档次定义：
+- 0.0-0.2：陌生人/初次认识 - 仅礼貌性交流
+- 0.2-0.4：普通网友 - 有基本互动但不熟悉
+- 0.4-0.6：熟悉网友 - 经常交流，有一定了解
+- 0.6-0.8：朋友 - 可以分享心情，互相关心
+- 0.8-1.0：好朋友/知己 - 深度信任，亲密无间
 
-分析要点:
-1. 用户的情绪态度(积极/消极/中性)
-2. 用户对Bot的兴趣程度
-3. 用户的交流风格(主动/被动/友好/正式等)
-4. 互动的质量和深度
+【严格要求】：
+1. 加分必须符合现实关系发展逻辑 - 不能因为用户反应好就盲目加分
+2. 关系提升需要足够的互动积累和时间验证，单次互动加分通常不超过0.05-0.1
+3. 必须考虑当前关系档次，不能跳跃式提升（比如从0.3直接到0.7）
+4. 关系印象描述要详细具体（100-200字），包括：
+   - 用户性格特点和交流风格观察
+   - 印象深刻的互动记忆和对话片段
+   - 你们关系的具体状态描述和发展阶段
+   - 根据你的性格，你对用户的真实感受
+
+性格视角深度分析:
+1. 以你的性格特点，用户这次的反应给你什么感受？
+2. 用户的情绪和行为符合你性格的喜好吗？具体哪些方面？
+3. 从现实角度看，这次互动是否足以让关系提升到下一个档次？为什么？
+4. 有什么特别值得记住的互动细节或对话内容？
+5. 基于你们的互动历史，用户给你留下了哪些深刻印象？
 
 请以JSON格式返回更新结果:
 {{
-    "relationship_text": "更新的关系印象描述(50字以内)",
-    "relationship_score": 0.0~1.0的新分数,
-    "analysis_reasoning": "分析理由说明",
+    "relationship_text": "详细的关系印象描述(100-200字)，包含用户性格观察、印象深刻记忆、关系状态描述",
+    "relationship_score": 0.0~1.0的新分数（必须严格符合现实逻辑）,
+    "analysis_reasoning": "从你性格角度的深度分析，重点说明分数调整的现实合理性",
     "interaction_quality": "high/medium/low"
 }}
 """

@@ -424,10 +424,50 @@ class PersonInfoManager:
 
         if "-" in platform:
             platform = platform.split("-")[1]
-
+        # 在此处打一个补丁，如果platform为qq，尝试生成id后检查是否存在，如果不存在，则将平台换为napcat后再次检查，如果存在，则更新原id为platform为qq的id
         components = [platform, str(user_id)]
         key = "_".join(components)
-        return hashlib.md5(key.encode()).hexdigest()
+        
+        # 如果不是 qq 平台，直接返回计算的 id
+        if platform != "qq":
+            return hashlib.md5(key.encode()).hexdigest()
+
+        qq_id = hashlib.md5(key.encode()).hexdigest()
+        # 对于 qq 平台，先检查该 person_id 是否已存在；如果存在直接返回
+        def _db_check_and_migrate_sync(p_id: str, raw_user_id: str):
+            try:
+                with get_db_session() as session:
+                    # 检查 qq_id 是否存在
+                    existing_qq = session.execute(select(PersonInfo).where(PersonInfo.person_id == p_id)).scalar()
+                    if existing_qq:
+                        return p_id
+
+                    # 如果 qq_id 不存在，尝试使用 napcat 作为平台生成对应 id 并检查
+                    nap_components = ["napcat", str(raw_user_id)]
+                    nap_key = "_".join(nap_components)
+                    nap_id = hashlib.md5(nap_key.encode()).hexdigest()
+
+                    existing_nap = session.execute(select(PersonInfo).where(PersonInfo.person_id == nap_id)).scalar()
+                    if not existing_nap:
+                        # napcat 也不存在，返回 qq_id（未命中）
+                        return p_id
+
+                    # napcat 存在，迁移该记录：更新 person_id 与 platform -> qq
+                    try:
+                        # 更新现有 napcat 记录
+                        existing_nap.person_id = p_id
+                        existing_nap.platform = "qq"
+                        existing_nap.user_id = str(raw_user_id)
+                        session.commit()
+                        return p_id
+                    except Exception:
+                        session.rollback()
+                        return p_id
+            except Exception as e:
+                logger.error(f"检查/迁移 napcat->qq 时出错: {e}")
+                return p_id
+
+        return _db_check_and_migrate_sync(qq_id, user_id)
 
     async def is_person_known(self, platform: str, user_id: int):
         """判断是否认识某人"""

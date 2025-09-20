@@ -13,6 +13,7 @@ from src.chat.planner_actions.plan_generator import PlanGenerator
 from src.chat.affinity_flow.interest_scoring import InterestScoringSystem
 from src.chat.affinity_flow.relationship_tracker import UserRelationshipTracker
 from src.common.data_models.info_data_model import Plan
+from src.common.data_models.message_manager_data_model import StreamContext
 from src.common.logger import get_logger
 from src.config.config import global_config
 from src.plugin_system.base.component_types import ChatMode
@@ -84,16 +85,14 @@ class ActionPlanner:
         }
 
     async def plan(
-        self, mode: ChatMode = ChatMode.FOCUS, message_data: dict = None
+        self, mode: ChatMode = ChatMode.FOCUS, context: StreamContext = None
     ) -> Tuple[List[Dict], Optional[Dict]]:
         """
         执行完整的增强版规划流程。
 
         Args:
             mode (ChatMode): 当前的聊天模式，默认为 FOCUS。
-            message_data (dict): 消息数据字典，包含：
-                - unread_messages: 未读消息列表
-                - history_messages: 历史消息列表（可选）
+            context (StreamContext): 包含聊天流消息的上下文对象。
 
         Returns:
             Tuple[List[Dict], Optional[Dict]]: 一个元组，包含：
@@ -101,11 +100,9 @@ class ActionPlanner:
                 - final_target_message_dict (Optional[Dict]): 最终的目标消息（字典格式）。
         """
         try:
-            # 提取未读消息用于兴趣度计算
-            unread_messages = message_data.get("unread_messages", []) if message_data else []
             self.planner_stats["total_plans"] += 1
 
-            return await self._enhanced_plan_flow(mode, unread_messages or [])
+            return await self._enhanced_plan_flow(mode, context)
 
         except Exception as e:
             logger.error(f"规划流程出错: {e}")
@@ -113,13 +110,14 @@ class ActionPlanner:
             return [], None
 
     async def _enhanced_plan_flow(
-        self, mode: ChatMode, unread_messages: List[Dict]
+        self, mode: ChatMode, context: StreamContext
     ) -> Tuple[List[Dict], Optional[Dict]]:
         """执行增强版规划流程"""
         try:
             # 1. 生成初始 Plan
             initial_plan = await self.generator.generate(mode)
 
+            unread_messages = context.get_unread_messages() if context else []
             # 2. 兴趣度评分 - 只对未读消息进行评分
             if unread_messages:
                 bot_nickname = global_config.bot.nickname
@@ -135,8 +133,8 @@ class ActionPlanner:
                         logger.info(f"消息兴趣度不足({latest_score.total_score:.2f})，移除reply动作")
                         reply_not_available = True
 
-            base_threshold = self.interest_scoring.reply_threshold
-            # 检查兴趣度是否达到阈值的0.8
+            # base_threshold = self.interest_scoring.reply_threshold
+            # 检查兴趣度是否达到非回复动作阈值
             non_reply_action_interest_threshold = global_config.affinity_flow.non_reply_action_interest_threshold
             if score < non_reply_action_interest_threshold:
                 logger.info(f"❌ 兴趣度不足非回复动作阈值: {score:.3f} < {non_reply_action_interest_threshold:.3f}，直接返回no_action")

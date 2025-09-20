@@ -11,7 +11,7 @@ router = None
 def create_router(plugin_config: dict):
     """创建路由器实例"""
     global router
-    platform_name = config_api.get_plugin_config(plugin_config, "maibot_server.platform_name", "napcat")
+    platform_name = config_api.get_plugin_config(plugin_config, "maibot_server.platform_name", "qq")
     host = config_api.get_plugin_config(plugin_config, "maibot_server.host", "localhost")
     port = config_api.get_plugin_config(plugin_config, "maibot_server.port", 8000)
     

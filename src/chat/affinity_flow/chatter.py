@@ -9,6 +9,7 @@ from typing import Dict
 
 from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.planner_actions.planner import ActionPlanner
+from src.common.data_models.message_manager_data_model import StreamContext
 from src.plugin_system.base.component_types import ChatMode
 
 from src.common.logger import get_logger
@@ -42,7 +43,7 @@ class AffinityFlowChatter:
         }
         self.last_activity_time = time.time()
 
-    async def process_stream_context(self, context) -> Dict[str, any]:
+    async def process_stream_context(self, context: StreamContext) -> Dict[str, any]:
         """
         处理StreamContext对象
 
@@ -53,27 +54,18 @@ class AffinityFlowChatter:
             处理结果字典
         """
         try:
-            # 获取未读消息和历史消息
             unread_messages = context.get_unread_messages()
-            history_messages = context.get_history_messages()
-
-            # 准备消息数据
-            message_data = {
-                "unread_messages": unread_messages,
-                "history_messages": history_messages
-            }
 
             # 使用增强版规划器处理消息
             actions, target_message = await self.planner.plan(
                 mode=ChatMode.FOCUS,
-                message_data=message_data
+                context=context
             )
             self.stats["plans_created"] += 1
 
             # 执行动作（如果规划器返回了动作）
             execution_result = {"executed_count": len(actions) if actions else 0}
             if actions:
-                # 这里可以添加额外的动作执行逻辑
                 logger.debug(f"聊天流 {self.stream_id} 生成了 {len(actions)} 个动作")
 
             # 更新统计

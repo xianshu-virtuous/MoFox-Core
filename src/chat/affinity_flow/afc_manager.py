@@ -9,6 +9,7 @@ from typing import Dict, Optional, List
 from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.planner_actions.planner import ActionPlanner
 from src.chat.affinity_flow.chatter import AffinityFlowChatter
+from src.common.data_models.message_manager_data_model import StreamContext
 from src.common.logger import get_logger
 
 logger = get_logger("afc_manager")
@@ -49,7 +50,7 @@ class AFCManager:
 
         return self.affinity_flow_chatters[stream_id]
 
-    async def process_stream_context(self, stream_id: str, context) -> Dict[str, any]:
+    async def process_stream_context(self, stream_id: str, context: StreamContext) -> Dict[str, any]:
         """处理StreamContext对象"""
         try:
             # 获取或创建聊天处理器
