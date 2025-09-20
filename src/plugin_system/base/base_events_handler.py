@@ -98,7 +98,7 @@ class BaseEventHandler(ABC):
             weight=cls.weight,
             intercept_message=cls.intercept_message,
         )
-    
+
     def set_plugin_name(self, plugin_name: str) -> None:
         """设置插件名称
 
@@ -107,9 +107,9 @@ class BaseEventHandler(ABC):
         """
         self.plugin_name = plugin_name
 
-    def set_plugin_config(self,plugin_config) -> None:
+    def set_plugin_config(self, plugin_config) -> None:
         self.plugin_config = plugin_config
-        
+
     def get_config(self, key: str, default=None):
         """获取插件配置值，支持嵌套键访问
 

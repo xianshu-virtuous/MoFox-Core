@@ -6,6 +6,7 @@ from . import BaseDataModel
 if TYPE_CHECKING:
     pass
 
+
 @dataclass
 class LLMGenerationDataModel(BaseDataModel):
     content: Optional[str] = None

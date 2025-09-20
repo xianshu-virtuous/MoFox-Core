@@ -33,6 +33,7 @@ class MessageSending:
             try:
                 # 重新导入router
                 from ..mmc_com_layer import router
+
                 self.maibot_router = router
                 if self.maibot_router is not None:
                     logger.info("MaiBot router重连成功")
@@ -73,14 +74,14 @@ class MessageSending:
 
                     # 获取对应的客户端并发送切片
                     platform = message_base.message_info.platform
-                    
+
                     # 再次检查router状态（防止运行时被重置）
-                    if self.maibot_router is None or not hasattr(self.maibot_router, 'clients'):
+                    if self.maibot_router is None or not hasattr(self.maibot_router, "clients"):
                         logger.warning("MaiBot router连接已断开，尝试重新连接")
                         if not await self._attempt_reconnect():
                             logger.error("MaiBot router重连失败，切片发送中止")
                             return False
-                        
+
                     if platform not in self.maibot_router.clients:
                         logger.error(f"平台 {platform} 未连接")
                         return False

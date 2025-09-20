@@ -146,7 +146,9 @@ class EventManager:
         logger.info(f"事件 {event_name} 已禁用")
         return True
 
-    def register_event_handler(self, handler_class: Type[BaseEventHandler], plugin_config: Optional[dict] = None) -> bool:
+    def register_event_handler(
+        self, handler_class: Type[BaseEventHandler], plugin_config: Optional[dict] = None
+    ) -> bool:
         """注册事件处理器
 
         Args:
@@ -168,7 +170,7 @@ class EventManager:
         # 创建事件处理器实例，传递插件配置
         handler_instance = handler_class()
         handler_instance.plugin_config = plugin_config
-        if plugin_config is not None and hasattr(handler_instance, 'set_plugin_config'):
+        if plugin_config is not None and hasattr(handler_instance, "set_plugin_config"):
             handler_instance.set_plugin_config(plugin_config)
 
         self._event_handlers[handler_name] = handler_instance

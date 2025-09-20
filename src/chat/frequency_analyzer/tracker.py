@@ -56,7 +56,7 @@ class ChatFrequencyTracker:
         now = time.time()
         if chat_id not in self._timestamps:
             self._timestamps[chat_id] = []
-        
+
         self._timestamps[chat_id].append(now)
         logger.debug(f"为 chat_id '{chat_id}' 记录了新的聊天时间: {now}")
         self._save_timestamps()

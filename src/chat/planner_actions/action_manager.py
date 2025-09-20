@@ -165,10 +165,15 @@ class ActionManager:
             # 通过chat_id获取chat_stream
             chat_manager = get_chat_manager()
             chat_stream = chat_manager.get_stream(chat_id)
-            
+
             if not chat_stream:
                 logger.error(f"{log_prefix} 无法找到chat_id对应的chat_stream: {chat_id}")
-                return {"action_type": action_name, "success": False, "reply_text": "", "error": "chat_stream not found"}
+                return {
+                    "action_type": action_name,
+                    "success": False,
+                    "reply_text": "",
+                    "error": "chat_stream not found",
+                }
 
             if action_name == "no_action":
                 return {"action_type": "no_action", "success": True, "reply_text": "", "command": ""}
@@ -177,7 +182,7 @@ class ActionManager:
                 # 直接处理no_reply逻辑，不再通过动作系统
                 reason = reasoning or "选择不回复"
                 logger.info(f"{log_prefix} 选择不回复，原因: {reason}")
-                
+
                 # 存储no_reply信息到数据库
                 await database_api.store_action_info(
                     chat_stream=chat_stream,
@@ -396,7 +401,7 @@ class ActionManager:
         }
 
         return loop_info, reply_text, cycle_timers
-    
+
     async def send_response(self, chat_stream, reply_set, thinking_start_time, message_data) -> str:
         """
         发送回复内容的具体实现

@@ -141,7 +141,8 @@ class MainSystem:
             # 停止消息重组器
             from src.plugin_system.core.event_manager import event_manager
             from src.plugin_system import EventType
-            asyncio.run(event_manager.trigger_event(EventType.ON_STOP,permission_group="SYSTEM"))
+
+            asyncio.run(event_manager.trigger_event(EventType.ON_STOP, permission_group="SYSTEM"))
             from src.utils.message_chunker import reassembler
 
             loop = asyncio.get_event_loop()
@@ -227,7 +228,7 @@ MoFox_Bot(第三方修改版)
 
         # 添加统计信息输出任务
         await async_task_manager.add_task(StatisticOutputTask())
-        
+
         # 添加遥测心跳任务
         await async_task_manager.add_task(TelemetryHeartBeatTask())
 
@@ -262,6 +263,7 @@ MoFox_Bot(第三方修改版)
 
         # 初始化回复后关系追踪系统
         from src.chat.affinity_flow.relationship_integration import initialize_relationship_tracking
+
         relationship_tracker = initialize_relationship_tracking()
         if relationship_tracker:
             logger.info("回复后关系追踪系统初始化成功")
@@ -285,6 +287,7 @@ MoFox_Bot(第三方修改版)
 
         # 初始化LPMM知识库
         from src.chat.knowledge.knowledge_lib import initialize_lpmm_knowledge
+
         initialize_lpmm_knowledge()
         logger.info("LPMM知识库初始化成功")
 
@@ -310,6 +313,7 @@ MoFox_Bot(第三方修改版)
 
         # 启动消息管理器
         from src.chat.message_manager import message_manager
+
         await message_manager.start()
         logger.info("消息管理器已启动")
 

@@ -302,9 +302,9 @@ class SendHandler:
 
         try:
             # 检查是否为缓冲消息ID（格式：buffered-{original_id}-{timestamp}）
-            if id.startswith('buffered-'):
+            if id.startswith("buffered-"):
                 # 从缓冲消息ID中提取原始消息ID
-                original_id = id.split('-')[1]
+                original_id = id.split("-")[1]
                 msg_info_response = await self.send_message_to_napcat("get_msg", {"message_id": int(original_id)})
             else:
                 msg_info_response = await self.send_message_to_napcat("get_msg", {"message_id": int(id)})
@@ -371,7 +371,7 @@ class SendHandler:
         use_tts = False
         if self.plugin_config:
             use_tts = config_api.get_plugin_config(self.plugin_config, "voice.use_tts", False)
-        
+
         if not use_tts:
             logger.warning("未启用语音消息处理")
             return {}

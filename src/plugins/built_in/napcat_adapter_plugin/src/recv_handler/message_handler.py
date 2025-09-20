@@ -100,7 +100,7 @@ class MessageHandler:
             # 检查群聊黑白名单
             group_list_type = config_api.get_plugin_config(self.plugin_config, "features.group_list_type", "blacklist")
             group_list = config_api.get_plugin_config(self.plugin_config, "features.group_list", [])
-            
+
             if group_list_type == "whitelist":
                 if group_id not in group_list:
                     logger.warning("群聊不在白名单中，消息被丢弃")
@@ -111,9 +111,11 @@ class MessageHandler:
                     return False
         else:
             # 检查私聊黑白名单
-            private_list_type = config_api.get_plugin_config(self.plugin_config, "features.private_list_type", "blacklist")
+            private_list_type = config_api.get_plugin_config(
+                self.plugin_config, "features.private_list_type", "blacklist"
+            )
             private_list = config_api.get_plugin_config(self.plugin_config, "features.private_list", [])
-            
+
             if private_list_type == "whitelist":
                 if user_id not in private_list:
                     logger.warning("私聊不在白名单中，消息被丢弃")
@@ -156,21 +158,23 @@ class MessageHandler:
         Parameters:
             raw_message: dict: 原始消息
         """
-        
+
         # 添加原始消息调试日志，特别关注message字段
-        logger.debug(f"收到原始消息: message_type={raw_message.get('message_type')}, message_id={raw_message.get('message_id')}")
+        logger.debug(
+            f"收到原始消息: message_type={raw_message.get('message_type')}, message_id={raw_message.get('message_id')}"
+        )
         logger.debug(f"原始消息内容: {raw_message.get('message', [])}")
-        
+
         # 检查是否包含@或video消息段
-        message_segments = raw_message.get('message', [])
+        message_segments = raw_message.get("message", [])
         if message_segments:
             for i, seg in enumerate(message_segments):
-                seg_type = seg.get('type')
-                if seg_type in ['at', 'video']:
+                seg_type = seg.get("type")
+                if seg_type in ["at", "video"]:
                     logger.info(f"检测到 {seg_type.upper()} 消息段 [{i}]: {seg}")
-                elif seg_type not in ['text', 'face', 'image']:
+                elif seg_type not in ["text", "face", "image"]:
                     logger.warning(f"检测到特殊消息段 [{i}]: type={seg_type}, data={seg.get('data', {})}")
-        
+
         message_type: str = raw_message.get("message_type")
         message_id: int = raw_message.get("message_id")
         # message_time: int = raw_message.get("time")
@@ -308,9 +312,13 @@ class MessageHandler:
             message_type = raw_message.get("message_type")
             should_use_buffer = False
 
-            if message_type == "group" and config_api.get_plugin_config(self.plugin_config, "features.message_buffer_enable_group", True):
+            if message_type == "group" and config_api.get_plugin_config(
+                self.plugin_config, "features.message_buffer_enable_group", True
+            ):
                 should_use_buffer = True
-            elif message_type == "private" and config_api.get_plugin_config(self.plugin_config, "features.message_buffer_enable_private", True):
+            elif message_type == "private" and config_api.get_plugin_config(
+                self.plugin_config, "features.message_buffer_enable_private", True
+            ):
                 should_use_buffer = True
 
             if should_use_buffer:
@@ -369,10 +377,10 @@ class MessageHandler:
         for sub_message in real_message:
             sub_message: dict
             sub_message_type = sub_message.get("type")
-            
+
             # 添加详细的消息类型调试信息
             logger.debug(f"处理消息段: type={sub_message_type}, data={sub_message.get('data', {})}")
-            
+
             # 特别关注 at 和 video 消息的识别
             if sub_message_type == "at":
                 logger.debug(f"检测到@消息: {sub_message}")
@@ -380,7 +388,7 @@ class MessageHandler:
                 logger.debug(f"检测到VIDEO消息: {sub_message}")
             elif sub_message_type not in ["text", "face", "image", "record"]:
                 logger.warning(f"检测到特殊消息类型: {sub_message_type}, 完整消息: {sub_message}")
-            
+
             match sub_message_type:
                 case RealMessageType.text:
                     ret_seg = await self.handle_text_message(sub_message)

@@ -84,7 +84,9 @@ class ChatStream:
         self.saved = False
         self.context: ChatMessageContext = None  # type: ignore # 用于存储该聊天的上下文信息
         # 从配置文件中读取focus_value，如果没有则使用默认值1.0
-        self.focus_energy = data.get("focus_energy", global_config.chat.focus_value) if data else global_config.chat.focus_value
+        self.focus_energy = (
+            data.get("focus_energy", global_config.chat.focus_value) if data else global_config.chat.focus_value
+        )
         self.no_reply_consecutive = 0
         self.breaking_accumulated_interest = 0.0
 

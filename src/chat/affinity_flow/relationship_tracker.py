@@ -116,6 +116,7 @@ class UserRelationshipTracker:
         try:
             # 获取bot人设信息
             from src.individuality.individuality import Individuality
+
             individuality = Individuality()
             bot_personality = await individuality.get_personality_block()
 
@@ -168,7 +169,17 @@ class UserRelationshipTracker:
                     # 清理LLM响应，移除可能的格式标记
                     cleaned_response = self._clean_llm_json_response(llm_response)
                     response_data = json.loads(cleaned_response)
-                    new_score = max(0.0, min(1.0, float(response_data.get("new_relationship_score", global_config.affinity_flow.base_relationship_score))))
+                    new_score = max(
+                        0.0,
+                        min(
+                            1.0,
+                            float(
+                                response_data.get(
+                                    "new_relationship_score", global_config.affinity_flow.base_relationship_score
+                                )
+                            ),
+                        ),
+                    )
 
                     if self.interest_scoring_system:
                         self.interest_scoring_system.update_user_relationship(
@@ -295,7 +306,9 @@ class UserRelationshipTracker:
             # 更新缓存
             self.user_relationship_cache[user_id] = {
                 "relationship_text": relationship_data.get("relationship_text", ""),
-                "relationship_score": relationship_data.get("relationship_score", global_config.affinity_flow.base_relationship_score),
+                "relationship_score": relationship_data.get(
+                    "relationship_score", global_config.affinity_flow.base_relationship_score
+                ),
                 "last_tracked": time.time(),
             }
             return relationship_data.get("relationship_score", global_config.affinity_flow.base_relationship_score)
@@ -386,7 +399,11 @@ class UserRelationshipTracker:
 
             # 获取当前关系数据
             current_relationship = self._get_user_relationship_from_db(user_id)
-            current_score = current_relationship.get("relationship_score", global_config.affinity_flow.base_relationship_score) if current_relationship else global_config.affinity_flow.base_relationship_score
+            current_score = (
+                current_relationship.get("relationship_score", global_config.affinity_flow.base_relationship_score)
+                if current_relationship
+                else global_config.affinity_flow.base_relationship_score
+            )
             current_text = current_relationship.get("relationship_text", "新用户") if current_relationship else "新用户"
 
             # 使用LLM分析并更新关系
@@ -501,6 +518,7 @@ class UserRelationshipTracker:
 
             # 获取bot人设信息
             from src.individuality.individuality import Individuality
+
             individuality = Individuality()
             bot_personality = await individuality.get_personality_block()
 

@@ -35,22 +35,25 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
 logger.info(f"已设置工作目录为: {script_dir}")
 
+
 # 检查并创建.env文件
 def ensure_env_file():
     """确保.env文件存在，如果不存在则从模板创建"""
     env_file = Path(".env")
     template_env = Path("template/template.env")
-    
+
     if not env_file.exists():
         if template_env.exists():
             logger.info("未找到.env文件，正在从模板创建...")
             import shutil
+
             shutil.copy(template_env, env_file)
             logger.info("已从template/template.env创建.env文件")
             logger.warning("请编辑.env文件，将EULA_CONFIRMED设置为true并配置其他必要参数")
         else:
             logger.error("未找到.env文件和template.env模板文件")
             sys.exit(1)
+
 
 # 确保环境文件存在
 ensure_env_file()
@@ -131,32 +134,32 @@ async def graceful_shutdown():
 def check_eula():
     """检查EULA和隐私条款确认状态 - 环境变量版（类似Minecraft）"""
     # 检查环境变量中的EULA确认
-    eula_confirmed = os.getenv('EULA_CONFIRMED', '').lower()
-    
-    if eula_confirmed == 'true':
+    eula_confirmed = os.getenv("EULA_CONFIRMED", "").lower()
+
+    if eula_confirmed == "true":
         logger.info("EULA已通过环境变量确认")
         return
-    
+
     # 如果没有确认，提示用户
     confirm_logger.critical("您需要同意EULA和隐私条款才能使用MoFox_Bot")
     confirm_logger.critical("请阅读以下文件：")
     confirm_logger.critical("  - EULA.md (用户许可协议)")
     confirm_logger.critical("  - PRIVACY.md (隐私条款)")
     confirm_logger.critical("然后编辑 .env 文件，将 'EULA_CONFIRMED=false' 改为 'EULA_CONFIRMED=true'")
-    
+
     # 等待用户确认
     while True:
         try:
             load_dotenv(override=True)  # 重新加载.env文件
-                
-            eula_confirmed = os.getenv('EULA_CONFIRMED', '').lower()
-            if eula_confirmed == 'true':
+
+            eula_confirmed = os.getenv("EULA_CONFIRMED", "").lower()
+            if eula_confirmed == "true":
                 confirm_logger.info("EULA确认成功，感谢您的同意")
                 return
-                
+
             confirm_logger.critical("请修改 .env 文件中的 EULA_CONFIRMED=true 后重新启动程序")
             input("按Enter键检查.env文件状态...")
-            
+
         except KeyboardInterrupt:
             confirm_logger.info("用户取消，程序退出")
             sys.exit(0)

@@ -28,6 +28,7 @@ class ActionPlannerInfo(BaseDataModel):
 @dataclass
 class InterestScore(BaseDataModel):
     """兴趣度评分结果"""
+
     message_id: str
     total_score: float
     interest_match_score: float
@@ -41,6 +42,7 @@ class Plan(BaseDataModel):
     """
     统一规划数据模型
     """
+
     chat_id: str
     mode: "ChatMode"
 

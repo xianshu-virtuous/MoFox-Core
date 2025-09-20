@@ -37,7 +37,7 @@ def replace_user_references_sync(
     """
     if not content:
         return ""
-        
+
     if name_resolver is None:
         def default_resolver(platform: str, user_id: str) -> str:
             # 检查是否是机器人自己
@@ -828,8 +828,8 @@ async def build_pic_mapping_info(pic_id_mapping: Dict[str, str]) -> str:
         # 从数据库中获取图片描述
         description = "[图片内容未知]"  # 默认描述
         try:
-            async with get_db_session() as session:
-                image = (await session.execute(select(Images).where(Images.image_id == pic_id))).scalar_one_or_none()
+            with get_db_session() as session:
+                image = session.execute(select(Images).where(Images.image_id == pic_id)).scalar_one_or_none()
                 if image and image.description:  # type: ignore
                     description = image.description
         except Exception:

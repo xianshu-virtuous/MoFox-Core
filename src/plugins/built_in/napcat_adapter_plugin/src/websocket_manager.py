@@ -18,7 +18,9 @@ class WebSocketManager:
         self.max_reconnect_attempts = 10  # 最大重连次数
         self.plugin_config = None
 
-    async def start_connection(self, message_handler: Callable[[Server.ServerConnection], Any], plugin_config: dict) -> None:
+    async def start_connection(
+        self, message_handler: Callable[[Server.ServerConnection], Any], plugin_config: dict
+    ) -> None:
         """根据配置启动 WebSocket 连接"""
         self.plugin_config = plugin_config
         mode = config_api.get_plugin_config(plugin_config, "napcat_server.mode")
@@ -72,9 +74,7 @@ class WebSocketManager:
                 # 如果配置了访问令牌，添加到请求头
                 access_token = config_api.get_plugin_config(self.plugin_config, "napcat_server.access_token")
                 if access_token:
-                    connect_kwargs["additional_headers"] = {
-                        "Authorization": f"Bearer {access_token}"
-                    }
+                    connect_kwargs["additional_headers"] = {"Authorization": f"Bearer {access_token}"}
                     logger.info("已添加访问令牌到连接请求头")
 
                 async with Server.connect(url, **connect_kwargs) as websocket:

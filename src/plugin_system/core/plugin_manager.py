@@ -129,9 +129,7 @@ class PluginManager:
                 self._show_plugin_components(plugin_name)
 
                 # 检查并调用 on_plugin_loaded 钩子（如果存在）
-                if hasattr(plugin_instance, "on_plugin_loaded") and callable(
-                    plugin_instance.on_plugin_loaded
-                ):
+                if hasattr(plugin_instance, "on_plugin_loaded") and callable(plugin_instance.on_plugin_loaded):
                     logger.debug(f"为插件 '{plugin_name}' 调用 on_plugin_loaded 钩子")
                     try:
                         # 使用 asyncio.create_task 确保它不会阻塞加载流程

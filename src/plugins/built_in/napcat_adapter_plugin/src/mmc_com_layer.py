@@ -14,7 +14,7 @@ def create_router(plugin_config: dict):
     platform_name = config_api.get_plugin_config(plugin_config, "maibot_server.platform_name", "qq")
     host = config_api.get_plugin_config(plugin_config, "maibot_server.host", "localhost")
     port = config_api.get_plugin_config(plugin_config, "maibot_server.port", 8000)
-    
+
     route_config = RouteConfig(
         route_config={
             platform_name: TargetConfig(
@@ -32,7 +32,7 @@ async def mmc_start_com(plugin_config: dict = None):
     logger.info("正在连接MaiBot")
     if plugin_config:
         create_router(plugin_config)
-    
+
     if router:
         router.register_class_handler(send_handler.handle_message)
         await router.run()

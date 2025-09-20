@@ -99,14 +99,13 @@ def get_global_server() -> Server:
     """获取全局服务器实例"""
     global global_server
     if global_server is None:
-        
         host = os.getenv("HOST", "127.0.0.1")
         port_str = os.getenv("PORT", "8000")
-        
+
         try:
             port = int(port_str)
         except ValueError:
             port = 8000
-            
+
         global_server = Server(host=host, port=port)
     return global_server

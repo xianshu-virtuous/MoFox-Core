@@ -64,50 +64,50 @@ class AtAction(BaseAction):
             # 使用回复器生成艾特回复，而不是直接发送命令
             from src.chat.replyer.default_generator import DefaultReplyer
             from src.chat.message_receive.chat_stream import get_chat_manager
-            
+
             # 获取当前聊天流
             chat_manager = get_chat_manager()
             chat_stream = self.chat_stream or chat_manager.get_stream(self.chat_id)
-            
+
             if not chat_stream:
                 logger.error(f"找不到聊天流: {self.chat_stream}")
                 return False, "聊天流不存在"
-            
+
             # 创建回复器实例
             replyer = DefaultReplyer(chat_stream)
-            
+
             # 构建回复对象，将艾特消息作为回复目标
             reply_to = f"{user_name}:{at_message}"
             extra_info = f"你需要艾特用户 {user_name} 并回复他们说: {at_message}"
-            
+
             # 使用回复器生成回复
             success, llm_response, prompt = await replyer.generate_reply_with_context(
                 reply_to=reply_to,
                 extra_info=extra_info,
                 enable_tool=False,  # 艾特回复通常不需要工具调用
-                from_plugin=False
+                from_plugin=False,
             )
-            
+
             if success and llm_response:
                 # 获取生成的回复内容
                 reply_content = llm_response.get("content", "")
                 if reply_content:
                     # 获取用户QQ号，发送真正的艾特消息
                     user_id = user_info.get("user_id")
-                    
+
                     # 发送真正的艾特命令，使用回复器生成的智能内容
                     await self.send_command(
                         "SEND_AT_MESSAGE",
                         args={"qq_id": user_id, "text": reply_content},
                         display_message=f"艾特用户 {user_name} 并发送智能回复: {reply_content}",
                     )
-                    
+
                     await self.store_action_info(
                         action_build_into_prompt=True,
                         action_prompt_display=f"执行了艾特用户动作：艾特用户 {user_name} 并发送智能回复: {reply_content}",
                         action_done=True,
                     )
-                    
+
                     logger.info(f"成功通过回复器生成智能内容并发送真正的艾特消息给 {user_name}: {reply_content}")
                     return True, "智能艾特消息发送成功"
                 else:
@@ -116,7 +116,7 @@ class AtAction(BaseAction):
             else:
                 logger.error("回复器生成回复失败")
                 return False, "回复生成失败"
-                
+
         except Exception as e:
             logger.error(f"执行艾特用户动作时发生异常: {e}", exc_info=True)
             await self.store_action_info(

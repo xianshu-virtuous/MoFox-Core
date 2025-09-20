@@ -2,6 +2,7 @@
 消息管理模块数据模型
 定义消息管理器使用的数据结构
 """
+
 import asyncio
 import time
 from dataclasses import dataclass, field
@@ -16,14 +17,16 @@ if TYPE_CHECKING:
 
 class MessageStatus(Enum):
     """消息状态枚举"""
-    UNREAD = "unread"    # 未读消息
-    READ = "read"        # 已读消息
+
+    UNREAD = "unread"  # 未读消息
+    READ = "read"  # 已读消息
     PROCESSING = "processing"  # 处理中
 
 
 @dataclass
 class StreamContext(BaseDataModel):
     """聊天流上下文信息"""
+
     stream_id: str
     unread_messages: List["DatabaseMessages"] = field(default_factory=list)
     history_messages: List["DatabaseMessages"] = field(default_factory=list)
@@ -59,6 +62,7 @@ class StreamContext(BaseDataModel):
 @dataclass
 class MessageManagerStats(BaseDataModel):
     """消息管理器统计信息"""
+
     total_streams: int = 0
     active_streams: int = 0
     total_unread_messages: int = 0
@@ -74,6 +78,7 @@ class MessageManagerStats(BaseDataModel):
 @dataclass
 class StreamStats(BaseDataModel):
     """聊天流统计信息"""
+
     stream_id: str
     is_active: bool
     unread_count: int

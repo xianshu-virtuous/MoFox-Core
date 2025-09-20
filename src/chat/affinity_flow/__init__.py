@@ -5,4 +5,4 @@
 
 from src.chat.affinity_flow.afc_manager import afc_manager
 
-__all__ = ['afc_manager', 'AFCManager', 'AffinityFlowChatter']
+__all__ = ["afc_manager", "AFCManager", "AffinityFlowChatter"]

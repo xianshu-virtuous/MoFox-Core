@@ -109,9 +109,7 @@ class ActionPlanner:
             self.planner_stats["failed_plans"] += 1
             return [], None
 
-    async def _enhanced_plan_flow(
-        self, mode: ChatMode, context: StreamContext
-    ) -> Tuple[List[Dict], Optional[Dict]]:
+    async def _enhanced_plan_flow(self, mode: ChatMode, context: StreamContext) -> Tuple[List[Dict], Optional[Dict]]:
         """执行增强版规划流程"""
         try:
             # 1. 生成初始 Plan
@@ -137,7 +135,9 @@ class ActionPlanner:
             # 检查兴趣度是否达到非回复动作阈值
             non_reply_action_interest_threshold = global_config.affinity_flow.non_reply_action_interest_threshold
             if score < non_reply_action_interest_threshold:
-                logger.info(f"❌ 兴趣度不足非回复动作阈值: {score:.3f} < {non_reply_action_interest_threshold:.3f}，直接返回no_action")
+                logger.info(
+                    f"❌ 兴趣度不足非回复动作阈值: {score:.3f} < {non_reply_action_interest_threshold:.3f}，直接返回no_action"
+                )
                 logger.info(f"📊 最低要求: {non_reply_action_interest_threshold:.3f}")
                 # 直接返回 no_action
                 from src.common.data_models.info_data_model import ActionPlannerInfo

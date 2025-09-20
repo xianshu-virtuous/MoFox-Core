@@ -1,6 +1,7 @@
 """
 PlanGenerator: 负责搜集和汇总所有决策所需的信息，生成一个未经筛选的“原始计划” (Plan)。
 """
+
 import time
 from typing import Dict
 
@@ -35,6 +36,7 @@ class PlanGenerator:
             chat_id (str): 当前聊天的 ID。
         """
         from src.chat.planner_actions.action_manager import ActionManager
+
         self.chat_id = chat_id
         # 注意：ActionManager 可能需要根据实际情况初始化
         self.action_manager = ActionManager()
@@ -51,8 +53,8 @@ class PlanGenerator:
         Returns:
             Plan: 一个填充了初始上下文信息的 Plan 对象。
         """
-        _is_group_chat, chat_target_info_dict = await get_chat_type_and_target_info(self.chat_id)
-        
+        _is_group_chat, chat_target_info_dict = get_chat_type_and_target_info(self.chat_id)
+
         target_info = None
         if chat_target_info_dict:
             target_info = TargetPersonInfo(**chat_target_info_dict)
@@ -64,7 +66,6 @@ class PlanGenerator:
             limit=int(global_config.chat.max_context_size),
         )
         chat_history = [DatabaseMessages(**msg) for msg in await chat_history_raw]
-
 
         plan = Plan(
             chat_id=self.chat_id,
@@ -86,10 +87,10 @@ class PlanGenerator:
             Dict[str, "ActionInfo"]: 一个字典，键是动作名称，值是 ActionInfo 对象。
         """
         current_available_actions_dict = self.action_manager.get_using_actions()
-        all_registered_actions: Dict[str, ActionInfo] = component_registry.get_components_by_type( # type: ignore
+        all_registered_actions: Dict[str, ActionInfo] = component_registry.get_components_by_type(  # type: ignore
             ComponentType.ACTION
         )
-        
+
         current_available_actions = {}
         for action_name in current_available_actions_dict:
             if action_name in all_registered_actions:
@@ -99,16 +100,13 @@ class PlanGenerator:
             name="reply",
             component_type=ComponentType.ACTION,
             description="系统级动作：选择回复消息的决策",
-            action_parameters={
-                "content": "回复的文本内容",
-                "reply_to_message_id": "要回复的消息ID"
-            },
+            action_parameters={"content": "回复的文本内容", "reply_to_message_id": "要回复的消息ID"},
             action_require=[
                 "你想要闲聊或者随便附和",
                 "当用户提到你或艾特你时",
                 "当需要回答用户的问题时",
                 "当你想参与对话时",
-                "当用户分享有趣的内容时"
+                "当用户分享有趣的内容时",
             ],
             activation_type=ActionActivationType.ALWAYS,
             activation_keywords=[],

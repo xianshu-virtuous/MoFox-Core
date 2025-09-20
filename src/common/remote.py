@@ -31,7 +31,9 @@ class TelemetryHeartBeatTask(AsyncTask):
         self.client_uuid: str | None = local_storage["mofox_uuid"] if "mofox_uuid" in local_storage else None  # type: ignore
         """客户端UUID"""
 
-        self.private_key_pem: str | None = local_storage["mofox_private_key"] if "mofox_private_key" in local_storage else None  # type: ignore
+        self.private_key_pem: str | None = (
+            local_storage["mofox_private_key"] if "mofox_private_key" in local_storage else None
+        )  # type: ignore
         """客户端私钥"""
 
         self.info_dict = self._get_sys_info()
@@ -61,78 +63,65 @@ class TelemetryHeartBeatTask(AsyncTask):
     def _generate_signature(self, request_body: dict) -> tuple[str, str]:
         """
         生成RSA签名
-        
+
         Returns:
             tuple[str, str]: (timestamp, signature_b64)
         """
         if not self.private_key_pem:
             raise ValueError("私钥未初始化")
-        
+
         # 生成时间戳
         timestamp = datetime.now(timezone.utc).isoformat()
-        
+
         # 创建签名数据字符串
         sign_data = f"{self.client_uuid}:{timestamp}:{json.dumps(request_body, separators=(',', ':'))}"
-        
+
         # 加载私钥
-        private_key = serialization.load_pem_private_key(
-            self.private_key_pem.encode('utf-8'),
-            password=None
-        )
-        
+        private_key = serialization.load_pem_private_key(self.private_key_pem.encode("utf-8"), password=None)
+
         # 确保是RSA私钥
         if not isinstance(private_key, rsa.RSAPrivateKey):
             raise ValueError("私钥必须是RSA格式")
-        
+
         # 生成签名
         signature = private_key.sign(
-            sign_data.encode('utf-8'),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
+            sign_data.encode("utf-8"),
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256(),
         )
-        
+
         # Base64编码
-        signature_b64 = base64.b64encode(signature).decode('utf-8')
-        
+        signature_b64 = base64.b64encode(signature).decode("utf-8")
+
         return timestamp, signature_b64
 
     def _decrypt_challenge(self, challenge_b64: str) -> str:
         """
         解密挑战数据
-        
+
         Args:
             challenge_b64: Base64编码的挑战数据
-            
+
         Returns:
             str: 解密后的UUID字符串
         """
         if not self.private_key_pem:
             raise ValueError("私钥未初始化")
-        
+
         # 加载私钥
-        private_key = serialization.load_pem_private_key(
-            self.private_key_pem.encode('utf-8'),
-            password=None
-        )
-        
+        private_key = serialization.load_pem_private_key(self.private_key_pem.encode("utf-8"), password=None)
+
         # 确保是RSA私钥
         if not isinstance(private_key, rsa.RSAPrivateKey):
             raise ValueError("私钥必须是RSA格式")
-        
+
         # 解密挑战数据
         decrypted_bytes = private_key.decrypt(
             base64.b64decode(challenge_b64),
-            padding.OAEP(
-                mgf=padding.MGF1(hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
+            padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
         )
-        
-        return decrypted_bytes.decode('utf-8')
+
+        return decrypted_bytes.decode("utf-8")
 
     async def _req_uuid(self) -> bool:
         """
@@ -155,28 +144,26 @@ class TelemetryHeartBeatTask(AsyncTask):
 
                         if response.status != 200:
                             response_text = await response.text()
-                            logger.error(
-                                f"注册步骤1失败，状态码: {response.status}, 响应内容: {response_text}"
-                            )
+                            logger.error(f"注册步骤1失败，状态码: {response.status}, 响应内容: {response_text}")
                             raise aiohttp.ClientResponseError(
                                 request_info=response.request_info,
                                 history=response.history,
                                 status=response.status,
-                                message=f"Step1 failed: {response_text}"
+                                message=f"Step1 failed: {response_text}",
                             )
 
                         step1_data = await response.json()
                         temp_uuid = step1_data.get("temp_uuid")
                         private_key = step1_data.get("private_key")
                         challenge = step1_data.get("challenge")
-                        
+
                         if not all([temp_uuid, private_key, challenge]):
                             logger.error("Step1响应缺少必要字段：temp_uuid, private_key 或 challenge")
                             raise ValueError("Step1响应数据不完整")
 
                         # 临时保存私钥用于解密
                         self.private_key_pem = private_key
-                        
+
                         # 解密挑战数据
                         logger.debug("解密挑战数据...")
                         try:
@@ -184,21 +171,18 @@ class TelemetryHeartBeatTask(AsyncTask):
                         except Exception as e:
                             logger.error(f"解密挑战数据失败: {e}")
                             raise
-                        
+
                         # 验证解密结果
                         if decrypted_uuid != temp_uuid:
                             logger.error(f"解密结果验证失败: 期望 {temp_uuid}, 实际 {decrypted_uuid}")
                             raise ValueError("解密结果与临时UUID不匹配")
-                        
+
                         logger.debug("挑战数据解密成功，开始注册步骤2")
 
                     # Step 2: 发送解密结果完成注册
                     async with session.post(
                         f"{TELEMETRY_SERVER_URL}/stat/reg_client_step2",
-                        json={
-                            "temp_uuid": temp_uuid,
-                            "decrypted_uuid": decrypted_uuid
-                        },
+                        json={"temp_uuid": temp_uuid, "decrypted_uuid": decrypted_uuid},
                         timeout=aiohttp.ClientTimeout(total=5),
                     ) as response:
                         logger.debug(f"Step2 Response status: {response.status}")
@@ -206,7 +190,7 @@ class TelemetryHeartBeatTask(AsyncTask):
                         if response.status == 200:
                             step2_data = await response.json()
                             mofox_uuid = step2_data.get("mofox_uuid")
-                            
+
                             if mofox_uuid:
                                 # 将正式UUID和私钥存储到本地
                                 local_storage["mofox_uuid"] = mofox_uuid
@@ -225,23 +209,19 @@ class TelemetryHeartBeatTask(AsyncTask):
                             raise ValueError(f"Step2失败: {response_text}")
                         else:
                             response_text = await response.text()
-                            logger.error(
-                                f"注册步骤2失败，状态码: {response.status}, 响应内容: {response_text}"
-                            )
+                            logger.error(f"注册步骤2失败，状态码: {response.status}, 响应内容: {response_text}")
                             raise aiohttp.ClientResponseError(
                                 request_info=response.request_info,
                                 history=response.history,
                                 status=response.status,
-                                message=f"Step2 failed: {response_text}"
+                                message=f"Step2 failed: {response_text}",
                             )
 
             except Exception as e:
                 import traceback
 
                 error_msg = str(e) or "未知错误"
-                logger.warning(
-                    f"注册客户端出错，不过你还是可以正常使用墨狐: {type(e).__name__}: {error_msg}"
-                )
+                logger.warning(f"注册客户端出错，不过你还是可以正常使用墨狐: {type(e).__name__}: {error_msg}")
                 logger.debug(f"完整错误信息: {traceback.format_exc()}")
 
             # 请求失败，重试次数+1
@@ -264,13 +244,13 @@ class TelemetryHeartBeatTask(AsyncTask):
         try:
             # 生成签名
             timestamp, signature = self._generate_signature(self.info_dict)
-            
+
             headers = {
                 "X-mofox-UUID": self.client_uuid,
                 "X-mofox-Signature": signature,
                 "X-mofox-Timestamp": timestamp,
                 "User-Agent": f"MofoxClient/{self.client_uuid[:8]}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             }
 
             logger.debug(f"正在发送心跳到服务器: {self.server_url}")

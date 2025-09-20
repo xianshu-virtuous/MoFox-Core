@@ -123,7 +123,9 @@ class RelationshipFetcher:
         all_points = current_points + forgotten_points
         if all_points:
             # 按权重和时效性综合排序
-            all_points.sort(key=lambda x: (float(x[1]) if len(x) > 1 else 0, float(x[2]) if len(x) > 2 else 0), reverse=True)
+            all_points.sort(
+                key=lambda x: (float(x[1]) if len(x) > 1 else 0, float(x[2]) if len(x) > 2 else 0), reverse=True
+            )
             selected_points = all_points[:points_num]
             points_text = "\n".join([f"- {point[0]}（{point[2]}）" for point in selected_points if len(point) > 2])
         else:
@@ -139,15 +141,17 @@ class RelationshipFetcher:
         # 2. 认识时间和频率
         if know_since:
             from datetime import datetime
-            know_time = datetime.fromtimestamp(know_since).strftime('%Y年%m月%d日')
+
+            know_time = datetime.fromtimestamp(know_since).strftime("%Y年%m月%d日")
             relation_parts.append(f"你从{know_time}开始认识{person_name}")
-        
+
         if know_times > 0:
             relation_parts.append(f"你们已经交流过{int(know_times)}次")
-        
+
         if last_know:
             from datetime import datetime
-            last_time = datetime.fromtimestamp(last_know).strftime('%m月%d日')
+
+            last_time = datetime.fromtimestamp(last_know).strftime("%m月%d日")
             relation_parts.append(f"最近一次交流是在{last_time}")
 
         # 3. 态度和印象
@@ -156,7 +160,7 @@ class RelationshipFetcher:
 
         if short_impression:
             relation_parts.append(f"你对ta的总体印象：{short_impression}")
-        
+
         if full_impression:
             relation_parts.append(f"更详细的了解：{full_impression}")
 
@@ -168,14 +172,14 @@ class RelationshipFetcher:
         try:
             from src.common.database.sqlalchemy_database_api import db_query
             from src.common.database.sqlalchemy_models import UserRelationships
-            
+
             # 查询用户关系数据
             relationships = await db_query(
                 UserRelationships,
                 filters=[UserRelationships.user_id == str(person_info_manager.get_value_sync(person_id, "user_id"))],
-                limit=1
+                limit=1,
             )
-            
+
             if relationships:
                 rel_data = relationships[0]
                 if rel_data.relationship_text:
@@ -183,13 +187,15 @@ class RelationshipFetcher:
                 if rel_data.relationship_score:
                     score_desc = self._get_relationship_score_description(rel_data.relationship_score)
                     relation_parts.append(f"关系亲密程度：{score_desc}")
-                    
+
         except Exception as e:
             logger.debug(f"查询UserRelationships表失败: {e}")
 
         # 构建最终的关系信息字符串
         if relation_parts:
-            relation_info = f"关于{person_name}，你知道以下信息：\n" + "\n".join([f"• {part}" for part in relation_parts])
+            relation_info = f"关于{person_name}，你知道以下信息：\n" + "\n".join(
+                [f"• {part}" for part in relation_parts]
+            )
         else:
             relation_info = f"你对{person_name}了解不多，这是比较初步的交流。"
 

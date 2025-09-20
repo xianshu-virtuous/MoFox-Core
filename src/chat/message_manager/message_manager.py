@@ -2,6 +2,7 @@
 消息管理模块
 管理每个聊天流的上下文信息，包含历史记录和未读消息，定期检查并处理新消息
 """
+
 import asyncio
 import time
 import traceback
@@ -100,9 +101,7 @@ class MessageManager:
 
                 # 如果没有处理任务，创建一个
                 if not context.processing_task or context.processing_task.done():
-                    context.processing_task = asyncio.create_task(
-                        self._process_stream_messages(stream_id)
-                    )
+                    context.processing_task = asyncio.create_task(self._process_stream_messages(stream_id))
 
         # 更新统计
         self.stats.active_streams = active_streams
@@ -128,11 +127,11 @@ class MessageManager:
                 try:
                     # 发送到AFC处理器，传递StreamContext对象
                     results = await afc_manager.process_stream_context(stream_id, context)
-                    
+
                     # 处理结果，标记消息为已读
                     if results.get("success", False):
                         self._clear_all_unread_messages(context)
-                        
+
                 except Exception as e:
                     logger.error(f"处理聊天流 {stream_id} 时发生异常，将清除所有未读消息: {e}")
                     raise
@@ -175,7 +174,7 @@ class MessageManager:
             unread_count=len(context.get_unread_messages()),
             history_count=len(context.history_messages),
             last_check_time=context.last_check_time,
-            has_active_task=context.processing_task and not context.processing_task.done()
+            has_active_task=context.processing_task and not context.processing_task.done(),
         )
 
     def get_manager_stats(self) -> Dict[str, Any]:
@@ -186,7 +185,7 @@ class MessageManager:
             "total_unread_messages": self.stats.total_unread_messages,
             "total_processed_messages": self.stats.total_processed_messages,
             "uptime": self.stats.uptime,
-            "start_time": self.stats.start_time
+            "start_time": self.stats.start_time,
         }
 
     def cleanup_inactive_streams(self, max_inactive_hours: int = 24):
@@ -196,8 +195,7 @@ class MessageManager:
 
         inactive_streams = []
         for stream_id, context in self.stream_contexts.items():
-            if (current_time - context.last_check_time > max_inactive_seconds and
-                not context.get_unread_messages()):
+            if current_time - context.last_check_time > max_inactive_seconds and not context.get_unread_messages():
                 inactive_streams.append(stream_id)
 
         for stream_id in inactive_streams:
@@ -210,9 +208,9 @@ class MessageManager:
         unread_messages = context.get_unread_messages()
         if not unread_messages:
             return
-            
+
         logger.warning(f"正在清除 {len(unread_messages)} 条未读消息")
-        
+
         # 将所有未读消息标记为已读并移动到历史记录
         for msg in unread_messages[:]:  # 使用切片复制避免迭代时修改列表
             try:

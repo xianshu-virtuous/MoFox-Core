@@ -271,7 +271,9 @@ class ComponentRegistry:
         # 使用EventManager进行事件处理器注册
         from src.plugin_system.core.event_manager import event_manager
 
-        return event_manager.register_event_handler(handler_class,self.get_plugin_config(handler_info.plugin_name) or {})
+        return event_manager.register_event_handler(
+            handler_class, self.get_plugin_config(handler_info.plugin_name) or {}
+        )
 
     # === 组件移除相关 ===
 
@@ -684,19 +686,20 @@ class ComponentRegistry:
         plugin_instance = plugin_manager.get_plugin_instance(plugin_name)
         if plugin_instance and plugin_instance.config:
             return plugin_instance.config
-        
+
         # 如果插件实例不存在，尝试从配置文件读取
         try:
             import toml
+
             config_path = Path("config") / "plugins" / plugin_name / "config.toml"
             if config_path.exists():
-                with open(config_path, 'r', encoding='utf-8') as f:
+                with open(config_path, "r", encoding="utf-8") as f:
                     config_data = toml.load(f)
                     logger.debug(f"从配置文件读取插件 {plugin_name} 的配置")
                     return config_data
         except Exception as e:
             logger.debug(f"读取插件 {plugin_name} 配置文件失败: {e}")
-        
+
         return {}
 
     def get_registry_stats(self) -> Dict[str, Any]:

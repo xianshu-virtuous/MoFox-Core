@@ -4,13 +4,11 @@
 """
 
 from .message_manager import MessageManager, message_manager
-from src.common.data_models.message_manager_data_model import StreamContext, MessageStatus, MessageManagerStats, StreamStats
+from src.common.data_models.message_manager_data_model import (
+    StreamContext,
+    MessageStatus,
+    MessageManagerStats,
+    StreamStats,
+)
 
-__all__ = [
-    "MessageManager",
-    "message_manager",
-    "StreamContext",
-    "MessageStatus",
-    "MessageManagerStats",
-    "StreamStats"
-]
+__all__ = ["MessageManager", "message_manager", "StreamContext", "MessageStatus", "MessageManagerStats", "StreamStats"]

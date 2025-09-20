@@ -2,6 +2,7 @@
 机器人兴趣标签数据模型
 定义机器人的兴趣标签和相关的embedding数据结构
 """
+
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 from datetime import datetime
@@ -12,6 +13,7 @@ from . import BaseDataModel
 @dataclass
 class BotInterestTag(BaseDataModel):
     """机器人兴趣标签"""
+
     tag_name: str
     weight: float = 1.0  # 权重，表示对这个兴趣的喜好程度 (0.0-1.0)
     embedding: Optional[List[float]] = None  # 标签的embedding向量
@@ -27,7 +29,7 @@ class BotInterestTag(BaseDataModel):
             "embedding": self.embedding,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
-            "is_active": self.is_active
+            "is_active": self.is_active,
         }
 
     @classmethod
@@ -39,13 +41,14 @@ class BotInterestTag(BaseDataModel):
             embedding=data.get("embedding"),
             created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else datetime.now(),
             updated_at=datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else datetime.now(),
-            is_active=data.get("is_active", True)
+            is_active=data.get("is_active", True),
         )
 
 
 @dataclass
 class BotPersonalityInterests(BaseDataModel):
     """机器人人格化兴趣配置"""
+
     personality_id: str
     personality_description: str  # 人设描述文本
     interest_tags: List[BotInterestTag] = field(default_factory=list)
@@ -57,7 +60,6 @@ class BotPersonalityInterests(BaseDataModel):
         """获取活跃的兴趣标签"""
         return [tag for tag in self.interest_tags if tag.is_active]
 
-
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
         return {
@@ -66,7 +68,7 @@ class BotPersonalityInterests(BaseDataModel):
             "interest_tags": [tag.to_dict() for tag in self.interest_tags],
             "embedding_model": self.embedding_model,
             "last_updated": self.last_updated.isoformat(),
-            "version": self.version
+            "version": self.version,
         }
 
     @classmethod
@@ -78,13 +80,14 @@ class BotPersonalityInterests(BaseDataModel):
             interest_tags=[BotInterestTag.from_dict(tag_data) for tag_data in data.get("interest_tags", [])],
             embedding_model=data.get("embedding_model", "text-embedding-ada-002"),
             last_updated=datetime.fromisoformat(data["last_updated"]) if data.get("last_updated") else datetime.now(),
-            version=data.get("version", 1)
+            version=data.get("version", 1),
         )
 
 
 @dataclass
 class InterestMatchResult(BaseDataModel):
     """兴趣匹配结果"""
+
     message_id: str
     matched_tags: List[str] = field(default_factory=list)
     match_scores: Dict[str, float] = field(default_factory=dict)  # tag_name -> score
@@ -120,7 +123,9 @@ class InterestMatchResult(BaseDataModel):
         # 计算置信度（基于匹配标签数量和分数分布）
         if len(self.match_scores) > 0:
             avg_score = self.overall_score
-            score_variance = sum((score - avg_score) ** 2 for score in self.match_scores.values()) / len(self.match_scores)
+            score_variance = sum((score - avg_score) ** 2 for score in self.match_scores.values()) / len(
+                self.match_scores
+            )
             # 分数越集中，置信度越高
             self.confidence = max(0.0, 1.0 - score_variance)
         else:

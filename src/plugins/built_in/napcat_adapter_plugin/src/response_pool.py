@@ -45,12 +45,12 @@ async def check_timeout_response() -> None:
     while True:
         cleaned_message_count: int = 0
         now_time = time.time()
-        
+
         # 获取心跳间隔配置
         heartbeat_interval = 30  # 默认值
         if plugin_config:
             heartbeat_interval = config_api.get_plugin_config(plugin_config, "napcat_server.heartbeat_interval", 30)
-        
+
         for echo_id, response_time in list(response_time_dict.items()):
             if now_time - response_time > heartbeat_interval:
                 cleaned_message_count += 1

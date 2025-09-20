@@ -233,7 +233,7 @@ class LauchNapcatAdapterHandler(BaseEventHandler):
         await reassembler.start_cleanup_task()
 
         logger.info("开始启动Napcat Adapter")
-        
+
         # 创建单独的异步任务，防止阻塞主线程
         asyncio.create_task(self._start_maibot_connection())
         asyncio.create_task(napcat_server(self.plugin_config))
@@ -244,10 +244,10 @@ class LauchNapcatAdapterHandler(BaseEventHandler):
         """非阻塞方式启动MaiBot连接，等待主服务启动后再连接"""
         # 等待一段时间让MaiBot主服务完全启动
         await asyncio.sleep(5)
-        
+
         max_attempts = 10
         attempt = 0
-        
+
         while attempt < max_attempts:
             try:
                 logger.info(f"尝试连接MaiBot (第{attempt + 1}次)")
@@ -291,7 +291,7 @@ class NapcatAdapterPlugin(BasePlugin):
     def enable_plugin(self) -> bool:
         """通过配置文件动态控制插件启用状态"""
         # 如果已经通过配置加载了状态，使用配置中的值
-        if hasattr(self, '_is_enabled'):
+        if hasattr(self, "_is_enabled"):
             return self._is_enabled
         # 否则使用默认值（禁用状态）
         return False
@@ -314,60 +314,107 @@ class NapcatAdapterPlugin(BasePlugin):
             "nickname": ConfigField(type=str, default="", description="昵称配置（目前未使用）"),
         },
         "napcat_server": {
-            "mode": ConfigField(type=str, default="reverse", description="连接模式：reverse=反向连接(作为服务器), forward=正向连接(作为客户端)", choices=["reverse", "forward"]),
+            "mode": ConfigField(
+                type=str,
+                default="reverse",
+                description="连接模式：reverse=反向连接(作为服务器), forward=正向连接(作为客户端)",
+                choices=["reverse", "forward"],
+            ),
             "host": ConfigField(type=str, default="localhost", description="主机地址"),
             "port": ConfigField(type=int, default=8095, description="端口号"),
-            "url": ConfigField(type=str, default="", description="正向连接时的完整WebSocket URL，如 ws://localhost:8080/ws (仅在forward模式下使用)"),
-            "access_token": ConfigField(type=str, default="", description="WebSocket 连接的访问令牌，用于身份验证（可选）"),
+            "url": ConfigField(
+                type=str,
+                default="",
+                description="正向连接时的完整WebSocket URL，如 ws://localhost:8080/ws (仅在forward模式下使用)",
+            ),
+            "access_token": ConfigField(
+                type=str, default="", description="WebSocket 连接的访问令牌，用于身份验证（可选）"
+            ),
             "heartbeat_interval": ConfigField(type=int, default=30, description="心跳间隔时间（按秒计）"),
         },
         "maibot_server": {
-            "host": ConfigField(type=str, default="localhost", description="麦麦在.env文件中设置的主机地址，即HOST字段"),
+            "host": ConfigField(
+                type=str, default="localhost", description="麦麦在.env文件中设置的主机地址，即HOST字段"
+            ),
             "port": ConfigField(type=int, default=8000, description="麦麦在.env文件中设置的端口，即PORT字段"),
             "platform_name": ConfigField(type=str, default="qq", description="平台名称，用于消息路由"),
         },
         "voice": {
-            "use_tts": ConfigField(type=bool, default=False, description="是否使用tts语音（请确保你配置了tts并有对应的adapter）"),
+            "use_tts": ConfigField(
+                type=bool, default=False, description="是否使用tts语音（请确保你配置了tts并有对应的adapter）"
+            ),
         },
         "slicing": {
-            "max_frame_size": ConfigField(type=int, default=64, description="WebSocket帧的最大大小，单位为字节，默认64KB"),
+            "max_frame_size": ConfigField(
+                type=int, default=64, description="WebSocket帧的最大大小，单位为字节，默认64KB"
+            ),
             "delay_ms": ConfigField(type=int, default=10, description="切片发送间隔时间，单位为毫秒"),
         },
         "debug": {
-            "level": ConfigField(type=str, default="INFO", description="日志等级（DEBUG, INFO, WARNING, ERROR, CRITICAL）", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+            "level": ConfigField(
+                type=str,
+                default="INFO",
+                description="日志等级（DEBUG, INFO, WARNING, ERROR, CRITICAL）",
+                choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            ),
         },
         "features": {
             # 权限设置
-            "group_list_type": ConfigField(type=str, default="blacklist", description="群聊列表类型：whitelist（白名单）或 blacklist（黑名单）", choices=["whitelist", "blacklist"]),
+            "group_list_type": ConfigField(
+                type=str,
+                default="blacklist",
+                description="群聊列表类型：whitelist（白名单）或 blacklist（黑名单）",
+                choices=["whitelist", "blacklist"],
+            ),
             "group_list": ConfigField(type=list, default=[], description="群聊ID列表"),
-            "private_list_type": ConfigField(type=str, default="blacklist", description="私聊列表类型：whitelist（白名单）或 blacklist（黑名单）", choices=["whitelist", "blacklist"]),
+            "private_list_type": ConfigField(
+                type=str,
+                default="blacklist",
+                description="私聊列表类型：whitelist（白名单）或 blacklist（黑名单）",
+                choices=["whitelist", "blacklist"],
+            ),
             "private_list": ConfigField(type=list, default=[], description="用户ID列表"),
-            "ban_user_id": ConfigField(type=list, default=[], description="全局禁止用户ID列表，这些用户无法在任何地方使用机器人"),
+            "ban_user_id": ConfigField(
+                type=list, default=[], description="全局禁止用户ID列表，这些用户无法在任何地方使用机器人"
+            ),
             "ban_qq_bot": ConfigField(type=bool, default=False, description="是否屏蔽QQ官方机器人消息"),
-            
             # 聊天功能设置
             "enable_poke": ConfigField(type=bool, default=True, description="是否启用戳一戳功能"),
             "ignore_non_self_poke": ConfigField(type=bool, default=False, description="是否无视不是针对自己的戳一戳"),
-            "poke_debounce_seconds": ConfigField(type=int, default=3, description="戳一戳防抖时间（秒），在指定时间内第二次针对机器人的戳一戳将被忽略"),
+            "poke_debounce_seconds": ConfigField(
+                type=int, default=3, description="戳一戳防抖时间（秒），在指定时间内第二次针对机器人的戳一戳将被忽略"
+            ),
             "enable_reply_at": ConfigField(type=bool, default=True, description="是否启用引用回复时艾特用户的功能"),
             "reply_at_rate": ConfigField(type=float, default=0.5, description="引用回复时艾特用户的几率 (0.0 ~ 1.0)"),
             "enable_emoji_like": ConfigField(type=bool, default=True, description="是否启用群聊表情回复功能"),
-            
             # 视频处理设置
             "enable_video_analysis": ConfigField(type=bool, default=True, description="是否启用视频识别功能"),
             "max_video_size_mb": ConfigField(type=int, default=100, description="视频文件最大大小限制（MB）"),
             "download_timeout": ConfigField(type=int, default=60, description="视频下载超时时间（秒）"),
-            "supported_formats": ConfigField(type=list, default=["mp4", "avi", "mov", "mkv", "flv", "wmv", "webm"], description="支持的视频格式"),
-            
+            "supported_formats": ConfigField(
+                type=list, default=["mp4", "avi", "mov", "mkv", "flv", "wmv", "webm"], description="支持的视频格式"
+            ),
             # 消息缓冲设置
             "enable_message_buffer": ConfigField(type=bool, default=True, description="是否启用消息缓冲合并功能"),
             "message_buffer_enable_group": ConfigField(type=bool, default=True, description="是否启用群聊消息缓冲合并"),
-            "message_buffer_enable_private": ConfigField(type=bool, default=True, description="是否启用私聊消息缓冲合并"),
-            "message_buffer_interval": ConfigField(type=float, default=3.0, description="消息合并间隔时间（秒），在此时间内的连续消息将被合并"),
-            "message_buffer_initial_delay": ConfigField(type=float, default=0.5, description="消息缓冲初始延迟（秒），收到第一条消息后等待此时间开始合并"),
-            "message_buffer_max_components": ConfigField(type=int, default=50, description="单个会话最大缓冲消息组件数量，超过此数量将强制合并"),
-            "message_buffer_block_prefixes": ConfigField(type=list, default=["/", "!", "！", ".", "。", "#", "%"], description="消息缓冲屏蔽前缀，以这些前缀开头的消息不会被缓冲"),
-        }
+            "message_buffer_enable_private": ConfigField(
+                type=bool, default=True, description="是否启用私聊消息缓冲合并"
+            ),
+            "message_buffer_interval": ConfigField(
+                type=float, default=3.0, description="消息合并间隔时间（秒），在此时间内的连续消息将被合并"
+            ),
+            "message_buffer_initial_delay": ConfigField(
+                type=float, default=0.5, description="消息缓冲初始延迟（秒），收到第一条消息后等待此时间开始合并"
+            ),
+            "message_buffer_max_components": ConfigField(
+                type=int, default=50, description="单个会话最大缓冲消息组件数量，超过此数量将强制合并"
+            ),
+            "message_buffer_block_prefixes": ConfigField(
+                type=list,
+                default=["/", "!", "！", ".", "。", "#", "%"],
+                description="消息缓冲屏蔽前缀，以这些前缀开头的消息不会被缓冲",
+            ),
+        },
     }
 
     # 配置节描述
@@ -380,7 +427,7 @@ class NapcatAdapterPlugin(BasePlugin):
         "voice": "发送语音设置",
         "slicing": "WebSocket消息切片设置",
         "debug": "调试设置",
-        "features": "功能设置（权限控制、聊天功能、视频处理、消息缓冲等）"
+        "features": "功能设置（权限控制、聊天功能、视频处理、消息缓冲等）",
     }
 
     def register_events(self):
@@ -414,6 +461,7 @@ class NapcatAdapterPlugin(BasePlugin):
         chunker.set_plugin_config(self.config)
         # 设置response_pool的插件配置
         from .src.response_pool import set_plugin_config as set_response_pool_config
+
         set_response_pool_config(self.config)
         # 设置send_handler的插件配置
         send_handler.set_plugin_config(self.config)

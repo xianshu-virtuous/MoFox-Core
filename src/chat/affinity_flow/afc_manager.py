@@ -2,6 +2,7 @@
 亲和力聊天处理流管理器
 管理不同聊天流的亲和力聊天处理流，统一获取新消息并分发到对应的亲和力聊天处理流
 """
+
 import time
 import traceback
 from typing import Dict, Optional, List
@@ -20,7 +21,7 @@ class AFCManager:
 
     def __init__(self):
         self.affinity_flow_chatters: Dict[str, "AffinityFlowChatter"] = {}
-        '''所有聊天流的亲和力聊天处理流，stream_id -> affinity_flow_chatter'''
+        """所有聊天流的亲和力聊天处理流，stream_id -> affinity_flow_chatter"""
 
         # 动作管理器
         self.action_manager = ActionManager()
@@ -40,11 +41,7 @@ class AFCManager:
             # 创建增强版规划器
             planner = ActionPlanner(stream_id, self.action_manager)
 
-            chatter = AffinityFlowChatter(
-                stream_id=stream_id,
-                planner=planner,
-                action_manager=self.action_manager
-            )
+            chatter = AffinityFlowChatter(stream_id=stream_id, planner=planner, action_manager=self.action_manager)
             self.affinity_flow_chatters[stream_id] = chatter
             logger.info(f"创建新的亲和力聊天处理器: {stream_id}")
 
@@ -73,7 +70,6 @@ class AFCManager:
                 "error_message": str(e),
                 "executed_count": 0,
             }
-
 
     def get_chatter_stats(self, stream_id: str) -> Optional[Dict[str, any]]:
         """获取聊天处理器统计"""
@@ -130,5 +126,6 @@ class AFCManager:
         if stream_id in self.affinity_flow_chatters:
             self.affinity_flow_chatters[stream_id].update_interest_keywords(new_keywords)
             logger.info(f"已更新聊天流 {stream_id} 的兴趣关键词: {list(new_keywords.keys())}")
+
 
 afc_manager = AFCManager()

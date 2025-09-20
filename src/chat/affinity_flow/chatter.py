@@ -2,6 +2,7 @@
 亲和力聊天处理器
 单个聊天流的处理器，负责处理特定聊天流的完整交互流程
 """
+
 import time
 import traceback
 from datetime import datetime
@@ -57,10 +58,7 @@ class AffinityFlowChatter:
             unread_messages = context.get_unread_messages()
 
             # 使用增强版规划器处理消息
-            actions, target_message = await self.planner.plan(
-                mode=ChatMode.FOCUS,
-                context=context
-            )
+            actions, target_message = await self.planner.plan(mode=ChatMode.FOCUS, context=context)
             self.stats["plans_created"] += 1
 
             # 执行动作（如果规划器返回了动作）
@@ -84,7 +82,9 @@ class AffinityFlowChatter:
                 **execution_result,
             }
 
-            logger.info(f"聊天流 {self.stream_id} StreamContext处理成功: 动作数={result['actions_count']}, 未读消息={result['unread_messages_processed']}")
+            logger.info(
+                f"聊天流 {self.stream_id} StreamContext处理成功: 动作数={result['actions_count']}, 未读消息={result['unread_messages_processed']}"
+            )
 
             return result
 
@@ -197,7 +197,9 @@ class AffinityFlowChatter:
 
     def __repr__(self) -> str:
         """详细字符串表示"""
-        return (f"AffinityFlowChatter(stream_id={self.stream_id}, "
-                f"messages_processed={self.stats['messages_processed']}, "
-                f"plans_created={self.stats['plans_created']}, "
-                f"last_activity={datetime.fromtimestamp(self.last_activity_time)})")
+        return (
+            f"AffinityFlowChatter(stream_id={self.stream_id}, "
+            f"messages_processed={self.stats['messages_processed']}, "
+            f"plans_created={self.stats['plans_created']}, "
+            f"last_activity={datetime.fromtimestamp(self.last_activity_time)})"
+        )

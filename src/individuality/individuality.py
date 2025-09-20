@@ -84,8 +84,7 @@ class Individuality:
 
         # 初始化智能兴趣系统
         await interest_scoring_system.initialize_smart_interests(
-            personality_description=full_personality,
-            personality_id=self.bot_person_id
+            personality_description=full_personality, personality_id=self.bot_person_id
         )
 
         logger.info("智能兴趣系统初始化完成")

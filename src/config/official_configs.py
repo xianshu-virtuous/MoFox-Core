@@ -51,8 +51,12 @@ class PersonalityConfig(ValidatedConfigBase):
     personality_core: str = Field(..., description="核心人格")
     personality_side: str = Field(..., description="人格侧写")
     identity: str = Field(default="", description="身份特征")
-    background_story: str = Field(default="", description="世界观背景故事，这部分内容会作为背景知识，LLM被指导不应主动复述")
-    safety_guidelines: List[str] = Field(default_factory=list, description="安全与互动底线，Bot在任何情况下都必须遵守的原则")
+    background_story: str = Field(
+        default="", description="世界观背景故事，这部分内容会作为背景知识，LLM被指导不应主动复述"
+    )
+    safety_guidelines: List[str] = Field(
+        default_factory=list, description="安全与互动底线，Bot在任何情况下都必须遵守的原则"
+    )
     reply_style: str = Field(default="", description="表达风格")
     prompt_mode: Literal["s4u", "normal"] = Field(default="s4u", description="Prompt模式")
     compress_personality: bool = Field(default=True, description="是否压缩人格")
@@ -109,7 +113,8 @@ class ChatConfig(ValidatedConfigBase):
     talk_frequency_adjust: list[list[str]] = Field(default_factory=lambda: [], description="聊天频率调整")
     focus_value: float = Field(default=1.0, description="专注值")
     focus_mode_quiet_groups: List[str] = Field(
-        default_factory=list, description='专注模式下需要保持安静的群组列表, 格式: ["platform:group_id1", "platform:group_id2"]'
+        default_factory=list,
+        description='专注模式下需要保持安静的群组列表, 格式: ["platform:group_id1", "platform:group_id2"]',
     )
     force_reply_private: bool = Field(default=False, description="强制回复私聊")
     group_chat_mode: Literal["auto", "normal", "focus"] = Field(default="auto", description="群聊模式")
@@ -376,6 +381,7 @@ class ExpressionConfig(ValidatedConfigBase):
         # 如果都没有匹配，返回默认值
         return True, True, 1.0
 
+
 class ToolConfig(ValidatedConfigBase):
     """工具配置类"""
 
@@ -510,7 +516,6 @@ class ExperimentalConfig(ValidatedConfigBase):
     pfc_chatting: bool = Field(default=False, description="启用PFC聊天")
 
 
-
 class MaimMessageConfig(ValidatedConfigBase):
     """maim_message配置类"""
 
@@ -635,8 +640,12 @@ class SleepSystemConfig(ValidatedConfigBase):
     sleep_by_schedule: bool = Field(default=True, description="是否根据日程表进行睡觉")
     fixed_sleep_time: str = Field(default="23:00", description="固定的睡觉时间")
     fixed_wake_up_time: str = Field(default="07:00", description="固定的起床时间")
-    sleep_time_offset_minutes: int = Field(default=15, ge=0, le=60, description="睡觉时间随机偏移量范围（分钟），实际睡觉时间会在±该值范围内随机")
-    wake_up_time_offset_minutes: int = Field(default=15, ge=0, le=60, description="起床时间随机偏移量范围（分钟），实际起床时间会在±该值范围内随机")
+    sleep_time_offset_minutes: int = Field(
+        default=15, ge=0, le=60, description="睡觉时间随机偏移量范围（分钟），实际睡觉时间会在±该值范围内随机"
+    )
+    wake_up_time_offset_minutes: int = Field(
+        default=15, ge=0, le=60, description="起床时间随机偏移量范围（分钟），实际起床时间会在±该值范围内随机"
+    )
     wakeup_threshold: float = Field(default=15.0, ge=1.0, description="唤醒阈值，达到此值时会被唤醒")
     private_message_increment: float = Field(default=3.0, ge=0.1, description="私聊消息增加的唤醒度")
     group_mention_increment: float = Field(default=2.0, ge=0.1, description="群聊艾特增加的唤醒度")
@@ -651,10 +660,10 @@ class SleepSystemConfig(ValidatedConfigBase):
     # --- 失眠机制相关参数 ---
     enable_insomnia_system: bool = Field(default=True, description="是否启用失眠系统")
     insomnia_trigger_delay_minutes: List[int] = Field(
-        default_factory=lambda:[30, 60], description="入睡后触发失眠判定的延迟时间范围（分钟）"
+        default_factory=lambda: [30, 60], description="入睡后触发失眠判定的延迟时间范围（分钟）"
     )
     insomnia_duration_minutes: List[int] = Field(
-        default_factory=lambda:[15, 45], description="单次失眠状态的持续时间范围（分钟）"
+        default_factory=lambda: [15, 45], description="单次失眠状态的持续时间范围（分钟）"
     )
     sleep_pressure_threshold: float = Field(default=30.0, description="触发“压力不足型失眠”的睡眠压力阈值")
     deep_sleep_threshold: float = Field(default=80.0, description="进入“深度睡眠”的睡眠压力阈值")
@@ -690,6 +699,8 @@ class CrossContextConfig(ValidatedConfigBase):
 
     enable: bool = Field(default=False, description="是否启用跨群聊上下文共享功能")
     groups: List[ContextGroup] = Field(default_factory=list, description="上下文共享组列表")
+
+
 class CommandConfig(ValidatedConfigBase):
     """命令系统配置类"""
 

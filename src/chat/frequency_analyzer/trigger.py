@@ -14,6 +14,7 @@ Frequency-Based Proactive Trigger
 - TRIGGER_CHECK_INTERVAL_SECONDS: 触发器检查的周期（秒）。
 - COOLDOWN_HOURS: 在同一个高峰时段内触发一次后的冷却时间（小时）。
 """
+
 import asyncio
 import time
 from datetime import datetime
@@ -21,6 +22,7 @@ from typing import Dict, Optional
 
 from src.common.logger import get_logger
 from src.chat.affinity_flow.afc_manager import afc_manager
+
 # TODO: 需要重新实现主动思考和睡眠管理功能
 from .analyzer import chat_frequency_analyzer
 
@@ -65,7 +67,7 @@ class FrequencyBasedTrigger:
                     continue
 
                 now = datetime.now()
-                
+
                 for chat_id in all_chat_ids:
                     # 3. 检查是否处于冷却时间内
                     last_triggered_time = self._last_triggered.get(chat_id, 0)
@@ -74,7 +76,6 @@ class FrequencyBasedTrigger:
 
                     # 4. 检查当前是否是该用户的高峰聊天时间
                     if chat_frequency_analyzer.is_in_peak_time(chat_id, now):
-                        
                         # 5. 检查用户当前是否已有活跃的处理任务
                         #    亲和力流系统不直接提供循环状态，通过检查最后活动时间来判断是否忙碌
                         chatter = afc_manager.get_or_create_chatter(chat_id)
@@ -87,13 +88,13 @@ class FrequencyBasedTrigger:
                         if current_time - chatter.get_activity_time() < 60:
                             logger.debug(f"用户 {chat_id} 的亲和力处理器正忙，本次不触发。")
                             continue
-                          
+
                         logger.info(f"检测到用户 {chat_id} 处于聊天高峰期，且处理器空闲，准备触发主动思考。")
-                        
+
                         # 6. TODO: 亲和力流系统的主动思考机制需要另行实现
                         #    目前先记录日志，等待后续实现
                         logger.info(f"用户 {chat_id} 处于高峰期，但亲和力流的主动思考功能暂未实现")
-                        
+
                         # 7. 更新触发时间，进入冷却
                         self._last_triggered[chat_id] = time.time()
 

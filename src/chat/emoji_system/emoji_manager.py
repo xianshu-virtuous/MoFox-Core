@@ -479,7 +479,7 @@ class EmojiManager:
             emoji_options_str = ""
             for i, emoji in enumerate(candidate_emojis):
                 # 为每个表情包创建一个编号和它的详细描述
-                emoji_options_str += f"编号: {i+1}\n描述: {emoji.description}\n\n"
+                emoji_options_str += f"编号: {i + 1}\n描述: {emoji.description}\n\n"
 
             # 精心设计的prompt，引导LLM做出选择
             prompt = f"""
@@ -526,10 +526,8 @@ class EmojiManager:
             await self.record_usage(selected_emoji.emoji_hash)
             _time_end = time.time()
 
-            logger.info(
-                f"找到匹配描述的表情包: {selected_emoji.description}, 耗时: {(_time_end - _time_start):.2f}s"
-            )
-            
+            logger.info(f"找到匹配描述的表情包: {selected_emoji.description}, 耗时: {(_time_end - _time_start):.2f}s")
+
             # 8. 返回选中的表情包信息
             return selected_emoji.full_path, f"[表情包：{selected_emoji.description}]", text_emotion
 
@@ -629,8 +627,9 @@ class EmojiManager:
 
             # 无论steal_emoji是否开启，都检查emoji文件夹以支持手动注册
             # 只有在需要腾出空间或填充表情库时，才真正执行注册
-            if (self.emoji_num > self.emoji_num_max and global_config.emoji.do_replace) or \
-               (self.emoji_num < self.emoji_num_max):
+            if (self.emoji_num > self.emoji_num_max and global_config.emoji.do_replace) or (
+                self.emoji_num < self.emoji_num_max
+            ):
                 try:
                     # 获取目录下所有图片文件
                     files_to_process = [
@@ -938,19 +937,21 @@ class EmojiManager:
                 image_base64 = image_base64.encode("ascii", errors="ignore").decode("ascii")
             image_bytes = base64.b64decode(image_base64)
             image_hash = hashlib.md5(image_bytes).hexdigest()
-            image_format = Image.open(io.BytesIO(image_bytes)).format.lower() if Image.open(io.BytesIO(image_bytes)).format else "jpeg"
-
+            image_format = (
+                Image.open(io.BytesIO(image_bytes)).format.lower()
+                if Image.open(io.BytesIO(image_bytes)).format
+                else "jpeg"
+            )
 
             # 2. 检查数据库中是否已存在该表情包的描述，实现复用
             existing_description = None
             try:
-                async with get_db_session() as session:
-                    result = await session.execute(
-                        select(Images).filter(
-                            (Images.emoji_hash == image_hash) & (Images.type == "emoji")
-                        )
+                with get_db_session() as session:
+                    existing_image = (
+                        session.query(Images)
+                        .filter((Images.emoji_hash == image_hash) & (Images.type == "emoji"))
+                        .one_or_none()
                     )
-                    existing_image = result.scalar_one_or_none()
                     if existing_image and existing_image.description:
                         existing_description = existing_image.description
                         logger.info(f"[复用描述] 找到已有详细描述: {existing_description[:50]}...")

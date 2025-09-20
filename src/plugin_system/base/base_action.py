@@ -91,7 +91,6 @@ class BaseAction(ABC):
         self.associated_types: list[str] = getattr(self.__class__, "associated_types", []).copy()
         self.chat_type_allow: ChatType = getattr(self.__class__, "chat_type_allow", ChatType.ALL)
 
-
         # =============================================================================
         # 便捷属性 - 直接在初始化时获取常用聊天信息（带类型注解）
         # =============================================================================
@@ -401,6 +400,7 @@ class BaseAction(ABC):
             from src.plugin_system.core.component_registry import component_registry
             # 1. 从注册中心获取Action类
             from src.plugin_system.core.component_registry import component_registry
+
             action_class = component_registry.get_component_class(action_name, ComponentType.ACTION)
             if not action_class:
                 logger.error(f"{log_prefix} 未找到Action: {action_name}")
@@ -409,7 +409,7 @@ class BaseAction(ABC):
             # 2. 准备实例化参数
             # 复用当前Action的大部分上下文信息
             called_action_data = action_data if action_data is not None else self.action_data
-            
+
             component_info = component_registry.get_component_info(action_name, ComponentType.ACTION)
             if not component_info:
                 logger.warning(f"{log_prefix} 未找到Action组件信息: {action_name}")

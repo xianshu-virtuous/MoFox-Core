@@ -104,7 +104,9 @@ class SimpleMessageBuffer:
             return True
 
         # 检查屏蔽前缀
-        block_prefixes = tuple(config_api.get_plugin_config(self.plugin_config, "features.message_buffer_block_prefixes", []))
+        block_prefixes = tuple(
+            config_api.get_plugin_config(self.plugin_config, "features.message_buffer_block_prefixes", [])
+        )
 
         text = text.strip()
         if text.startswith(block_prefixes):
@@ -136,9 +138,13 @@ class SimpleMessageBuffer:
 
         # 检查是否启用对应类型的缓冲
         message_type = event_data.get("message_type", "")
-        if message_type == "group" and not config_api.get_plugin_config(self.plugin_config, "features.message_buffer_enable_group", False):
+        if message_type == "group" and not config_api.get_plugin_config(
+            self.plugin_config, "features.message_buffer_enable_group", False
+        ):
             return False
-        elif message_type == "private" and not config_api.get_plugin_config(self.plugin_config, "features.message_buffer_enable_private", False):
+        elif message_type == "private" and not config_api.get_plugin_config(
+            self.plugin_config, "features.message_buffer_enable_private", False
+        ):
             return False
 
         # 提取文本
@@ -160,7 +166,9 @@ class SimpleMessageBuffer:
             session = self.buffer_pool[session_id]
 
             # 检查是否超过最大组件数量
-            if len(session.messages) >= config_api.get_plugin_config(self.plugin_config, "features.message_buffer_max_components", 5):
+            if len(session.messages) >= config_api.get_plugin_config(
+                self.plugin_config, "features.message_buffer_max_components", 5
+            ):
                 logger.debug(f"会话 {session_id} 消息数量达到上限，强制合并")
                 asyncio.create_task(self._force_merge_session(session_id))
                 self.buffer_pool[session_id] = BufferedSession(session_id=session_id, original_event=original_event)

@@ -17,6 +17,7 @@ from src.plugin_system.core import component_registry, event_manager, global_ann
 from src.plugin_system.base import BaseCommand, EventType
 from src.mais4u.mais4u_chat.s4u_msg_processor import S4UMessageProcessor
 from src.chat.utils.utils import is_mentioned_bot_in_message
+
 # 导入反注入系统
 from src.chat.antipromptinjector import initialize_anti_injector
 
@@ -515,7 +516,7 @@ class ChatBot:
                     chat_info_user_id=message.chat_stream.user_info.user_id,
                     chat_info_user_nickname=message.chat_stream.user_info.user_nickname,
                     chat_info_user_cardname=message.chat_stream.user_info.user_cardname,
-                    chat_info_user_platform=message.chat_stream.user_info.platform
+                    chat_info_user_platform=message.chat_stream.user_info.platform,
                 )
 
                 # 如果是群聊，添加群组信息

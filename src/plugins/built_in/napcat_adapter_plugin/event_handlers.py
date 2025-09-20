@@ -1,4 +1,3 @@
-
 from src.plugin_system import BaseEventHandler
 from src.plugin_system.base.base_event import HandlerResult
 
@@ -1747,6 +1746,7 @@ class SetGroupSignHandler(BaseEventHandler):
         else:
             logger.error("事件 napcat_set_group_sign 请求失败！")
             return HandlerResult(False, False, {"status": "error"})
+
 
 # ===PERSONAL===
 class SetInputStatusHandler(BaseEventHandler):

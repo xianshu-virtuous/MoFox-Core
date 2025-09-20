@@ -105,4 +105,4 @@ class PlanManager:
     @staticmethod
     async def get_plans_for_schedule(month: str, max_count: int) -> List:
         avoid_days = global_config.planning_system.avoid_repetition_days
-        return await get_smart_plans_for_daily_schedule(month, max_count=max_count, avoid_days=avoid_days)
+        return get_smart_plans_for_daily_schedule(month, max_count=max_count, avoid_days=avoid_days)
