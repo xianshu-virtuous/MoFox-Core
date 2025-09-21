@@ -79,6 +79,9 @@ class PromptParameters:
     # 可用动作信息
     available_actions: Optional[Dict[str, Any]] = None
 
+    # 动态生成的聊天场景提示
+    chat_scene: str = ""
+
     def validate(self) -> List[str]:
         """参数验证"""
         errors = []
@@ -721,6 +724,7 @@ class Prompt:
             "moderation_prompt": self.parameters.moderation_prompt_block or context_data.get("moderation_prompt", ""),
             "safety_guidelines_block": self.parameters.safety_guidelines_block
             or context_data.get("safety_guidelines_block", ""),
+            "chat_scene": self.parameters.chat_scene or "你正在一个QQ群里聊天，你需要理解整个群的聊天动态和话题走向，并做出自然的回应。",
         }
 
     def _prepare_normal_params(self, context_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -747,6 +751,7 @@ class Prompt:
             "moderation_prompt": self.parameters.moderation_prompt_block or context_data.get("moderation_prompt", ""),
             "safety_guidelines_block": self.parameters.safety_guidelines_block
             or context_data.get("safety_guidelines_block", ""),
+            "chat_scene": self.parameters.chat_scene or "你正在一个QQ群里聊天，你需要理解整个群的聊天动态和话题走向，并做出自然的回应。",
         }
 
     def _prepare_default_params(self, context_data: Dict[str, Any]) -> Dict[str, Any]:

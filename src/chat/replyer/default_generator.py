@@ -109,7 +109,7 @@ def init_prompt():
 
 ## 任务
 
-*你正在一个{chat_context_type}里聊天，你需要理解整个{chat_context_type}的聊天动态和话题走向，并做出自然的回应。*
+*{chat_scene}*
 
 ### 核心任务
 - 你现在的主要任务是和 {sender_name} 聊天。{relation_info_block}同时，也有其他用户会参与聊天，你可以参考他们的回复内容，但是你现在想回复{sender_name}的发言。
@@ -170,7 +170,7 @@ If you need to use the search tool, please directly call the function "lpmm_sear
     logger.debug("[Prompt模式调试] 正在注册normal_style_prompt模板")
     Prompt(
         """
-你正在一个QQ群里聊天，你需要理解整个群的聊天动态和话题走向，并做出自然的回应。
+{chat_scene}
 
 **重要：消息针对性判断**
 {safety_guidelines_block}
@@ -1280,8 +1280,15 @@ class DefaultReplyer:
         # 根据配置选择模板
         current_prompt_mode = global_config.personality.prompt_mode
 
+        # 动态生成聊天场景提示
+        if is_group_chat:
+            chat_scene_prompt = "你正在一个QQ群里聊天，你需要理解整个群的聊天动态和话题走向，并做出自然的回应。"
+        else:
+            chat_scene_prompt = f"你正在和 {sender} 私下聊天，你需要理解你们的对话并做出自然的回应。"
+
         # 使用新的统一Prompt系统 - 创建PromptParameters
         prompt_parameters = PromptParameters(
+            chat_scene=chat_scene_prompt,
             chat_id=chat_id,
             is_group_chat=is_group_chat,
             sender=sender,
