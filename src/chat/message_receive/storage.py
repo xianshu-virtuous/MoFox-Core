@@ -52,7 +52,8 @@ class MessageStorage:
                 if display_message:
                     filtered_display_message = re.sub(pattern, "", display_message, flags=re.DOTALL)
                 else:
-                    filtered_display_message = ""
+                    # 如果没有设置display_message，使用processed_plain_text作为显示消息
+                    filtered_display_message = re.sub(pattern, "", message.processed_plain_text, flags=re.DOTALL) if message.processed_plain_text else ""
                 interest_value = 0
                 is_mentioned = False
                 reply_to = message.reply_to
