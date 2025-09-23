@@ -66,6 +66,9 @@ def init_prompts():
 *   **使用昵称**: 在你的思绪流中，请直接使用用户的昵称来指代他们，而不是`<m1>`, `<m2>`这样的消息ID。
 *   **严禁技术术语**: 严禁在思考中提及任何数字化的度量（如兴趣度、分数）或内部技术术语。请完全使用角色自身的感受和语言来描述思考过程。
 
+## 可用动作列表
+{action_options_text}
+
 ```json
 {{
     "thinking": "在这里写下你的思绪流...",
@@ -262,6 +265,22 @@ def init_prompts():
 请根据上述信息判断是否需要使用此动作。
 """,
         "action_prompt",
+    )
+
+    # 带有完整JSON示例的动作提示词模板
+    Prompt(
+        """
+动作: {action_name}
+动作描述: {action_description}
+动作使用场景:
+{action_require}
+
+你应该像这样使用它:
+{{
+{json_example}
+}}
+""",
+        "action_prompt_with_example",
     )
 
 

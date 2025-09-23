@@ -533,18 +533,60 @@ class ChatterPlanFilter:
     async def _build_action_options(current_available_actions: Dict[str, ActionInfo]) -> str:
         action_options_block = ""
         for action_name, action_info in current_available_actions.items():
-            param_text = ""
+            # 构建参数的JSON示例
+            params_json_list = []
             if action_info.action_parameters:
-                param_text = "\n" + "\n".join(
-                    f'    "{p_name}":"{p_desc}"' for p_name, p_desc in action_info.action_parameters.items()
-                )
-            require_text = "\n".join(f"- {req}" for req in action_info.action_require)
-            using_action_prompt = await global_prompt_manager.get_prompt_async("action_prompt")
+                for p_name, p_desc in action_info.action_parameters.items():
+                    # 为参数描述添加一个通用示例值
+                    example_value = f"<{p_desc}>"
+                    params_json_list.append(f'        "{p_name}": "{example_value}"')
+            
+            # 基础动作信息
+            action_description = action_info.description
+            action_require = "\n".join(f"- {req}" for req in action_info.action_require)
+
+            # 构建完整的JSON使用范例
+            json_example_lines = [
+                "    {",
+                f'        "action_type": "{action_name}"',
+            ]
+            # 将参数列表合并到JSON示例中
+            if params_json_list:
+                # 移除最后一行的逗号
+                json_example_lines.extend([line.rstrip(',') for line in params_json_list])
+
+            json_example_lines.append('        "reason": "<执行该动作的详细原因>"')
+            json_example_lines.append("    }")
+            
+            # 使用逗号连接内部元素，除了最后一个
+            json_parts = []
+            for i, line in enumerate(json_example_lines):
+                # "{" 和 "}" 不需要逗号
+                if line.strip() in ["{", "}"]:
+                    json_parts.append(line)
+                    continue
+                
+                # 检查是否是最后一个需要逗号的元素
+                is_last_item = True
+                for next_line in json_example_lines[i+1:]:
+                    if next_line.strip() not in ["}"]:
+                        is_last_item = False
+                        break
+                
+                if not is_last_item:
+                    json_parts.append(f"{line},")
+                else:
+                    json_parts.append(line)
+
+            json_example = "\n".join(json_parts)
+
+            # 使用新的、更详细的action_prompt模板
+            using_action_prompt = await global_prompt_manager.get_prompt_async("action_prompt_with_example")
             action_options_block += using_action_prompt.format(
                 action_name=action_name,
-                action_description=action_info.description,
-                action_parameters=param_text,
-                action_require=require_text,
+                action_description=action_description,
+                action_require=action_require,
+                json_example=json_example,
             )
         return action_options_block
 
