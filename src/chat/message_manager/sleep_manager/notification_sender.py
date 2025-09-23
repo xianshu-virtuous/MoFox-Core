@@ -1,12 +1,13 @@
 from src.common.logger import get_logger
-from ..hfc_context import HfcContext
+
+#from ..hfc_context import HfcContext
 
 logger = get_logger("notification_sender")
 
 
 class NotificationSender:
     @staticmethod
-    async def send_goodnight_notification(context: HfcContext):
+    async def send_goodnight_notification(context): # type: ignore
         """发送晚安通知"""
         #try:
             #from ..proactive.events import ProactiveTriggerEvent
@@ -19,7 +20,7 @@ class NotificationSender:
             #logger.error(f"发送晚安通知失败: {e}")
 
     @staticmethod
-    async def send_insomnia_notification(context: HfcContext, reason: str):
+    async def send_insomnia_notification(context, reason: str): # type: ignore
         """发送失眠通知"""
         #try:
             #from ..proactive.events import ProactiveTriggerEvent
