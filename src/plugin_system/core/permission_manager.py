@@ -22,10 +22,15 @@ class PermissionManager(IPermissionManager):
     """权限管理器实现类"""
 
     def __init__(self):
-        self.engine = get_engine()
-        self.SessionLocal = async_sessionmaker(bind=self.engine)
+        self.engine = None
+        self.SessionLocal = None
         self._master_users: Set[Tuple[str, str]] = set()
         self._load_master_users()
+
+    async def initialize(self):
+        """异步初始化数据库连接"""
+        self.engine = await get_engine()
+        self.SessionLocal = async_sessionmaker(bind=self.engine)
         logger.info("权限管理器初始化完成")
 
     def _load_master_users(self):

@@ -223,6 +223,7 @@ MoFox_Bot(第三方修改版)
         from src.plugin_system.apis.permission_api import permission_api
 
         permission_manager = PermissionManager()
+        await permission_manager.initialize()
         permission_api.set_permission_manager(permission_manager)
         logger.info("权限管理器初始化成功")
 
