@@ -263,8 +263,8 @@ MoFox_Bot(第三方修改版)
 
         # 初始化回复后关系追踪系统
         try:
-            from src.plugins.built_in.chatter.interest_scoring import chatter_interest_scoring_system
-            from src.plugins.built_in.chatter.relationship_tracker import ChatterRelationshipTracker
+            from src.plugins.built_in.affinity_flow_chatter.interest_scoring import chatter_interest_scoring_system
+            from src.plugins.built_in.affinity_flow_chatter.relationship_tracker import ChatterRelationshipTracker
 
             relationship_tracker = ChatterRelationshipTracker(interest_scoring_system=chatter_interest_scoring_system)
             chatter_interest_scoring_system.relationship_tracker = relationship_tracker

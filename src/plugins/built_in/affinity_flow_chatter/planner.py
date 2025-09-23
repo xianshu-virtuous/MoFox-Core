@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from src.chat.planner_actions.action_manager import ChatterActionManager
     
 # 导入提示词模块以确保其被初始化
-from src.plugins.built_in.chatter import planner_prompts  # noqa
+from src.plugins.built_in.affinity_flow_chatter import planner_prompts  # noqa
 
 logger = get_logger("planner")
 

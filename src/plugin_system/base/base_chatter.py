@@ -6,7 +6,7 @@ from src.plugin_system.base.component_types import ChatterInfo, ComponentType
 
 if TYPE_CHECKING:
     from src.chat.planner_actions.action_manager import ChatterActionManager
-    from src.plugins.built_in.chatter.planner import ChatterActionPlanner as ActionPlanner
+    from src.plugins.built_in.affinity_flow_chatter.planner import ChatterActionPlanner as ActionPlanner
 
 class BaseChatter(ABC):
     chatter_name: str = ""
