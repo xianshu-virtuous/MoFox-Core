@@ -1689,11 +1689,7 @@ class HippocampusManager:
         if not self._initialized:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
         async with self._db_lock:
-            if self._hippocampus and self._hippocampus.parahippocampal_gyrus:
-                return await self._hippocampus.parahippocampal_gyrus.operation_forget_topic(percentage)
-            else:
-                logger.warning("海马体或海马旁回未初始化，跳过本次记忆遗忘。")
-                return None
+            return await self._hippocampus.parahippocampal_gyrus.operation_forget_topic(percentage)
 
     async def consolidate_memory(self):
         """整合记忆的公共接口"""
@@ -1701,11 +1697,7 @@ class HippocampusManager:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
         # 使用 operation_build_memory 方法来整合记忆
         async with self._db_lock:
-            if self._hippocampus and self._hippocampus.parahippocampal_gyrus:
-                return await self._hippocampus.parahippocampal_gyrus.operation_build_memory()
-            else:
-                logger.warning("海马体或海马旁回未初始化，跳过本次记忆整合。")
-                return None
+            return await self._hippocampus.parahippocampal_gyrus.operation_build_memory()
 
     async def get_memory_from_text(
         self,
