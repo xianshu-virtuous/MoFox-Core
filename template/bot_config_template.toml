@@ -1,5 +1,5 @@
 [inner]
-version = "6.8.8"
+version = "6.8.9"
 
 #----以下是给开发人员阅读的，如果你只是部署了MoFox-Bot，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -152,9 +152,6 @@ focus_value = 1
 # 格式为: ["platform:group_id1", "platform:group_id2"]
 # 例如: ["qq:123456789", "qq:987654321"]
 focus_mode_quiet_groups = []
-
-# breaking模式配置
-enable_breaking_mode = true # 是否启用自动进入breaking模式，关闭后不会自动进入breaking形式
 
 # 强制私聊回复
 force_reply_private = false # 是否强制私聊回复，开启后私聊将强制回复
