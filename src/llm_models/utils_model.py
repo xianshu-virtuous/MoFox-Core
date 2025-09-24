@@ -815,12 +815,7 @@ class LLMRequest:
                 )
             return content, (reasoning_content, model_info.name, tool_calls)
 
-        result = await self._execute_with_failover(request_callable=request_logic, raise_on_failure=True)
-        if result:
-            return result
-
-        # 这段代码理论上不可达，因为 raise_on_failure=True 会抛出异常
-        raise RuntimeError("图片响应生成失败，所有模型均尝试失败。")
+        return await self._execute_with_failover(request_callable=request_logic, raise_on_failure=True)
 
     async def generate_response_for_voice(self, voice_base64: str) -> Optional[str]:
         """
@@ -844,8 +839,7 @@ class LLMRequest:
             return response.content or None
 
         # 对于语音识别，如果所有模型都失败，我们可能不希望程序崩溃，而是返回None
-        result = await self._execute_with_failover(request_callable=request_logic, raise_on_failure=False)
-        return result
+        return await self._execute_with_failover(request_callable=request_logic, raise_on_failure=False)
 
     async def generate_response_async(
         self,
@@ -1107,12 +1101,7 @@ class LLMRequest:
 
             return embedding, model_info.name
 
-        result = await self._execute_with_failover(request_callable=request_logic, raise_on_failure=True)
-        if result:
-            return result
-
-        # 这段代码理论上不可达，因为 raise_on_failure=True 会抛出异常
-        raise RuntimeError("获取 embedding 失败，所有模型均尝试失败。")
+        return await self._execute_with_failover(request_callable=request_logic, raise_on_failure=True)
 
     def _model_scheduler(
         self, failed_models: set | None = None
@@ -1246,8 +1235,34 @@ class LLMRequest:
         """
         根据输入的字典列表构建并验证 `ToolOption` 对象列表。
 
-        此方法将标准化的工具定义（字典格式）转换为内部使用的 `ToolOption` 对象，
-        同时会验证参数格式的正确性。
+        if isinstance(e, NetworkConnectionError):  # 网络连接错误
+            return self._check_retry(
+                remain_try,
+                retry_interval,
+                can_retry_msg=f"任务-'{task_name}' 模型-'{model_name}': 连接异常，将于{retry_interval}秒后重试",
+                cannot_retry_msg=f"任务-'{task_name}' 模型-'{model_name}': 连接异常，超过最大重试次数，请检查网络连接状态或URL是否正确",
+            )
+        elif isinstance(e, ReqAbortException):
+            logger.warning(f"任务-'{task_name}' 模型-'{model_name}': 请求被中断，详细信息-{e}")
+            return -1, None  # 不再重试请求该模型
+        elif isinstance(e, RespNotOkException):
+            return self._handle_resp_not_ok(
+                e,
+                task_name,
+                model_info,
+                api_provider,
+                remain_try,
+                retry_interval,
+                messages,
+            )
+        elif isinstance(e, RespParseException):
+            # 响应解析错误
+            logger.error(f"任务-'{task_name}' 模型-'{model_name}': 响应解析错误，错误信息-{e}")
+            logger.debug(f"附加内容: {str(e.ext_info)}")
+            return -1, None  # 不再重试请求该模型
+        else:
+            logger.error(f"任务-'{task_name}' 模型-'{model_name}': 未知异常，错误信息-{str(e)}")
+            return -1, None  # 不再重试请求该模型
 
         Args:
             tools (Optional[List[Dict[str, Any]]]): 工具定义的列表。
