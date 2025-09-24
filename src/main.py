@@ -2,7 +2,8 @@
 import asyncio
 import signal
 import sys
-import time
+from functools import partial
+from typing import Dict, Any
 
 from maim_message import MessageServer
 from rich.traceback import install
@@ -96,6 +97,20 @@ install(extra_lines=3)
 logger = get_logger("main")
 
 
+def _task_done_callback(task: asyncio.Task, message_id: str, start_time: float):
+    """后台任务完成时的回调函数"""
+    end_time = time.time()
+    duration = end_time - start_time
+    try:
+        task.result()  # 如果任务有异常，这里会重新抛出
+        logger.info(f"消息 {message_id} 的后台任务 (ID: {id(task)}) 已成功完成, 耗时: {duration:.2f}s")
+    except asyncio.CancelledError:
+        logger.warning(f"消息 {message_id} 的后台任务 (ID: {id(task)}) 被取消, 耗时: {duration:.2f}s")
+    except Exception:
+        logger.error(f"处理消息 {message_id} 的后台任务 (ID: {id(task)}) 出现未捕获的异常, 耗时: {duration:.2f}s:")
+        logger.error(traceback.format_exc())
+
+
 class MainSystem:
     def __init__(self):
         self.hippocampus_manager = hippocampus_manager
@@ -175,6 +190,20 @@ class MainSystem:
                 logger.info("🛑 记忆管理器已停止")
         except Exception as e:
             logger.error(f"停止记忆管理器时出错: {e}")
+
+    async def _message_process_wrapper(self, message_data: Dict[str, Any]):
+        """并行处理消息的包装器"""
+        try:
+            start_time = time.time()
+            message_id = message_data.get("message_info", {}).get("message_id", "UNKNOWN")
+            # 创建后台任务
+            task = asyncio.create_task(chat_bot.message_process(message_data))
+            logger.info(f"已为消息 {message_id} 创建后台处理任务 (ID: {id(task)})")
+            # 添加一个回调函数，当任务完成时，它会被调用
+            task.add_done_callback(partial(_task_done_callback, message_id=message_id, start_time=start_time))
+        except Exception:
+            logger.error("在创建消息处理任务时发生严重错误:")
+            logger.error(traceback.format_exc())
 
     async def initialize(self):
         """初始化系统组件"""
@@ -306,7 +335,7 @@ MoFox_Bot(第三方修改版)
         # await asyncio.sleep(0.5) #防止logger输出飞了
 
         # 将bot.py中的chat_bot.message_process消息处理函数注册到api.py的消息处理基类中
-        self.app.register_message_handler(chat_bot.message_process)
+        self.app.register_message_handler(self._message_process_wrapper)
 
         # 启动消息重组器的清理任务
         from src.utils.message_chunker import reassembler

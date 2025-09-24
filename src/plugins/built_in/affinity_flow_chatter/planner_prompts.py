@@ -88,6 +88,7 @@ def init_prompts():
 
 **强制规则**:
 - 对于每一个需要目标消息的动作（如`reply`, `poke_user`, `set_emoji_like`），你 **必须** 在`action_data`中提供准确的`target_message_id`，这个ID来源于`## 未读历史消息`中消息前的`<m...>`标签。
+- 当你选择的动作需要参数时（例如 `set_emoji_like` 需要 `emoji` 参数），你 **必须** 在 `action_data` 中提供所有必需的参数及其对应的值。
 
 如果没有合适的回复对象或不需要回复，输出空的 actions 数组：
 ```json

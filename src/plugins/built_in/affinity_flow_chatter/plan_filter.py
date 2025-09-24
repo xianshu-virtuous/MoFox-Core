@@ -5,6 +5,7 @@ PlanFilter: 接收 Plan 对象，根据不同模式的逻辑进行筛选，决�
 import orjson
 import time
 import traceback
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -430,8 +431,12 @@ class ChatterPlanFilter:
                     continue
 
                 action = single_action_obj.get("action_type", "no_action")
-                reasoning = single_action_obj.get("reason", "未提供原因")
-                action_data = {k: v for k, v in single_action_obj.items() if k not in ["action_type", "reason"]}
+                reasoning = single_action_obj.get("reasoning", "未提供原因") # 兼容旧的reason字段
+                action_data = single_action_obj.get("action_data", {})
+                
+                # 为了向后兼容，如果action_data不存在，则从顶层字段获取
+                if not action_data:
+                    action_data = {k: v for k, v in single_action_obj.items() if k not in ["action_type", "reason", "reasoning", "thinking"]}
 
                 # 保留原始的thinking字段（如果有）
                 thinking = action_json.get("thinking", "")
@@ -538,7 +543,13 @@ class ChatterPlanFilter:
             if action_info.action_parameters:
                 for p_name, p_desc in action_info.action_parameters.items():
                     # 为参数描述添加一个通用示例值
-                    example_value = f"<{p_desc}>"
+                    if action_name == "set_emoji_like" and p_name == "emoji":
+                        # 特殊处理set_emoji_like的emoji参数
+                        from plugins.set_emoji_like.qq_emoji_list import qq_face
+                        emoji_options = [re.search(r"\[表情：(.+?)\]", name).group(1) for name in qq_face.values() if re.search(r"\[表情：(.+?)\]", name)]
+                        example_value = f"<从'{', '.join(emoji_options[:10])}...'中选择一个>"
+                    else:
+                        example_value = f"<{p_desc}>"
                     params_json_list.append(f'        "{p_name}": "{example_value}"')
             
             # 基础动作信息

@@ -435,11 +435,14 @@ class ChatBot:
             # 处理消息内容，生成纯文本
             await message.process()
 
-            # 过滤检查 (在消息处理之后进行)
-            if _check_ban_words(
-                message.processed_plain_text, chat, user_info  # type: ignore
-            ) or _check_ban_regex(
-                message.processed_plain_text, chat, user_info  # type: ignore
+            # 在这里打印[所见]日志，确保在所有处理和过滤之前记录
+            logger.info(f"\u001b[38;5;118m{message.message_info.user_info.user_nickname}:{message.processed_plain_text}\u001b[0m")
+
+            # 过滤检查
+            if _check_ban_words(message.processed_plain_text, chat, user_info) or _check_ban_regex(  # type: ignore
+                message.raw_message,  # type: ignore
+                chat,
+                user_info,  # type: ignore
             ):
                 return
 

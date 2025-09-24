@@ -64,10 +64,6 @@ class AffinityChatter(BaseChatter):
         try:
             unread_messages = context.get_unread_messages()
 
-            # 像hfc一样，打印收到的消息
-            for msg in unread_messages:
-                logger.info(f"{SOFT_GREEN}[所见] {msg.user_info.user_nickname}:{msg.processed_plain_text}{RESET_COLOR}")
-
             # 使用增强版规划器处理消息
             actions, target_message = await self.planner.plan(context=context)
             self.stats["plans_created"] += 1
