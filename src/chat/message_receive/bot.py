@@ -417,7 +417,6 @@ class ChatBot:
                     return
 
             get_chat_manager().register_message(message)
-
             chat = await get_chat_manager().get_or_create_stream(
                 platform=message.message_info.platform,  # type: ignore
                 user_info=user_info,  # type: ignore
@@ -429,11 +428,11 @@ class ChatBot:
             # 处理消息内容，生成纯文本
             await message.process()
 
-            # 过滤检查
-            if _check_ban_words(message.processed_plain_text, chat, user_info) or _check_ban_regex(  # type: ignore
-                message.raw_message,  # type: ignore
-                chat,
-                user_info,  # type: ignore
+            # 过滤检查 (在消息处理之后进行)
+            if _check_ban_words(
+                message.processed_plain_text, chat, user_info  # type: ignore
+            ) or _check_ban_regex(
+                message.processed_plain_text, chat, user_info  # type: ignore
             ):
                 return
 
