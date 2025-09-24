@@ -231,6 +231,7 @@ class SendHandler:
             target_id = seg.data
             if target_id == "notice":
                 return payload
+            logger.info(target_id if isinstance(target_id, str) else "")
             new_payload = self.build_payload(
                 payload,
                 await self.handle_reply_message(target_id if isinstance(target_id, str) else "", user_info),
