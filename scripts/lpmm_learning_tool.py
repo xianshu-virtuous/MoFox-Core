@@ -8,6 +8,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 from typing import Optional
+from json_repair import repair_json
 
 # 将项目根目录添加到 sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -83,6 +84,53 @@ def preprocess_raw_data():
 # --- 模块二：信息提取 ---
 
 
+def _parse_and_repair_json(json_string: str) -> Optional[dict]:
+    """
+    尝试解析JSON字符串，如果失败则尝试修复并重新解析。
+
+    该函数首先会清理字符串，去除常见的Markdown代码块标记，
+    然后尝试直接解析。如果解析失败，它会调用 `repair_json`
+    进行修复，并再次尝试解析。
+
+    Args:
+        json_string: 从LLM获取的、可能格式不正确的JSON字符串。
+
+    Returns:
+        解析后的字典。如果最终无法解析，则返回 None，并记录详细错误日志。
+    """
+    if not isinstance(json_string, str):
+        logger.error(f"输入内容非字符串，无法解析: {type(json_string)}")
+        return None
+
+    # 1. 预处理：去除常见的多余字符，如Markdown代码块标记
+    cleaned_string = json_string.strip()
+    if cleaned_string.startswith("```json"):
+        cleaned_string = cleaned_string[7:].strip()
+    elif cleaned_string.startswith("```"):
+        cleaned_string = cleaned_string[3:].strip()
+    
+    if cleaned_string.endswith("```"):
+        cleaned_string = cleaned_string[:-3].strip()
+
+    # 2. 性能优化：乐观地尝试直接解析
+    try:
+        return orjson.loads(cleaned_string)
+    except orjson.JSONDecodeError:
+        logger.warning("直接解析JSON失败，将尝试修复...")
+        
+        # 3. 修复与最终解析
+        repaired_json_str = ""
+        try:
+            repaired_json_str = repair_json(cleaned_string)
+            return orjson.loads(repaired_json_str)
+        except Exception as e:
+            # 4. 增强错误处理：记录详细的失败信息
+            logger.error(f"修复并解析JSON后依然失败: {e}")
+            logger.error(f"原始字符串 (清理后): {cleaned_string}")
+            logger.error(f"修复后尝试解析的字符串: {repaired_json_str}")
+            return None
+
+
 def get_extraction_prompt(paragraph: str) -> str:
     return f"""
 请从以下段落中提取关键信息。你需要提取两种类型的信息：
@@ -116,7 +164,14 @@ async def extract_info_async(pg_hash, paragraph, llm_api):
     content = None
     try:
         content, (_, _, _) = await llm_api.generate_response_async(prompt)
-        extracted_data = orjson.loads(content)
+        
+        # 改进点：调用封装好的函数处理JSON解析和修复
+        extracted_data = _parse_and_repair_json(content)
+        
+        if extracted_data is None:
+            # 如果解析失败，抛出异常以触发统一的错误处理逻辑
+            raise ValueError("无法从LLM输出中解析有效的JSON数据")
+
         doc_item = {
             "idx": pg_hash,
             "passage": paragraph,
