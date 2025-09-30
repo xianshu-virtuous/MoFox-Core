@@ -356,4 +356,4 @@ class MessageManager:
 
 
 # 创建全局消息管理器实例
-message_manager = MessageManag
+message_manager = MessageManager()
