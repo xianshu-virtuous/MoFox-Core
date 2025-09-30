@@ -488,6 +488,13 @@ class DefaultReplyer:
             try:
                 # 使用新的增强记忆系统
                 from src.chat.memory_system.enhanced_memory_integration import recall_memories, remember_message
+               
+                # 检索相关记忆
+                enhanced_memories = await recall_memories(
+                    query=target,
+                    user_id=str(self.chat_stream.stream_id),
+                    chat_id=self.chat_stream.stream_id
+                )
 
                 # 异步存储聊天历史（非阻塞）
                 asyncio.create_task(
@@ -496,12 +503,6 @@ class DefaultReplyer:
                         user_id=str(self.chat_stream.stream_id),
                         chat_id=self.chat_stream.stream_id
                     )
-                )
-                # 检索相关记忆
-                enhanced_memories = await recall_memories(
-                    query=target,
-                    user_id=str(self.chat_stream.stream_id),
-                    chat_id=self.chat_stream.stream_id
                 )
 
                 # 转换格式以兼容现有代码
