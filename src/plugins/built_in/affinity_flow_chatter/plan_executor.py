@@ -111,16 +111,26 @@ class ChatterPlanExecutor:
         }
 
     async def _execute_reply_actions(self, reply_actions: List[ActionPlannerInfo], plan: Plan) -> Dict[str, any]:
-        """执行回复动作"""
+        """串行执行所有回复动作"""
         results = []
+        total_actions = len(reply_actions)
+        if total_actions > 1:
+            logger.info(f"[多重回复] 开始执行 {total_actions} 个回复任务。")
 
-        for action_info in reply_actions:
-            result = await self._execute_single_reply_action(action_info, plan)
+        for i, action_info in enumerate(reply_actions):
+            is_last_action = i == total_actions - 1
+            if total_actions > 1:
+                logger.info(f"[多重回复] 正在执行第 {i+1}/{total_actions} 个回复...")
+            
+            # 传递 clear_unread 参数
+            result = await self._execute_single_reply_action(action_info, plan, clear_unread=is_last_action)
             results.append(result)
 
+        if total_actions > 1:
+            logger.info(f"[多重回复] 所有回复任务执行完毕。")
         return {"results": results}
 
-    async def _execute_single_reply_action(self, action_info: ActionPlannerInfo, plan: Plan) -> Dict[str, any]:
+    async def _execute_single_reply_action(self, action_info: ActionPlannerInfo, plan: Plan, clear_unread: bool = True) -> Dict[str, any]:
         """执行单个回复动作"""
         start_time = time.time()
         success = False
@@ -152,17 +162,29 @@ class ChatterPlanExecutor:
                 "target_message": action_info.action_message,
                 "reasoning": action_info.reasoning,
                 "action_data": action_info.action_data or {},
+                "clear_unread_messages": clear_unread,
             }
 
             logger.debug(f"📬 [PlanExecutor] 准备调用 ActionManager，target_message: {action_info.action_message}")
 
             # 通过动作管理器执行回复
-            reply_content = await self.action_manager.execute_action(
+            execution_result = await self.action_manager.execute_action(
                 action_name=action_info.action_type, **action_params
             )
+            
+            # 从返回结果中提取真正的回复文本
+            if isinstance(execution_result, dict):
+                reply_content = execution_result.get("reply_text", "")
+                success = execution_result.get("success", False)
+            else:
+                # 兼容旧的返回值（虽然可能性不大）
+                reply_content = str(execution_result) if execution_result else ""
+                success = bool(reply_content)
 
-            success = True
-            logger.info(f"回复动作 '{action_info.action_type}' 执行成功。")
+            if success:
+                logger.info(f"回复动作 '{action_info.action_type}' 执行成功。")
+            else:
+                raise Exception(execution_result.get("error", "未知错误"))
 
         except Exception as e:
             error_message = str(e)
@@ -181,7 +203,7 @@ class ChatterPlanExecutor:
             "error_message": error_message,
             "execution_time": execution_time,
             "reasoning": action_info.reasoning,
-            "reply_content": reply_content[:200] + "..." if len(reply_content) > 200 else reply_content,
+            "reply_content": reply_content[:200] + "..." if reply_content and len(reply_content) > 200 else reply_content,
         }
 
     async def _execute_other_actions(self, other_actions: List[ActionPlannerInfo], plan: Plan) -> Dict[str, any]:
@@ -251,6 +273,7 @@ class ChatterPlanExecutor:
                 "target_message": action_info.action_message,
                 "reasoning": action_info.reasoning,
                 "action_data": action_data,
+                "clear_unread_messages": False,  # 其他动作不应清除未读消息
             }
 
             # 通过动作管理器执行动作

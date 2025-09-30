@@ -145,6 +145,7 @@ class ChatterActionManager:
         action_data: Optional[dict] = None,
         thinking_id: Optional[str] = None,
         log_prefix: str = "",
+        clear_unread_messages: bool = True,
     ) -> Any:
         """
         执行单个动作的通用函数
@@ -217,7 +218,8 @@ class ChatterActionManager:
                 if success:
                     await self._record_action_to_message(chat_stream, action_name, target_message, action_data)
                     # 自动清空所有未读消息
-                    await self._clear_all_unread_messages(chat_stream.stream_id, action_name)
+                    if clear_unread_messages:
+                        await self._clear_all_unread_messages(chat_stream.stream_id, action_name)
                     # 重置打断计数
                     await self._reset_interruption_count_after_action(chat_stream.stream_id)
 
@@ -262,8 +264,8 @@ class ChatterActionManager:
                 # 记录回复动作到目标消息
                 await self._record_action_to_message(chat_stream, "reply", target_message, action_data)
 
-                # 自动清空所有未读消息
-                await self._clear_all_unread_messages(chat_stream.stream_id, "reply")
+                if clear_unread_messages:
+                    await self._clear_all_unread_messages(chat_stream.stream_id, "reply")
 
                 # 回复成功，重置打断计数
                 await self._reset_interruption_count_after_action(chat_stream.stream_id)
