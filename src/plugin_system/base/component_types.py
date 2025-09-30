@@ -142,6 +142,10 @@ class ActionInfo(ComponentInfo):
     mode_enable: ChatMode = ChatMode.ALL
     parallel_action: bool = False
     chat_type_allow: ChatType = ChatType.ALL  # 允许的聊天类型
+    # 二步Action相关属性
+    is_two_step_action: bool = False  # 是否为二步Action
+    step_one_description: str = ""  # 第一步的描述
+    sub_actions: List[Tuple[str, str, Dict[str, str]]] = field(default_factory=list)  # 子Action列表
 
     def __post_init__(self):
         super().__post_init__()
@@ -153,6 +157,8 @@ class ActionInfo(ComponentInfo):
             self.action_require = []
         if self.associated_types is None:
             self.associated_types = []
+        if self.sub_actions is None:
+            self.sub_actions = []
         self.component_type = ComponentType.ACTION
 
 

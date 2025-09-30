@@ -55,6 +55,10 @@ class ToolExecutor:
 
         self.llm_model = LLMRequest(model_set=model_config.model_task_config.tool_use, request_type="tool_executor")
 
+        # 二步工具调用状态管理
+        self._pending_step_two_tools: Dict[str, Dict[str, Any]] = {}
+        """待处理的第二步工具调用，格式为 {tool_name: step_two_definition}"""
+
         logger.info(f"{self.log_prefix}工具执行器初始化完成")
 
     async def execute_from_chat_message(
@@ -112,7 +116,18 @@ class ToolExecutor:
     def _get_tool_definitions(self) -> List[Dict[str, Any]]:
         all_tools = get_llm_available_tool_definitions()
         user_disabled_tools = global_announcement_manager.get_disabled_chat_tools(self.chat_id)
-        return [definition for name, definition in all_tools if name not in user_disabled_tools]
+        
+        # 获取基础工具定义（包括二步工具的第一步）
+        tool_definitions = [definition for name, definition in all_tools if name not in user_disabled_tools]
+        
+        # 检查是否有待处理的二步工具第二步调用
+        pending_step_two = getattr(self, '_pending_step_two_tools', {})
+        if pending_step_two:
+            # 添加第二步工具定义
+            for tool_name, step_two_def in pending_step_two.items():
+                tool_definitions.append(step_two_def)
+        
+        return tool_definitions
 
     async def execute_tool_calls(self, tool_calls: Optional[List[ToolCall]]) -> Tuple[List[Dict[str, Any]], List[str]]:
         """执行工具调用
@@ -251,6 +266,32 @@ class ToolExecutor:
                 f"{self.log_prefix} 正在执行工具: [bold green]{function_name}[/bold green] | 参数: {function_args}"
             )
             function_args["llm_called"] = True  # 标记为LLM调用
+            
+            # 检查是否是二步工具的第二步调用
+            if "_" in function_name and function_name.count("_") >= 1:
+                # 可能是二步工具的第二步调用，格式为 "tool_name_sub_tool_name"
+                parts = function_name.split("_", 1)
+                if len(parts) == 2:
+                    base_tool_name, sub_tool_name = parts
+                    base_tool_instance = get_tool_instance(base_tool_name)
+                    
+                    if base_tool_instance and base_tool_instance.is_two_step_tool:
+                        logger.info(f"{self.log_prefix}执行二步工具第二步: {base_tool_name}.{sub_tool_name}")
+                        result = await base_tool_instance.execute_step_two(sub_tool_name, function_args)
+                        
+                        # 清理待处理的第二步工具
+                        self._pending_step_two_tools.pop(base_tool_name, None)
+                        
+                        if result:
+                            logger.debug(f"{self.log_prefix}二步工具第二步 {function_name} 执行成功")
+                            return {
+                                "tool_call_id": tool_call.call_id,
+                                "role": "tool",
+                                "name": function_name,
+                                "type": "function",
+                                "content": result.get("content", ""),
+                            }
+            
             # 获取对应工具实例
             tool_instance = tool_instance or get_tool_instance(function_name)
             if not tool_instance:
@@ -260,6 +301,16 @@ class ToolExecutor:
             # 执行工具并记录日志
             logger.debug(f"{self.log_prefix}执行工具 {function_name}，参数: {function_args}")
             result = await tool_instance.execute(function_args)
+            
+            # 检查是否是二步工具的第一步结果
+            if result and result.get("type") == "two_step_tool_step_one":
+                logger.info(f"{self.log_prefix}二步工具第一步完成: {function_name}")
+                # 保存第二步工具定义
+                next_tool_def = result.get("next_tool_definition")
+                if next_tool_def:
+                    self._pending_step_two_tools[function_name] = next_tool_def
+                    logger.debug(f"{self.log_prefix}已保存第二步工具定义: {next_tool_def['name']}")
+            
             if result:
                 logger.debug(f"{self.log_prefix}工具 {function_name} 执行成功，结果: {result}")
                 return {

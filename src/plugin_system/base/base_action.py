@@ -2,7 +2,7 @@ import time
 import asyncio
 
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional, List, Dict, Any
 
 from src.common.logger import get_logger
 from src.chat.message_receive.chat_stream import ChatStream
@@ -25,7 +25,20 @@ class BaseAction(ABC):
     - parallel_action: 是否允许并行执行
     - random_activation_probability: 随机激活概率
     - llm_judge_prompt: LLM判断提示词
+    
+    二步Action相关属性：
+    - is_two_step_action: 是否为二步Action
+    - step_one_description: 第一步的描述
+    - sub_actions: 子Action列表
     """
+
+    # 二步Action相关类属性
+    is_two_step_action: bool = False
+    """是否为二步Action。如果为True，Action将分两步执行：第一步选择操作，第二步执行具体操作"""
+    step_one_description: str = ""
+    """第一步的描述，用于向LLM展示Action的基本功能"""
+    sub_actions: List[Tuple[str, str, Dict[str, str]]] = []
+    """子Action列表，格式为[(子Action名, 子Action描述, 子Action参数)]。仅在二步Action中使用"""
 
     def __init__(
         self,
@@ -90,6 +103,13 @@ class BaseAction(ABC):
         self.parallel_action: bool = getattr(self.__class__, "parallel_action", True)
         self.associated_types: list[str] = getattr(self.__class__, "associated_types", []).copy()
         self.chat_type_allow: ChatType = getattr(self.__class__, "chat_type_allow", ChatType.ALL)
+
+        # 二步Action相关实例属性
+        self.is_two_step_action: bool = getattr(self.__class__, "is_two_step_action", False)
+        self.step_one_description: str = getattr(self.__class__, "step_one_description", "")
+        self.sub_actions: List[Tuple[str, str, Dict[str, str]]] = getattr(self.__class__, "sub_actions", []).copy()
+        self._selected_sub_action: Optional[str] = None
+        """当前选择的子Action名称，用于二步Action的状态管理"""
 
         # =============================================================================
         # 便捷属性 - 直接在初始化时获取常用聊天信息（带类型注解）
@@ -480,15 +500,73 @@ class BaseAction(ABC):
             action_require=getattr(cls, "action_require", []).copy(),
             associated_types=getattr(cls, "associated_types", []).copy(),
             chat_type_allow=getattr(cls, "chat_type_allow", ChatType.ALL),
+            # 二步Action相关属性
+            is_two_step_action=getattr(cls, "is_two_step_action", False),
+            step_one_description=getattr(cls, "step_one_description", ""),
+            sub_actions=getattr(cls, "sub_actions", []).copy(),
         )
+
+    async def handle_step_one(self) -> Tuple[bool, str]:
+        """处理二步Action的第一步
+
+        Returns:
+            Tuple[bool, str]: (是否执行成功, 回复文本)
+        """
+        if not self.is_two_step_action:
+            return False, "此Action不是二步Action"
+
+        # 检查action_data中是否包含选择的子Action
+        selected_action = self.action_data.get("selected_action")
+        if not selected_action:
+            # 第一步：展示可用的子Action
+            available_actions = [sub_action[0] for sub_action in self.sub_actions]
+            description = self.step_one_description or f"{self.action_name}支持以下操作"
+            
+            actions_list = "\n".join([f"- {action}: {desc}" for action, desc, _ in self.sub_actions])
+            response = f"{description}\n\n可用操作：\n{actions_list}\n\n请选择要执行的操作。"
+            
+            return True, response
+        else:
+            # 验证选择的子Action是否有效
+            valid_actions = [sub_action[0] for sub_action in self.sub_actions]
+            if selected_action not in valid_actions:
+                return False, f"无效的操作选择: {selected_action}。可用操作: {valid_actions}"
+            
+            # 保存选择的子Action
+            self._selected_sub_action = selected_action
+            
+            # 调用第二步执行
+            return await self.execute_step_two(selected_action)
+
+    async def execute_step_two(self, sub_action_name: str) -> Tuple[bool, str]:
+        """执行二步Action的第二步
+
+        Args:
+            sub_action_name: 子Action名称
+
+        Returns:
+            Tuple[bool, str]: (是否执行成功, 回复文本)
+        """
+        if not self.is_two_step_action:
+            return False, "此Action不是二步Action"
+
+        # 子类需要重写此方法来实现具体的第二步逻辑
+        return False, f"二步Action必须实现execute_step_two方法来处理操作: {sub_action_name}"
 
     @abstractmethod
     async def execute(self) -> Tuple[bool, str]:
         """执行Action的抽象方法，子类必须实现
 
+        对于二步Action，会自动处理第一步逻辑
+
         Returns:
             Tuple[bool, str]: (是否执行成功, 回复文本)
         """
+        # 如果是二步Action，自动处理第一步
+        if self.is_two_step_action:
+            return await self.handle_step_one()
+        
+        # 普通Action由子类实现
         pass
 
     async def handle_action(self) -> Tuple[bool, str]:
