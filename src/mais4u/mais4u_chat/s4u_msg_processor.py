@@ -41,21 +41,22 @@ async def _calculate_interest(message: MessageRecv) -> Tuple[float, bool]:
 
     if global_config.memory.enable_memory:
         with Timer("记忆激活"):
-            # 使用新的增强记忆系统计算兴趣度
+            # 使用新的统一记忆系统计算兴趣度
             try:
-                from src.chat.memory_system.enhanced_memory_integration import recall_memories
+                from src.chat.memory_system import get_memory_system
 
-                # 检索相关记忆来估算兴趣度
-                enhanced_memories = await recall_memories(
-                    query=message.processed_plain_text,
+                memory_system = get_memory_system()
+                enhanced_memories = await memory_system.retrieve_relevant_memories(
+                    query_text=message.processed_plain_text,
                     user_id=str(message.user_info.user_id),
-                    chat_id=message.chat_id
+                    scope_id=message.chat_id,
+                    limit=5
                 )
 
                 # 基于检索结果计算兴趣度
                 if enhanced_memories:
                     # 有相关记忆，兴趣度基于相似度计算
-                    max_score = max(score for _, score in enhanced_memories)
+                    max_score = max(getattr(memory, 'relevance_score', 0.5) for memory in enhanced_memories)
                     interested_rate = min(max_score, 1.0)  # 限制在0-1之间
                 else:
                     # 没有相关记忆，给予基础兴趣度

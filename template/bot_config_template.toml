@@ -1,5 +1,5 @@
 [inner]
-version = "7.0.3"
+version = "7.1.3"
 
 #----以下是给开发人员阅读的，如果你只是部署了MoFox-Bot，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -277,18 +277,13 @@ max_context_emojis = 30 # 每次随机传递给LLM的表情包详细描述的最
 
 [memory]
 enable_memory = true # 是否启用记忆系统
-memory_build_interval = 600 # 记忆构建间隔 单位秒   间隔越低，MoFox-Bot学习越多，但是冗余信息也会增多
-enable_instant_memory = true # 是否启用即时记忆
-enable_llm_instant_memory = true # 是否启用基于LLM的瞬时记忆
-enable_vector_instant_memory = true # 是否启用基于向量的瞬时记忆
-enable_enhanced_memory = true # 是否启用增强记忆系统
-enhanced_memory_auto_save = true # 是否自动保存增强记忆
+memory_build_interval = 600 # 记忆构建间隔（秒）。间隔越低，学习越频繁，但可能产生更多冗余信息
 
 min_memory_length = 10 # 最小记忆长度
 max_memory_length = 500 # 最大记忆长度
 memory_value_threshold = 0.5 # 记忆价值阈值，低于该值的记忆会被丢弃
-vector_similarity_threshold = 0.4 # 向量相似度阈值
-semantic_similarity_threshold = 0.4 # 语义重排阶段的最低匹配阈值
+vector_similarity_threshold = 0.7 # 向量相似度阈值
+semantic_similarity_threshold = 0.6 # 语义重排阶段的最低匹配阈值
 
 metadata_filter_limit = 100 # 元数据过滤阶段返回数量上限
 vector_search_limit = 50 # 向量搜索阶段返回数量上限
@@ -300,12 +295,42 @@ semantic_weight = 0.3 # 综合评分中语义匹配的权重
 context_weight = 0.2 # 综合评分中上下文关联的权重
 recency_weight = 0.1 # 综合评分中时效性的权重
 
-fusion_similarity_threshold = 0.6 # 记忆融合时的相似度阈值
+fusion_similarity_threshold = 0.85 # 记忆融合时的相似度阈值
 deduplication_window_hours = 24 # 记忆去重窗口（小时）
 
-enable_memory_cache = true # 是否启用本地记忆缓存
-cache_ttl_seconds = 300 # 缓存有效期（秒）
-max_cache_size = 1000 # 缓存中允许的最大记忆条数
+# 智能遗忘机制配置 (新增)
+enable_memory_forgetting = true # 是否启用智能遗忘机制
+forgetting_check_interval_hours = 24 # 遗忘检查间隔（小时）
+
+# 遗忘阈值配置
+base_forgetting_days = 30.0 # 基础遗忘天数
+min_forgetting_days = 7.0 # 最小遗忘天数（重要记忆也会被保留的最少天数）
+max_forgetting_days = 365.0 # 最大遗忘天数（普通记忆最长保留天数）
+
+# 重要程度权重 - 不同重要程度的额外保护天数
+critical_importance_bonus = 45.0 # 关键重要性额外天数
+high_importance_bonus = 30.0 # 高重要性额外天数
+normal_importance_bonus = 15.0 # 一般重要性额外天数
+low_importance_bonus = 0.0 # 低重要性额外天数
+
+# 置信度权重 - 不同置信度的额外保护天数
+verified_confidence_bonus = 30.0 # 已验证置信度额外天数
+high_confidence_bonus = 20.0 # 高置信度额外天数
+medium_confidence_bonus = 10.0 # 中等置信度额外天数
+low_confidence_bonus = 0.0 # 低置信度额外天数
+
+# 激活频率权重
+activation_frequency_weight = 0.5 # 每次激活增加的天数权重
+max_frequency_bonus = 10.0 # 最大激活频率奖励天数
+
+# 休眠机制
+dormant_threshold_days = 90 # 休眠状态判定天数（超过此天数未访问的记忆进入休眠状态）
+
+# 统一存储配置 (新增)
+unified_storage_path = "data/unified_memory" # 统一存储数据路径
+unified_storage_cache_limit = 10000 # 内存缓存大小限制
+unified_storage_auto_save_interval = 50 # 自动保存间隔（记忆条数）
+unified_storage_enable_compression = true # 是否启用数据压缩
 
 [voice]
 enable_asr = true # 是否启用语音识别，启用后MoFox-Bot可以识别语音消息，启用该功能需要配置语音识别模型[model.voice]

@@ -491,10 +491,10 @@ class DefaultReplyer:
         running_memories = []
         instant_memory = None
 
-        if global_config.memory.enable_instant_memory:
+        if global_config.memory.enable_memory:
             try:
-                # 使用新的增强记忆系统
-                from src.chat.memory_system.enhanced_memory_integration import recall_memories, remember_message
+                # 使用新的统一记忆系统
+                from src.chat.memory_system import get_memory_system
 
                 stream = self.chat_stream
                 user_info_obj = getattr(stream, "user_info", None)
@@ -588,33 +588,37 @@ class DefaultReplyer:
 
                 memory_context = {key: value for key, value in memory_context.items() if value}
 
+                # 获取记忆系统实例
+                memory_system = get_memory_system()
+
                 # 检索相关记忆
-                enhanced_memories = await recall_memories(
+                enhanced_memories = await memory_system.retrieve_relevant_memories(
                     query=target,
                     user_id=memory_user_id,
-                    chat_id=stream.stream_id,
-                    context=memory_context
+                    scope_id=stream.stream_id,
+                    context=memory_context,
+                    limit=10
                 )
 
                 # 注意：记忆存储已迁移到回复生成完成后进行，不在查询阶段执行
 
                 # 转换格式以兼容现有代码
                 running_memories = []
-                if enhanced_memories and enhanced_memories.get("has_memories"):
-                    for memory in enhanced_memories.get("memories", []):
+                if enhanced_memories:
+                    for memory_chunk in enhanced_memories:
                         running_memories.append({
-                            "content": memory.get("content", ""),
-                            "memory_type": memory.get("type", "unknown"),
-                            "confidence": memory.get("confidence"),
-                            "importance": memory.get("importance"),
-                            "relevance": memory.get("relevance"),
-                            "source": memory.get("source"),
-                            "structure": memory.get("structure"),
+                            "content": memory_chunk.display or memory_chunk.text_content or "",
+                            "memory_type": memory_chunk.memory_type.value,
+                            "confidence": memory_chunk.metadata.confidence.value,
+                            "importance": memory_chunk.metadata.importance.value,
+                            "relevance": getattr(memory_chunk, 'relevance_score', 0.5),
+                            "source": memory_chunk.metadata.source,
+                            "structure": memory_chunk.content_structure.value if memory_chunk.content_structure else "unknown",
                         })
 
                 # 构建瞬时记忆字符串
-                if enhanced_memories and enhanced_memories.get("has_memories"):
-                    top_memory = enhanced_memories.get("memories", [])[:1]
+                if running_memories:
+                    top_memory = running_memories[:1]
                     if top_memory:
                         instant_memory = top_memory[0].get("content", "")
 
@@ -639,26 +643,45 @@ class DefaultReplyer:
             rounded = int(value)
             return mapping.get(rounded, f"{value:.2f}")
 
-        # 构建记忆字符串，即使某种记忆为空也要继续
+        # 构建记忆字符串，使用方括号格式
         memory_str = ""
         has_any_memory = False
 
         # 添加长期记忆（来自增强记忆系统）
         if running_memories:
-            if not memory_str:
-                memory_str = "以下是当前在聊天中，你回忆起的记忆：\n"
-            for running_memory in running_memories:
-                details = []
-                details.append(f"类型: {running_memory.get('memory_type', 'unknown')}")
-                if running_memory.get("confidence") is not None:
-                    details.append(f"置信度: {_format_confidence_label(running_memory.get('confidence'))}")
-                if running_memory.get("importance") is not None:
-                    details.append(f"重要性: {_format_importance_label(running_memory.get('importance'))}")
-                if running_memory.get("relevance") is not None:
-                    details.append(f"相关度: {running_memory['relevance']:.2f}")
+            # 使用方括号格式
+            memory_parts = ["### 🧠 相关记忆 (Relevant Memories)", ""]
 
-                detail_text = f" （{'，'.join(details)}）" if details else ""
-                memory_str += f"- {running_memory['content']}{detail_text}\n"
+            # 按相关度排序，并记录相关度信息用于调试
+            sorted_memories = sorted(running_memories, key=lambda x: x.get('relevance', 0.0), reverse=True)
+
+            # 调试相关度信息
+            relevance_info = [(m.get('memory_type', 'unknown'), m.get('relevance', 0.0)) for m in sorted_memories]
+            logger.debug(f"记忆相关度信息: {relevance_info}")
+
+            for running_memory in sorted_memories:
+                content = running_memory.get('content', '')
+                memory_type = running_memory.get('memory_type', 'unknown')
+
+                # 映射记忆类型到中文标签
+                type_mapping = {
+                    "personal_fact": "个人事实",
+                    "preference": "偏好",
+                    "event": "事件",
+                    "opinion": "观点",
+                    "relationship": "个人事实",
+                    "unknown": "未知"
+                }
+                chinese_type = type_mapping.get(memory_type, "未知")
+
+                # 提取纯净内容（如果包含旧格式的元数据）
+                clean_content = content
+                if "（类型:" in content and "）" in content:
+                    clean_content = content.split("（类型:")[0].strip()
+
+                memory_parts.append(f"- **[{chinese_type}]** {clean_content}")
+
+            memory_str = "\n".join(memory_parts) + "\n"
             has_any_memory = True
 
         # 添加瞬时记忆
@@ -1790,11 +1813,11 @@ class DefaultReplyer:
             reply_message: 回复的原始消息
         """
         try:
-            if not global_config.memory.enable_memory or not global_config.memory.enable_instant_memory:
+            if not global_config.memory.enable_memory:
                 return
 
-            # 使用增强记忆系统存储记忆
-            from src.chat.memory_system.enhanced_memory_integration import remember_message
+            # 使用统一记忆系统存储记忆
+            from src.chat.memory_system import get_memory_system
 
             stream = self.chat_stream
             user_info_obj = getattr(stream, "user_info", None)
@@ -1904,12 +1927,15 @@ class DefaultReplyer:
             )
 
             # 异步存储聊天历史（完全非阻塞）
+            memory_system = get_memory_system()
             asyncio.create_task(
-                remember_message(
-                    message=chat_history,
-                    user_id=memory_user_id,
-                    chat_id=stream.stream_id,
-                    context=memory_context
+                memory_system.process_conversation_memory(
+                    context={
+                        "conversation_text": chat_history,
+                        "user_id": memory_user_id,
+                        "scope_id": stream.stream_id,
+                        **memory_context
+                    }
                 )
             )
             

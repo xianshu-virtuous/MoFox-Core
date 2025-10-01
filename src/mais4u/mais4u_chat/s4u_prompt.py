@@ -162,20 +162,22 @@ class PromptBuilder:
 
     @staticmethod
     async def build_memory_block(text: str) -> str:
-        # 使用新的增强记忆系统检索记忆
+        # 使用新的统一记忆系统检索记忆
         try:
-            from src.chat.memory_system.enhanced_memory_integration import recall_memories
+            from src.chat.memory_system import get_memory_system
 
-            enhanced_memories = await recall_memories(
-                query=text,
+            memory_system = get_memory_system()
+            enhanced_memories = await memory_system.retrieve_relevant_memories(
+                query_text=text,
                 user_id="system",  # 系统查询
-                chat_id="system"
+                scope_id="system",
+                limit=5
             )
 
             related_memory_info = ""
-            if enhanced_memories and enhanced_memories.get("has_memories"):
-                for memory in enhanced_memories.get("memories", []):
-                    related_memory_info += memory.get("content", "") + " "
+            if enhanced_memories:
+                for memory_chunk in enhanced_memories:
+                    related_memory_info += memory_chunk.display or memory_chunk.text_content or ""
                 return await global_prompt_manager.format_prompt("memory_prompt", memory_info=related_memory_info.strip())
             return ""
 

@@ -84,12 +84,6 @@ class MemoryFormatter:
         
         lines = ["## 🧠 相关记忆回顾", ""]
         
-        if query_context:
-            lines.extend([
-                f"*查询上下文: {query_context}*",
-                ""
-            ])
-        
         if self.config.group_by_type:
             lines.extend(self._format_memories_by_type(memories))
         else:

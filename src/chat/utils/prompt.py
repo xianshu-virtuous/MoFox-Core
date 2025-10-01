@@ -588,13 +588,38 @@ class Prompt:
                     # 使用记忆格式化器进行格式化
                     from src.chat.memory_system.memory_formatter import format_memories_bracket_style
 
-                    # 转换记忆数据格式
+                    # 转换记忆数据格式 - 修复字段映射
                     formatted_memories = []
                     for memory in running_memories:
+                        # 从 content 字段提取 display 内容，移除括号中的元数据
+                        content = memory.get("content", "")
+                        display_text = content
+
+                        # 如果包含元数据括号，提取纯文本部分
+                        if "（类型:" in content and "）" in content:
+                            display_text = content.split("（类型:")[0].strip()
+
+                        # 映射 topic 到 memory_type
+                        topic = memory.get("topic", "personal_fact")
+                        memory_type_mapping = {
+                            "relationship": "personal_fact",
+                            "opinion": "opinion",
+                            "personal_fact": "personal_fact",
+                            "preference": "preference",
+                            "event": "event"
+                        }
+                        mapped_type = memory_type_mapping.get(topic, "personal_fact")
+
                         formatted_memories.append({
-                            "display": memory.get("display", memory.get("content", "")),
-                            "memory_type": memory.get("memory_type", "personal_fact"),
-                            "metadata": memory.get("metadata", {})
+                            "display": display_text,
+                            "memory_type": mapped_type,
+                            "metadata": {
+                                "confidence": memory.get("confidence", "未知"),
+                                "importance": memory.get("importance", "一般"),
+                                "timestamp": memory.get("timestamp", ""),
+                                "source": memory.get("source", "unknown"),
+                                "relevance_score": memory.get("relevance_score", 0.0)
+                            }
                         })
 
                     # 使用方括号格式格式化记忆
@@ -604,11 +629,16 @@ class Prompt:
                     )
                 except Exception as e:
                     logger.warning(f"记忆格式化失败，使用简化格式: {e}")
-                    # 备用简化格式
-                    memory_parts = ["以下是当前在聊天中，你回忆起的记忆："]
+                    # 备用简化格式 - 提取纯净内容
+                    memory_parts = ["## 相关记忆回顾", ""]
                     for memory in running_memories:
-                        content = memory["content"]
-                        memory_parts.append(f"- {content}")
+                        content = memory.get("content", "")
+                        # 提取纯文本内容
+                        if "（类型:" in content and "）" in content:
+                            clean_content = content.split("（类型:")[0].strip()
+                            memory_parts.append(f"- {clean_content}")
+                        else:
+                            memory_parts.append(f"- {content}")
                     memory_block = "\n".join(memory_parts)
             else:
                 memory_block = ""

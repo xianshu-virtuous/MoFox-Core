@@ -1,45 +1,42 @@
 # -*- coding: utf-8 -*-
 """
-增强记忆系统管理器
+记忆系统管理器
 替代原有的 Hippocampus 和 instant_memory 系统
 """
 
-import asyncio
 import re
-import time
 from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime
 from dataclasses import dataclass
 
 from src.common.logger import get_logger
 from src.config.config import global_config
-from src.chat.memory_system.enhanced_memory_core import EnhancedMemorySystem
+from src.chat.memory_system.memory_system import MemorySystem
 from src.chat.memory_system.memory_chunk import MemoryChunk, MemoryType
-from src.chat.memory_system.enhanced_memory_adapter import (
-    initialize_enhanced_memory_system
+from src.chat.memory_system.memory_system import (
+    initialize_memory_system
 )
 
 logger = get_logger(__name__)
 
 
 @dataclass
-class EnhancedMemoryResult:
-    """增强记忆查询结果"""
+class MemoryResult:
+    """记忆查询结果"""
     content: str
     memory_type: str
     confidence: float
     importance: float
     timestamp: float
-    source: str = "enhanced_memory"
+    source: str = "memory"
     relevance_score: float = 0.0
     structure: Dict[str, Any] | None = None
 
 
-class EnhancedMemoryManager:
-    """增强记忆系统管理器 - 替代原有的 HippocampusManager"""
+class MemoryManager:
+    """记忆系统管理器 - 替代原有的 HippocampusManager"""
 
     def __init__(self):
-        self.enhanced_system: Optional[EnhancedMemorySystem] = None
+        self.memory_system: Optional[MemorySystem] = None
         self.is_initialized = False
         self.user_cache = {}  # 用户记忆缓存
 
@@ -52,73 +49,73 @@ class EnhancedMemoryManager:
         return cleaned
 
     async def initialize(self):
-        """初始化增强记忆系统"""
+        """初始化记忆系统"""
         if self.is_initialized:
             return
 
         try:
             from src.config.config import global_config
 
-            # 检查是否启用增强记忆系统
-            if not global_config.memory.enable_enhanced_memory:
-                logger.info("增强记忆系统已禁用，跳过初始化")
+            # 检查是否启用记忆系统
+            if not global_config.memory.enable_memory:
+                logger.info("记忆系统已禁用，跳过初始化")
                 self.is_initialized = True
                 return
 
-            logger.info("正在初始化增强记忆系统...")
+            logger.info("正在初始化记忆系统...")
 
             # 获取LLM模型
             from src.llm_models.utils_model import LLMRequest
             from src.config.config import model_config
             llm_model = LLMRequest(model_set=model_config.model_task_config.utils, request_type="memory")
 
-            # 初始化增强记忆系统
-            self.enhanced_system = await initialize_enhanced_memory_system(llm_model)
+            # 初始化记忆系统
+            self.memory_system = await initialize_memory_system(llm_model)
 
             # 设置全局实例
-            global_enhanced_manager = self.enhanced_system
+            global_memory_manager = self.memory_system
 
             self.is_initialized = True
-            logger.info("✅ 增强记忆系统初始化完成")
+            logger.info("✅ 记忆系统初始化完成")
 
         except Exception as e:
-            logger.error(f"❌ 增强记忆系统初始化失败: {e}")
-            # 如果增强系统初始化失败，创建一个空的管理器避免系统崩溃
-            self.enhanced_system = None
+            logger.error(f"❌ 记忆系统初始化失败: {e}")
+            # 如果系统初始化失败，创建一个空的管理器避免系统崩溃
+            self.memory_system = None
             self.is_initialized = True  # 标记为已初始化但系统不可用
 
     def get_hippocampus(self):
         """兼容原有接口 - 返回空"""
-        logger.debug("get_hippocampus 调用 - 增强记忆系统不使用此方法")
+        logger.debug("get_hippocampus 调用 - 记忆系统不使用此方法")
         return {}
 
     async def build_memory(self):
         """兼容原有接口 - 构建记忆"""
-        if not self.is_initialized or not self.enhanced_system:
+        if not self.is_initialized or not self.memory_system:
             return
 
         try:
-            # 增强记忆系统使用实时构建，不需要定时构建
-            logger.debug("build_memory 调用 - 增强记忆系统使用实时构建")
+            # 记忆系统使用实时构建，不需要定时构建
+            logger.debug("build_memory 调用 - 记忆系统使用实时构建")
         except Exception as e:
             logger.error(f"build_memory 失败: {e}")
 
     async def forget_memory(self, percentage: float = 0.005):
         """兼容原有接口 - 遗忘机制"""
-        if not self.is_initialized or not self.enhanced_system:
+        if not self.is_initialized or not self.memory_system:
             return
 
         try:
             # 增强记忆系统有内置的遗忘机制
             logger.debug(f"forget_memory 调用 - 参数: {percentage}")
             # 可以在这里调用增强系统的维护功能
-            await self.enhanced_system.maintenance()
+            await self.memory_system.maintenance()
         except Exception as e:
             logger.error(f"forget_memory 失败: {e}")
 
     async def consolidate_memory(self):
         """兼容原有接口 - 记忆巩固"""
-        if not self.is_initialized or not self.enhanced_system:
+        if not self.is_initialized or not self.memory_system:
             return
 
         try:
@@ -138,7 +135,7 @@ class EnhancedMemoryManager:
         keyword_weight: float = 1.0
     ) -> List[Tuple[str, str]]:
         """从文本获取相关记忆 - 兼容原有接口"""
-        if not self.is_initialized or not self.enhanced_system:
+        if not self.is_initialized or not self.memory_system:
             return []
 
         try:
@@ -148,7 +145,7 @@ class EnhancedMemoryManager:
                 "expected_memory_types": [MemoryType.PERSONAL_FACT, MemoryType.EVENT, MemoryType.PREFERENCE]
             }
 
-            relevant_memories = await self.enhanced_system.retrieve_relevant_memories(
+            relevant_memories = await self.memory_system.retrieve_relevant_memories(
                 query=text,
                 user_id=user_id,
                 context=context,
@@ -177,7 +174,7 @@ class EnhancedMemoryManager:
         max_depth: int = 3
     ) -> List[Tuple[str, str]]:
         """从关键词获取记忆 - 兼容原有接口"""
-        if not self.is_initialized or not self.enhanced_system:
+        if not self.is_initialized or not self.memory_system:
             return []
 
         try:
@@ -195,7 +192,7 @@ class EnhancedMemoryManager:
                 ]
             }
 
-            relevant_memories = await self.enhanced_system.retrieve_relevant_memories(
+            relevant_memories = await self.memory_system.retrieve_relevant_memories(
                 query_text=query_text,
                 user_id="default_user",  # 可以根据实际需要传递
                 context=context,
@@ -218,7 +215,7 @@ class EnhancedMemoryManager:
 
     def get_memory_from_keyword(self, keyword: str, max_depth: int = 2) -> list:
         """从单个关键词获取记忆 - 兼容原有接口"""
-        if not self.is_initialized or not self.enhanced_system:
+        if not self.is_initialized or not self.memory_system:
             return []
 
         try:
@@ -237,7 +234,7 @@ class EnhancedMemoryManager:
         timestamp: Optional[float] = None
     ) -> List[MemoryChunk]:
         """处理对话并构建记忆 - 新增功能"""
-        if not self.is_initialized or not self.enhanced_system:
+        if not self.is_initialized or not self.memory_system:
             return []
 
         try:
@@ -246,7 +243,7 @@ class EnhancedMemoryManager:
             if timestamp is not None:
                 payload_context.setdefault("timestamp", timestamp)
 
-            result = await self.enhanced_system.process_conversation_memory(payload_context)
+            result = await self.memory_system.process_conversation_memory(payload_context)
 
             # 从结果中提取记忆块
             memory_chunks = []
@@ -266,13 +263,13 @@ class EnhancedMemoryManager:
         user_id: str,
         context: Optional[Dict[str, Any]] = None,
         limit: int = 5
-    ) -> List[EnhancedMemoryResult]:
+    ) -> List[MemoryResult]:
         """获取增强记忆上下文 - 新增功能"""
-        if not self.is_initialized or not self.enhanced_system:
+        if not self.is_initialized or not self.memory_system:
             return []
 
         try:
-            relevant_memories = await self.enhanced_system.retrieve_relevant_memories(
+            relevant_memories = await self.memory_system.retrieve_relevant_memories(
                 query=query_text,
                 user_id=None,
                 context=context or {},
@@ -282,7 +279,7 @@ class EnhancedMemoryManager:
             results = []
             for memory in relevant_memories:
                 formatted_content, structure = self._format_memory_chunk(memory)
-                result = EnhancedMemoryResult(
+                result = MemoryResult(
                     content=formatted_content,
                     memory_type=memory.memory_type.value,
                     confidence=memory.metadata.confidence.value,
@@ -500,12 +497,12 @@ class EnhancedMemoryManager:
             return
 
         try:
-            if self.enhanced_system:
-                await self.enhanced_system.shutdown()
-            logger.info("✅ 增强记忆系统已关闭")
+            if self.memory_system:
+                await self.memory_system.shutdown()
+            logger.info("✅ 记忆系统已关闭")
         except Exception as e:
-            logger.error(f"关闭增强记忆系统失败: {e}")
+            logger.error(f"关闭记忆系统失败: {e}")
 
 
-# 全局增强记忆管理器实例
-enhanced_memory_manager = EnhancedMemoryManager()
+# 全局记忆管理器实例
+memory_manager = MemoryManager()

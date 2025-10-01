@@ -349,7 +349,7 @@ class RemindAction(BaseAction):
     # === 基本信息 ===
     action_name = "set_reminder"
     action_description = "根据用户的对话内容，智能地设置一个未来的提醒事项。"
-    activation_type = (ActionActivationType.KEYWORD,)
+    activation_type = ActionActivationType.KEYWORD
     activation_keywords = ["提醒", "叫我", "记得", "别忘了"]
     chat_type_allow = ChatType.ALL
     parallel_action = True

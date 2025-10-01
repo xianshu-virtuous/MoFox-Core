@@ -36,7 +36,7 @@ from src.plugin_system.core.plugin_manager import plugin_manager
 from src.common.message import get_global_api
 
 # 导入增强记忆系统管理器
-from src.chat.memory_system.enhanced_memory_manager import enhanced_memory_manager
+from src.chat.memory_system.memory_manager import memory_manager
 
 # 插件系统现在使用统一的插件加载器
 
@@ -62,7 +62,7 @@ def _task_done_callback(task: asyncio.Task, message_id: str, start_time: float):
 class MainSystem:
     def __init__(self):
         # 使用增强记忆系统
-        self.enhanced_memory_manager = enhanced_memory_manager
+        self.memory_manager = memory_manager
 
         self.individuality: Individuality = get_individuality()
 
@@ -128,7 +128,7 @@ class MainSystem:
             # 停止增强记忆系统
             try:
                 if global_config.memory.enable_memory:
-                    await self.enhanced_memory_manager.shutdown()
+                    await self.memory_manager.shutdown()
                     logger.info("🛑 增强记忆系统已停止")
             except Exception as e:
                 logger.error(f"停止增强记忆系统时出错: {e}")
@@ -272,7 +272,7 @@ MoFox_Bot(第三方修改版)
         logger.info("聊天管理器初始化成功")
 
         # 初始化增强记忆系统
-        await self.enhanced_memory_manager.initialize()
+        await self.memory_manager.initialize()
         logger.info("增强记忆系统初始化成功")
 
         # 老记忆系统已完全删除

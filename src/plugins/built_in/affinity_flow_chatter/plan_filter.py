@@ -604,16 +604,18 @@ class ChatterPlanFilter:
             else:
                 keywords.append("晚上")
 
-            # 使用新的增强记忆系统检索记忆
+            # 使用新的统一记忆系统检索记忆
             try:
-                from src.chat.memory_system.enhanced_memory_integration import recall_memories
+                from src.chat.memory_system import get_memory_system
 
+                memory_system = get_memory_system()
                 # 将关键词转换为查询字符串
                 query = " ".join(keywords)
-                enhanced_memories = await recall_memories(
-                    query=query,
+                enhanced_memories = await memory_system.retrieve_relevant_memories(
+                    query_text=query,
                     user_id="system",  # 系统查询
-                    chat_id="system"
+                    scope_id="system",
+                    limit=5
                 )
 
                 if not enhanced_memories:
@@ -621,9 +623,10 @@ class ChatterPlanFilter:
 
                 # 转换格式以兼容现有代码
                 retrieved_memories = []
-                if enhanced_memories and enhanced_memories.get("has_memories"):
-                    for memory in enhanced_memories.get("memories", []):
-                        retrieved_memories.append((memory.get("type", "unknown"), memory.get("content", "")))
+                for memory_chunk in enhanced_memories:
+                    content = memory_chunk.display or memory_chunk.text_content or ""
+                    memory_type = memory_chunk.memory_type.value if memory_chunk.memory_type else "unknown"
+                    retrieved_memories.append((memory_type, content))
 
                 memory_statements = [f"关于'{topic}', 你记得'{memory_item}'。" for topic, memory_item in retrieved_memories]
 

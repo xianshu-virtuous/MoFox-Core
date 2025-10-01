@@ -97,7 +97,7 @@ class ContentStructure:
 
 @dataclass
 class MemoryMetadata:
-    """记忆元数据"""
+    """记忆元数据 - 简化版本"""
     # 基础信息
     memory_id: str                  # 唯一标识符
     user_id: str                    # 用户ID
@@ -108,46 +108,115 @@ class MemoryMetadata:
     last_accessed: float = 0.0      # 最后访问时间
     last_modified: float = 0.0      # 最后修改时间
 
+    # 激活频率管理
+    last_activation_time: float = 0.0    # 最后激活时间
+    activation_frequency: int = 0        # 激活频率（单位时间内的激活次数）
+    total_activations: int = 0           # 总激活次数
+
     # 统计信息
     access_count: int = 0           # 访问次数
     relevance_score: float = 0.0    # 相关度评分
 
-    # 信心和重要性
+    # 信心和重要性（核心字段）
     confidence: ConfidenceLevel = ConfidenceLevel.MEDIUM
     importance: ImportanceLevel = ImportanceLevel.NORMAL
 
-    # 情感和关系
-    emotional_context: Optional[str] = None  # 情感上下文
-    relationship_score: float = 0.0         # 关系分（0-1）
+    # 遗忘机制相关
+    forgetting_threshold: float = 0.0  # 遗忘阈值（动态计算）
+    last_forgetting_check: float = 0.0 # 上次遗忘检查时间
 
-    # 来源和验证
+    # 来源信息
     source_context: Optional[str] = None    # 来源上下文片段
-    verification_status: bool = False        # 验证状态
 
     def __post_init__(self):
         """后初始化处理"""
         if not self.memory_id:
             self.memory_id = str(uuid.uuid4())
 
+        current_time = time.time()
+
         if self.created_at == 0:
-            self.created_at = time.time()
+            self.created_at = current_time
 
         if self.last_accessed == 0:
-            self.last_accessed = self.created_at
+            self.last_accessed = current_time
 
         if self.last_modified == 0:
-            self.last_modified = self.created_at
+            self.last_modified = current_time
+
+        if self.last_activation_time == 0:
+            self.last_activation_time = current_time
+
+        if self.last_forgetting_check == 0:
+            self.last_forgetting_check = current_time
 
     def update_access(self):
         """更新访问信息"""
         current_time = time.time()
         self.last_accessed = current_time
         self.access_count += 1
+        self.total_activations += 1
+
+        # 更新激活频率
+        self._update_activation_frequency(current_time)
+
+    def _update_activation_frequency(self, current_time: float):
+        """更新激活频率（24小时内的激活次数）"""
+        from datetime import datetime, timedelta
+
+        # 如果超过24小时，重置激活频率
+        if current_time - self.last_activation_time > 86400:  # 24小时 = 86400秒
+            self.activation_frequency = 1
+        else:
+            self.activation_frequency += 1
+
+        self.last_activation_time = current_time
 
     def update_relevance(self, new_score: float):
         """更新相关度评分"""
         self.relevance_score = max(0.0, min(1.0, new_score))
         self.last_modified = time.time()
+
+    def calculate_forgetting_threshold(self) -> float:
+        """计算遗忘阈值（天数）"""
+        # 基础天数
+        base_days = 30.0
+
+        # 重要性权重 (1-4 -> 0-3)
+        importance_weight = (self.importance.value - 1) * 15  # 0, 15, 30, 45
+
+        # 置信度权重 (1-4 -> 0-3)
+        confidence_weight = (self.confidence.value - 1) * 10  # 0, 10, 20, 30
+
+        # 激活频率权重（每5次激活增加1天）
+        frequency_weight = min(self.activation_frequency, 20) * 0.5  # 最多10天
+
+        # 计算最终阈值
+        threshold = base_days + importance_weight + confidence_weight + frequency_weight
+
+        # 设置最小和最大阈值
+        return max(7.0, min(threshold, 365.0))  # 7天到1年之间
+
+    def should_forget(self, current_time: Optional[float] = None) -> bool:
+        """判断是否应该遗忘"""
+        if current_time is None:
+            current_time = time.time()
+
+        # 计算遗忘阈值
+        self.forgetting_threshold = self.calculate_forgetting_threshold()
+
+        # 计算距离最后激活的时间
+        days_since_activation = (current_time - self.last_activation_time) / 86400
+
+        return days_since_activation > self.forgetting_threshold
+
+    def is_dormant(self, current_time: Optional[float] = None, inactive_days: int = 90) -> bool:
+        """判断是否处于休眠状态（长期未激活）"""
+        if current_time is None:
+            current_time = time.time()
+
+        days_since_last_access = (current_time - self.last_accessed) / 86400
+        return days_since_last_access > inactive_days
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -158,14 +227,16 @@ class MemoryMetadata:
             "created_at": self.created_at,
             "last_accessed": self.last_accessed,
             "last_modified": self.last_modified,
+            "last_activation_time": self.last_activation_time,
+            "activation_frequency": self.activation_frequency,
+            "total_activations": self.total_activations,
             "access_count": self.access_count,
             "relevance_score": self.relevance_score,
             "confidence": self.confidence.value,
             "importance": self.importance.value,
-            "emotional_context": self.emotional_context,
-            "relationship_score": self.relationship_score,
-            "source_context": self.source_context,
-            "verification_status": self.verification_status
+            "forgetting_threshold": self.forgetting_threshold,
+            "last_forgetting_check": self.last_forgetting_check,
+            "source_context": self.source_context
         }
 
     @classmethod
@@ -178,14 +249,16 @@ class MemoryMetadata:
             created_at=data.get("created_at", 0),
             last_accessed=data.get("last_accessed", 0),
             last_modified=data.get("last_modified", 0),
+            last_activation_time=data.get("last_activation_time", 0),
+            activation_frequency=data.get("activation_frequency", 0),
+            total_activations=data.get("total_activations", 0),
             access_count=data.get("access_count", 0),
             relevance_score=data.get("relevance_score", 0.0),
             confidence=ConfidenceLevel(data.get("confidence", ConfidenceLevel.MEDIUM.value)),
             importance=ImportanceLevel(data.get("importance", ImportanceLevel.NORMAL.value)),
-            emotional_context=data.get("emotional_context"),
-            relationship_score=data.get("relationship_score", 0.0),
-            source_context=data.get("source_context"),
-            verification_status=data.get("verification_status", False)
+            forgetting_threshold=data.get("forgetting_threshold", 0.0),
+            last_forgetting_check=data.get("last_forgetting_check", 0),
+            source_context=data.get("source_context")
         )
 
 
@@ -268,6 +341,18 @@ class MemoryChunk:
     def update_relevance(self, new_score: float):
         """更新相关度评分"""
         self.metadata.update_relevance(new_score)
+
+    def should_forget(self, current_time: Optional[float] = None) -> bool:
+        """判断是否应该遗忘"""
+        return self.metadata.should_forget(current_time)
+
+    def is_dormant(self, current_time: Optional[float] = None, inactive_days: int = 90) -> bool:
+        """判断是否处于休眠状态（长期未激活）"""
+        return self.metadata.is_dormant(current_time, inactive_days)
+
+    def calculate_forgetting_threshold(self) -> float:
+        """计算遗忘阈值（天数）"""
+        return self.metadata.calculate_forgetting_threshold()
 
     def add_keyword(self, keyword: str):
         """添加关键词"""

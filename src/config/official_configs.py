@@ -439,15 +439,8 @@ class EmojiConfig(ValidatedConfigBase):
 class MemoryConfig(ValidatedConfigBase):
     """记忆配置类"""
 
-    enable_memory: bool = Field(default=True, description="启用记忆")
-    memory_build_interval: int = Field(default=600, description="记忆构建间隔")
-    enable_instant_memory: bool = Field(default=True, description="启用即时记忆")
-    enable_llm_instant_memory: bool = Field(default=True, description="启用基于LLM的瞬时记忆")
-    enable_vector_instant_memory: bool = Field(default=True, description="启用基于向量的瞬时记忆")
-
-    # 增强记忆系统配置
-    enable_enhanced_memory: bool = Field(default=True, description="启用增强记忆系统")
-    enhanced_memory_auto_save: bool = Field(default=True, description="自动保存增强记忆")
+    enable_memory: bool = Field(default=True, description="启用记忆系统")
+    memory_build_interval: int = Field(default=600, description="记忆构建间隔（秒）")
 
     # 记忆构建配置
     min_memory_length: int = Field(default=10, description="最小记忆长度")
