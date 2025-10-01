@@ -354,6 +354,25 @@ class MessageManager:
         except Exception as e:
             logger.error(f"清除未读消息时发生错误: {e}")
 
+    async def clear_stream_unread_messages(self, stream_id: str):
+        """清除指定聊天流的所有未读消息"""
+        try:
+            chat_manager = get_chat_manager()
+            chat_stream = chat_manager.get_stream(stream_id)
+            if not chat_stream:
+                logger.warning(f"clear_stream_unread_messages: 聊天流 {stream_id} 不存在")
+                return
+
+            context = chat_stream.context_manager.context
+            if hasattr(context, 'unread_messages') and context.unread_messages:
+                logger.debug(f"正在为流 {stream_id} 清除 {len(context.unread_messages)} 条未读消息")
+                context.unread_messages.clear()
+            else:
+                logger.debug(f"流 {stream_id} 没有需要清除的未读消息")
+
+        except Exception as e:
+            logger.error(f"清除流 {stream_id} 的未读消息时发生错误: {e}")
+
 
 # 创建全局消息管理器实例
 message_manager = MessageManager()

@@ -122,6 +122,13 @@ class ChatterManager:
             actions_count = result.get("actions_count", 0)
             logger.debug(f"流 {stream_id} 处理完成: 成功={success}, 动作数={actions_count}")
 
+            # 在处理完成后，清除该流的未读消息
+            try:
+                from src.chat.message_manager.message_manager import message_manager
+                await message_manager.clear_stream_unread_messages(stream_id)
+            except Exception as clear_e:
+                logger.error(f"清除流 {stream_id} 未读消息时发生错误: {clear_e}")
+
             return result
         except Exception as e:
             self.stats["failed_executions"] += 1
