@@ -77,7 +77,7 @@ class AffinityChatter(BaseChatter):
             # 执行动作（如果规划器返回了动作）
             execution_result = {"executed_count": len(actions) if actions else 0}
             if actions:
-                logger.info(f"聊天流 {self.stream_id} 生成了 {len(actions)} 个动作")
+                logger.debug(f"聊天流 {self.stream_id} 生成了 {len(actions)} 个动作")
 
             # 更新统计
             self.stats["messages_processed"] += 1

@@ -78,60 +78,78 @@ class MainSystem:
 
         def signal_handler(signum, frame):
             logger.info("收到退出信号，正在优雅关闭系统...")
-            self._cleanup()
-            sys.exit(0)
+
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # 如果事件循环正在运行，创建任务并设置回调
+                    async def cleanup_and_exit():
+                        await self._async_cleanup()
+                        sys.exit(0)
+
+                    task = asyncio.create_task(cleanup_and_exit())
+                    # 添加任务完成回调，确保程序退出
+                    task.add_done_callback(lambda t: None)
+                else:
+                    # 如果事件循环未运行，使用同步清理
+                    self._cleanup()
+                    sys.exit(0)
+            except Exception as e:
+                logger.error(f"信号处理失败: {e}")
+                sys.exit(1)
 
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
 
-    @staticmethod
-    def _cleanup():
-        """清理资源"""
+    async def _async_cleanup(self):
+        """异步清理资源"""
         try:
             # 停止消息管理器
-            from src.chat.message_manager import message_manager
-            import asyncio
+            try:
+                from src.chat.message_manager import message_manager
+                await message_manager.stop()
+                logger.info("🛑 消息管理器已停止")
+            except Exception as e:
+                logger.error(f"停止消息管理器时出错: {e}")
 
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(message_manager.stop())
-            else:
-                loop.run_until_complete(message_manager.stop())
-            logger.info("🛑 消息管理器已停止")
-        except Exception as e:
-            logger.error(f"停止消息管理器时出错: {e}")
-
-        try:
             # 停止消息重组器
-            from src.plugin_system.core.event_manager import event_manager
-            from src.plugin_system import EventType
-            asyncio.run(event_manager.trigger_event(EventType.ON_STOP, permission_group="SYSTEM"))
-            
-            from src.utils.message_chunker import reassembler
+            try:
+                from src.plugin_system.core.event_manager import event_manager
+                from src.plugin_system import EventType
+                from src.utils.message_chunker import reassembler
 
+                await event_manager.trigger_event(EventType.ON_STOP, permission_group="SYSTEM")
+                await reassembler.stop_cleanup_task()
+                logger.info("🛑 消息重组器已停止")
+            except Exception as e:
+                logger.error(f"停止消息重组器时出错: {e}")
+
+            # 停止增强记忆系统
+            try:
+                if global_config.memory.enable_memory:
+                    await self.enhanced_memory_manager.shutdown()
+                    logger.info("🛑 增强记忆系统已停止")
+            except Exception as e:
+                logger.error(f"停止增强记忆系统时出错: {e}")
+
+        except Exception as e:
+            logger.error(f"异步清理资源时出错: {e}")
+
+    def _cleanup(self):
+        """同步清理资源（向后兼容）"""
+        import asyncio
+
+        try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                asyncio.create_task(reassembler.stop_cleanup_task())
+                # 如果循环正在运行，创建异步清理任务
+                asyncio.create_task(self._async_cleanup())
             else:
-                loop.run_until_complete(reassembler.stop_cleanup_task())
-            logger.info("🛑 消息重组器已停止")
+                # 如果循环未运行，直接运行异步清理
+                loop.run_until_complete(self._async_cleanup())
         except Exception as e:
-            logger.error(f"停止消息重组器时出错: {e}")
-
-  
-        try:
-            # 停止增强记忆系统
-            if global_config.memory.enable_memory:
-                import asyncio
-
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(self.enhanced_memory_manager.shutdown())
-                else:
-                    loop.run_until_complete(self.enhanced_memory_manager.shutdown())
-                logger.info("🛑 增强记忆系统已停止")
-        except Exception as e:
-            logger.error(f"停止增强记忆系统时出错: {e}")
+            logger.error(f"同步清理资源时出错: {e}")
 
     async def _message_process_wrapper(self, message_data: Dict[str, Any]):
         """并行处理消息的包装器"""

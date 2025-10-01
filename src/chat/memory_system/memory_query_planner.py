@@ -136,25 +136,23 @@ class MemoryQueryPlanner:
         persona = context.get("bot_personality") or context.get("bot_identity") or "未知"
 
         return f"""
-你是一名记忆检索分析师，将根据对话查询生成结构化的检索计划。
-请结合提供的上下文，输出一个JSON对象，字段含义如下：
-- semantic_query: 提供给向量检索的自然语言查询，要求清晰具体；
-- memory_types: 建议检索的记忆类型数组，取值范围参见 MemoryType 枚举 (personal_fact,event,preference,opinion,relationship,emotion,knowledge,skill,goal,experience,contextual)；
-- subject_includes: 需要出现在记忆主语中的人或角色列表；
-- object_includes: 记忆中需要提到的重要对象或主题关键词列表；
-- required_keywords: 检索时必须包含的关键词；
-- optional_keywords: 可以提升相关性的附加关键词；
-- owner_filters: 如果需要限制检索所属主体，请列出用户ID或其它标识；
-- recency: 建议的时间偏好，可选 recent/any/historical；
-- emphasis: 检索策略倾向，可选 precision/recall/balanced；
-- limit: 推荐的最大返回数量(1-15之间)；
-- notes: 额外说明，可选。
+你是一名记忆检索规划助手，请基于输入生成一个简洁的 JSON 检索计划。
+仅需提供以下字段：
+- semantic_query: 用于向量召回的自然语言描述，要求具体且贴合当前查询；
+- memory_types: 建议检索的记忆类型列表，取值范围来自 MemoryType 枚举 (personal_fact,event,preference,opinion,relationship,emotion,knowledge,skill,goal,experience,contextual)；
+- subject_includes: 建议出现在记忆主语中的人物或角色；
+- object_includes: 建议关注的对象、主题或关键信息；
+- recency: 推荐的时间偏好，可选 recent/any/historical；
+- limit: 推荐的最大返回数量 (1-15)；
+- notes: 额外补充说明（可选）。
+
+请不要生成谓语字段，也不要额外补充其它参数。
 
 当前查询: "{query_text}"
 已知的对话参与者: {participant_preview}
 机器人设定: {persona}
 
-请输出符合要求的JSON，禁止添加额外说明或Markdown代码块。
+请直接输出符合要求的 JSON 对象，禁止添加额外文本或 Markdown 代码块。
 """
 
     def _extract_json_payload(self, response: str) -> Optional[str]:

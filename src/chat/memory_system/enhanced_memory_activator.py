@@ -104,7 +104,6 @@ class EnhancedMemoryActivator:
         response, (reasoning_content, model_name, _) = await self.key_words_model.generate_response_async(
             prompt, temperature=0.5
         )
-
         keywords = list(get_keywords_from_json(response))
 
         # 更新关键词缓存

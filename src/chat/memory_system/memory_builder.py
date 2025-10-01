@@ -3,11 +3,11 @@
 记忆构建模块
 从对话流中提取高质量、结构化记忆单元
 输出格式要求:
-{{
+{
     "memories": [
-        {{
+        {
             "type": "记忆类型",
-            "display": "用于直接展示和检索的自然语言描述",
+            "display": "一句优雅自然的中文描述，用于直接展示及提示词拼接",
             "subject": ["主体1", "主体2"],
             "predicate": "谓语(动作/状态)",
             "object": "宾语(对象/属性或结构体)",
@@ -15,16 +15,17 @@
             "importance": "重要性等级(1-4)",
             "confidence": "置信度(1-4)",
             "reasoning": "提取理由"
-        }}
+        }
     ]
-}}
+}
 
 注意：
 1. `subject` 可包含多个主体，请用数组表示；若主体不明确，请根据上下文给出最合理的称呼
-2. `display` 必须是一句完整流畅的中文描述，可直接用于用户展示和向量搜索
-3. 只提取确实值得记忆的信息，不要提取琐碎内容
-4. 确保信息准确、具体、有价值
-5. 重要性: 1=低, 2=一般, 3=高, 4=关键；置信度: 1=低, 2=中等, 3=高, 4=已验证
+2. `display` 字段必填，必须是完整顺畅的自然语言，禁止依赖字符串拼接
+3. 主谓宾用于索引和检索结构化信息，提示词构建仅使用 `display`
+4. 只提取确实值得记忆的信息，不要提取琐碎内容
+5. 确保信息准确、具体、有价值
+6. 重要性: 1=低, 2=一般, 3=高, 4=关键；置信度: 1=低, 2=中等, 3=高, 4=已验证
 """
 
 import re
@@ -397,6 +398,7 @@ class MemoryBuilder:
     "memories": [
         {{
             "type": "记忆类型",
+            "display": "一句自然流畅的中文描述，用于直接展示和提示词构建",
             "subject": "主语(通常是用户)",
             "predicate": "谓语(动作/状态)",
             "object": "宾语(对象/属性)",
@@ -409,11 +411,16 @@ class MemoryBuilder:
 }}
 
 注意：
-1. 只提取确实值得记忆的信息，不要提取琐碎内容
-2. 确保提取的信息准确、具体、有价值
-3. 使用主谓宾结构确保信息清晰
-4. 重要性等级: 1=低, 2=一般, 3=高, 4=关键
-5. 置信度: 1=低, 2=中等, 3=高, 4=已验证
+1. `display` 字段必填，必须是完整顺畅的自然语言，禁止依赖字符串拼接
+2. **display 字段格式要求**: 使用自然流畅的中文描述，格式示例：
+   - 用户养了一只名叫Whiskers的猫。
+   - 用户特别喜欢拿铁咖啡。
+   - 在2024年5月15日，用户提到对新项目感到很有压力。
+   - 用户认为这个电影很有趣。
+3. 主谓宾用于索引和检索，提示词构建仅使用 `display` 的自然语言描述
+4. 只提取确实值得记忆的信息，不要提取琐碎内容
+5. 确保提取的信息准确、具体、有价值
+6. 重要性等级: 1=低, 2=一般, 3=高, 4=关键；置信度: 1=低, 2=中等, 3=高, 4=已验证
 
 ## 🚨 时间处理要求（强制）：
 - **绝对时间优先**：任何涉及时间的记忆都必须使用绝对日期格式
@@ -532,18 +539,37 @@ class MemoryBuilder:
                     "confidence"
                 )
 
+                predicate_value = mem_data.get("predicate", "")
+                object_value = mem_data.get("object", "")
+
+                display_text = self._sanitize_display_text(mem_data.get("display"))
+                used_fallback_display = False
+                if not display_text:
+                    display_text = self._compose_display_text(normalized_subject, predicate_value, object_value)
+                    used_fallback_display = True
+
                 memory = create_memory_chunk(
                     user_id=user_id,
                     subject=normalized_subject,
-                    predicate=mem_data.get("predicate", ""),
-                    obj=mem_data.get("object", ""),
+                    predicate=predicate_value,
+                    obj=object_value,
                     memory_type=MemoryType(mem_data.get("type", "contextual")),
                     chat_id=context.get("chat_id"),
                     source_context=mem_data.get("reasoning", ""),
                     importance=importance_level,
                     confidence=confidence_level,
-                    display=mem_data.get("display")
+                    display=display_text
                 )
+
+                if used_fallback_display:
+                    logger.warning(
+                        "LLM 记忆缺少自然语言 display 字段，已基于主谓宾临时生成描述",
+                        fallback_generated=True,
+                        memory_type=memory.memory_type.value,
+                        subjects=memory.content.to_subject_list(),
+                        predicate=predicate_value,
+                        object_payload=object_value,
+                    )
 
                 # 添加关键词
                 keywords = mem_data.get("keywords", [])
@@ -754,6 +780,23 @@ class MemoryBuilder:
         cleaned = re.sub(r"[\s\u3000]+", " ", text).strip()
         cleaned = re.sub(r"[、，,；;]+$", "", cleaned)
         return cleaned
+
+    def _sanitize_display_text(self, value: Any) -> str:
+        if value is None:
+            return ""
+
+        if isinstance(value, (list, dict)):
+            try:
+                value = orjson.dumps(value, ensure_ascii=False).decode("utf-8")
+            except Exception:
+                value = str(value)
+
+        text = str(value).strip()
+        if not text or text.lower() in {"null", "none", "undefined"}:
+            return ""
+
+        text = re.sub(r"[\s\u3000]+", " ", text)
+        return text.strip("\n ")
 
     def _looks_like_system_identifier(self, value: str) -> bool:
         if not value:

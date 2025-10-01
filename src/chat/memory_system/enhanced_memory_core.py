@@ -22,7 +22,7 @@ from src.chat.memory_system.memory_chunk import MemoryChunk
 from src.chat.memory_system.memory_builder import MemoryBuilder, MemoryExtractionError
 from src.chat.memory_system.memory_fusion import MemoryFusionEngine
 from src.chat.memory_system.vector_storage import VectorStorageManager, VectorStorageConfig
-from src.chat.memory_system.metadata_index import MetadataIndexManager
+from src.chat.memory_system.metadata_index import MetadataIndexManager, IndexType
 from src.chat.memory_system.multi_stage_retrieval import MultiStageRetrieval, RetrievalConfig
 from src.chat.memory_system.memory_query_planner import MemoryQueryPlanner
 
@@ -199,6 +199,22 @@ class EnhancedMemorySystem:
                 similarity_threshold=self.config.similarity_threshold
             )
             self.vector_storage = VectorStorageManager(vector_config)
+            
+            # 尝试加载现有的向量数据
+            try:
+                await self.vector_storage.load_storage()
+                loaded_count = self.vector_storage.storage_stats.get("total_vectors", 0)
+                logger.info(f"✅ 向量存储数据加载完成，向量数量: {loaded_count}")
+                
+                # 如果没有加载到向量，尝试重建索引
+                if loaded_count == 0:
+                    logger.info("向量存储为空，尝试从缓存重建...")
+                    await self._rebuild_vector_storage_if_needed()
+                    
+            except Exception as e:
+                logger.warning(f"向量存储数据加载失败: {e}，将使用空索引")
+                await self._rebuild_vector_storage_if_needed()
+            
             self.metadata_index = MetadataIndexManager()
             # 创建检索配置
             retrieval_config = RetrievalConfig(
@@ -354,8 +370,12 @@ class EnhancedMemorySystem:
                 self.status = original_status
                 return []
 
-            # 3. 记忆融合与去重
-            fused_chunks = await self.fusion_engine.fuse_memories(memory_chunks)
+            # 3. 记忆融合与去重（包含与历史记忆的融合）
+            existing_candidates = await self._collect_fusion_candidates(memory_chunks)
+            fused_chunks = await self.fusion_engine.fuse_memories(
+                memory_chunks,
+                existing_candidates
+            )
 
             # 4. 存储记忆
             stored_count = await self._store_memories(fused_chunks)
@@ -375,6 +395,11 @@ class EnhancedMemorySystem:
                 len(fused_chunks),
                 stored_count,
                 build_time,
+                extra={
+                    "generated_count": len(fused_chunks),
+                    "stored_count": stored_count,
+                    "build_duration_seconds": round(build_time, 4),
+                },
             )
 
             self.status = original_status
@@ -414,6 +439,101 @@ class EnhancedMemorySystem:
                 f"  {idx}) 类型={memory.memory_type.value} 重要性={memory.metadata.importance.name} "
                 f"置信度={memory.metadata.confidence.name} | 内容={text}"
             )
+
+    async def _collect_fusion_candidates(self, new_memories: List[MemoryChunk]) -> List[MemoryChunk]:
+        """收集与新记忆相似的现有记忆，便于融合去重"""
+        if not new_memories:
+            return []
+
+        candidate_ids: Set[str] = set()
+        new_memory_ids = {
+            memory.memory_id
+            for memory in new_memories
+            if memory and getattr(memory, "memory_id", None)
+        }
+
+        # 基于指纹的直接匹配
+        for memory in new_memories:
+            try:
+                fingerprint = self._build_memory_fingerprint(memory)
+                fingerprint_key = self._fingerprint_key(memory.user_id, fingerprint)
+                existing_id = self._memory_fingerprints.get(fingerprint_key)
+                if existing_id and existing_id not in new_memory_ids:
+                    candidate_ids.add(existing_id)
+            except Exception as exc:
+                logger.debug("构建记忆指纹失败，跳过候选收集: %s", exc)
+
+        # 基于主体索引的候选
+        subject_index = None
+        if self.metadata_index and hasattr(self.metadata_index, "indices"):
+            subject_index = self.metadata_index.indices.get(IndexType.SUBJECT)
+
+        if subject_index:
+            for memory in new_memories:
+                for subject in memory.subjects:
+                    normalized = subject.strip().lower() if isinstance(subject, str) else ""
+                    if not normalized:
+                        continue
+                    subject_candidates = subject_index.get(normalized)
+                    if subject_candidates:
+                        candidate_ids.update(subject_candidates)
+
+        # 基于向量搜索的候选
+        total_vectors = 0
+        if self.vector_storage and hasattr(self.vector_storage, "storage_stats"):
+            total_vectors = self.vector_storage.storage_stats.get("total_vectors", 0) or 0
+
+        if self.vector_storage and total_vectors > 0:
+            search_tasks = []
+            for memory in new_memories:
+                display_text = (memory.display or "").strip()
+                if not display_text:
+                    continue
+                search_tasks.append(
+                    self.vector_storage.search_similar_memories(
+                        query_text=display_text,
+                        limit=8,
+                        scope_id=GLOBAL_MEMORY_SCOPE
+                    )
+                )
+
+            if search_tasks:
+                search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+                similarity_threshold = getattr(
+                    self.fusion_engine,
+                    "similarity_threshold",
+                    self.config.similarity_threshold,
+                )
+                min_threshold = max(0.0, min(1.0, similarity_threshold * 0.8))
+
+                for result in search_results:
+                    if isinstance(result, Exception):
+                        logger.warning("融合候选向量搜索失败: %s", result)
+                        continue
+                    for memory_id, similarity in result:
+                        if memory_id in new_memory_ids:
+                            continue
+                        if similarity is None or similarity < min_threshold:
+                            continue
+                        candidate_ids.add(memory_id)
+
+        existing_candidates: List[MemoryChunk] = []
+        cache = self.vector_storage.memory_cache if self.vector_storage else {}
+        for candidate_id in candidate_ids:
+            if candidate_id in new_memory_ids:
+                continue
+            candidate_memory = cache.get(candidate_id)
+            if candidate_memory:
+                existing_candidates.append(candidate_memory)
+
+        if existing_candidates:
+            logger.debug(
+                "融合候选收集完成，新记忆=%d，候选=%d",
+                len(new_memories),
+                len(existing_candidates),
+            )
+
+        return existing_candidates
 
     async def process_conversation_memory(
         self,
@@ -526,6 +646,29 @@ class EnhancedMemorySystem:
             effective_limit = effective_limit or self.config.final_recall_limit
             effective_limit = max(1, min(effective_limit, self.config.final_recall_limit))
             normalized_context["resolved_query_text"] = resolved_query_text
+
+            query_debug_payload = {
+                "raw_query": raw_query,
+                "semantic_query": resolved_query_text,
+                "limit": effective_limit,
+                "planner_used": planner_ran,
+                "memory_types": [mt.value for mt in (query_plan.memory_types if query_plan else [])],
+                "subjects": getattr(query_plan, "subject_includes", []) if query_plan else [],
+                "objects": getattr(query_plan, "object_includes", []) if query_plan else [],
+                "recency": getattr(query_plan, "recency_preference", None) if query_plan else None,
+                "optional_keywords": getattr(query_plan, "optional_keywords", []) if query_plan else [],
+            }
+
+            try:
+                logger.info(
+                    f"🔍 记忆检索指令 | raw='{raw_query}' | semantic='{resolved_query_text}' | limit={effective_limit}",
+                    extra={"memory_query": query_debug_payload},
+                )
+            except Exception:
+                logger.info(
+                    "🔍 记忆检索指令: %s",
+                    orjson.dumps(query_debug_payload, ensure_ascii=False).decode("utf-8"),
+                )
 
             if normalized_context.get("__memory_building__"):
                 logger.debug("当前处于记忆构建流程，跳过查询规划并进行降级检索")
@@ -1107,6 +1250,57 @@ class EnhancedMemorySystem:
 
         except Exception as e:
             logger.error(f"❌ 记忆系统关闭失败: {e}", exc_info=True)
+
+    async def _rebuild_vector_storage_if_needed(self):
+        """重建向量存储（如果需要）"""
+        try:
+            # 检查是否有记忆缓存数据
+            if not hasattr(self.vector_storage, 'memory_cache') or not self.vector_storage.memory_cache:
+                logger.info("无记忆缓存数据，跳过向量存储重建")
+                return
+
+            logger.info(f"开始重建向量存储，记忆数量: {len(self.vector_storage.memory_cache)}")
+            
+            # 收集需要重建向量的记忆
+            memories_to_rebuild = []
+            for memory_id, memory in self.vector_storage.memory_cache.items():
+                # 检查记忆是否有有效的 display 文本
+                if memory.display and memory.display.strip():
+                    memories_to_rebuild.append(memory)
+                elif memory.text_content and memory.text_content.strip():
+                    memories_to_rebuild.append(memory)
+            
+            if not memories_to_rebuild:
+                logger.warning("没有找到可重建向量的记忆")
+                return
+            
+            logger.info(f"准备为 {len(memories_to_rebuild)} 条记忆重建向量")
+            
+            # 批量重建向量
+            batch_size = 10
+            rebuild_count = 0
+            
+            for i in range(0, len(memories_to_rebuild), batch_size):
+                batch = memories_to_rebuild[i:i + batch_size]
+                try:
+                    await self.vector_storage.store_memories(batch)
+                    rebuild_count += len(batch)
+                    
+                    if rebuild_count % 50 == 0:
+                        logger.info(f"已重建向量: {rebuild_count}/{len(memories_to_rebuild)}")
+                        
+                except Exception as e:
+                    logger.error(f"批量重建向量失败: {e}")
+                    continue
+            
+            # 保存重建的向量存储
+            await self.vector_storage.save_storage()
+            
+            final_count = self.vector_storage.storage_stats.get("total_vectors", 0)
+            logger.info(f"✅ 向量存储重建完成，最终向量数量: {final_count}")
+            
+        except Exception as e:
+            logger.error(f"❌ 向量存储重建失败: {e}", exc_info=True)
 
 
 # 全局记忆系统实例

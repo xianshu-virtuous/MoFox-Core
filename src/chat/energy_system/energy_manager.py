@@ -351,7 +351,7 @@ class EnergyManager:
             / total_calculations
         )
 
-        logger.info(f"聊天流 {stream_id} 最终能量: {final_energy:.3f} (原始: {total_energy:.3f}, 耗时: {calculation_time:.3f}s)")
+        logger.debug(f"聊天流 {stream_id} 最终能量: {final_energy:.3f} (原始: {total_energy:.3f}, 耗时: {calculation_time:.3f}s)")
         return final_energy
 
     def _apply_threshold_adjustment(self, energy: float) -> float:

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from src.common.logger import get_logger
 from src.chat.memory_system.integration_layer import MemoryIntegrationLayer, IntegrationConfig, IntegrationMode
 from src.chat.memory_system.memory_chunk import MemoryChunk, MemoryType
+from src.chat.memory_system.memory_formatter import MemoryFormatter, FormatterConfig, format_memories_for_llm
 from src.llm_models.utils_model import LLMRequest
 
 logger = get_logger(__name__)
@@ -189,15 +190,21 @@ class EnhancedMemoryAdapter:
         if not memories:
             return ""
 
-        # 格式化记忆为提示词友好的Markdown结构
-        lines: List[str] = ["### 🧠 相关记忆 (Relevant Memories)", ""]
-
-        for memory in memories:
-            type_label = MEMORY_TYPE_LABELS.get(memory.memory_type, memory.memory_type.value)
-            display_text = memory.display or memory.text_content
-            lines.append(f"- **[{type_label}]** {display_text}")
-
-        return "\n".join(lines)
+        # 使用新的记忆格式化器
+        formatter_config = FormatterConfig(
+            include_timestamps=True,
+            include_memory_types=True,
+            include_confidence=False,
+            use_emoji_icons=True,
+            group_by_type=False,
+            max_display_length=150
+        )
+        
+        return format_memories_for_llm(
+            memories=memories,
+            query_context=query,
+            config=formatter_config
+        )
 
     async def get_enhanced_memory_summary(self, user_id: str) -> Dict[str, Any]:
         """获取增强记忆系统摘要"""

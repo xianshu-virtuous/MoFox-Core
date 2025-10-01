@@ -343,6 +343,7 @@ class Prompt:
                 pre_built_params["relation_info_block"] = self.parameters.relation_info_block
             if self.parameters.memory_block:
                 pre_built_params["memory_block"] = self.parameters.memory_block
+                logger.debug("使用预构建的memory_block，跳过实时构建")
             if self.parameters.tool_info_block:
                 pre_built_params["tool_info_block"] = self.parameters.tool_info_block
             if self.parameters.knowledge_prompt:
@@ -355,8 +356,11 @@ class Prompt:
                 tasks.append(self._build_expression_habits())
                 task_names.append("expression_habits")
 
+            # 记忆块应该在回复前预构建，这里优先使用预构建的结果
             if self.parameters.enable_memory and not pre_built_params.get("memory_block"):
-                tasks.append(self._build_memory_block())
+                # 如果没有预构建的记忆块，则快速构建一个简化版本
+                logger.debug("memory_block未预构建，执行快速构建作为后备方案")
+                tasks.append(self._build_memory_block_fast())
                 task_names.append("memory_block")
 
             if self.parameters.enable_relation and not pre_built_params.get("relation_info_block"):
@@ -377,7 +381,7 @@ class Prompt:
 
             # 性能优化 - 为不同任务设置不同的超时时间
             task_timeouts = {
-                "memory_block": 15.0,      # 记忆系统
+                "memory_block": 15.0,       # 记忆系统 - 降低超时时间，鼓励预构建
                 "tool_info": 15.0,         # 工具信息
                 "relation_info": 10.0,     # 关系信息
                 "knowledge_info": 10.0,    # 知识库查询
@@ -579,26 +583,71 @@ class Prompt:
                 instant_memory = None
 
             # 构建记忆块
-            memory_parts = []
-            existing_contents = set()
-
             if running_memories:
-                memory_parts.append("以下是当前在聊天中，你回忆起的记忆：")
-                for memory in running_memories:
-                    content = memory["content"]
-                    memory_parts.append(f"- {content}")
-                    existing_contents.add(content)
+                try:
+                    # 使用记忆格式化器进行格式化
+                    from src.chat.memory_system.memory_formatter import format_memories_bracket_style
 
+                    # 转换记忆数据格式
+                    formatted_memories = []
+                    for memory in running_memories:
+                        formatted_memories.append({
+                            "display": memory.get("display", memory.get("content", "")),
+                            "memory_type": memory.get("memory_type", "personal_fact"),
+                            "metadata": memory.get("metadata", {})
+                        })
+
+                    # 使用方括号格式格式化记忆
+                    memory_block = format_memories_bracket_style(
+                        formatted_memories,
+                        query_context=self.parameters.target
+                    )
+                except Exception as e:
+                    logger.warning(f"记忆格式化失败，使用简化格式: {e}")
+                    # 备用简化格式
+                    memory_parts = ["以下是当前在聊天中，你回忆起的记忆："]
+                    for memory in running_memories:
+                        content = memory["content"]
+                        memory_parts.append(f"- {content}")
+                    memory_block = "\n".join(memory_parts)
+            else:
+                memory_block = ""
+
+            # 添加即时记忆
             if instant_memory:
-                if instant_memory not in existing_contents:
-                    memory_parts.append(f"- 最相关记忆：{instant_memory}")
-
-            memory_block = "\n".join(memory_parts) if memory_parts else ""
+                if memory_block:
+                    memory_block += f"\n- 最相关记忆：{instant_memory}"
+                else:
+                    memory_block = f"- 最相关记忆：{instant_memory}"
 
             return {"memory_block": memory_block}
 
         except Exception as e:
             logger.error(f"构建记忆块失败: {e}")
+            return {"memory_block": ""}
+
+    async def _build_memory_block_fast(self) -> Dict[str, Any]:
+        """快速构建记忆块（简化版本，用于未预构建时的后备方案）"""
+        if not global_config.memory.enable_memory:
+            return {"memory_block": ""}
+
+        try:
+            from src.chat.memory_system.enhanced_memory_activator import enhanced_memory_activator
+
+            # 简化的快速查询，只获取即时记忆
+            instant_memory = await enhanced_memory_activator.get_instant_memory(
+                target_message=self.parameters.target, chat_id=self.parameters.chat_id
+            )
+
+            if instant_memory:
+                memory_block = f"- 相关记忆：{instant_memory}"
+            else:
+                memory_block = ""
+
+            return {"memory_block": memory_block}
+
+        except Exception as e:
+            logger.warning(f"快速构建记忆块失败: {e}")
             return {"memory_block": ""}
 
     async def _build_relation_info(self) -> Dict[str, Any]:

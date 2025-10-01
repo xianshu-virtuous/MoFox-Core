@@ -352,7 +352,14 @@ class DefaultReplyer:
                 logger.error(f"LLM 生成失败: {llm_e}")
                 return False, None, prompt, selected_expressions  # LLM 调用失败则无法生成回复
 
-            return True, llm_response, prompt, selected_expressions
+            # 回复生成成功后，异步存储聊天记忆（不阻塞返回）
+            try:
+                await self._store_chat_memory_async(reply_to, reply_message)
+            except Exception as memory_e:
+                # 记忆存储失败不应该影响回复生成的成功返回
+                logger.warning(f"记忆存储失败，但不影响回复生成: {memory_e}")
+
+            return True, llm_response, prompt
 
         except UserWarning as uw:
             raise uw
@@ -589,15 +596,7 @@ class DefaultReplyer:
                     context=memory_context
                 )
 
-                # 异步存储聊天历史（非阻塞）
-                asyncio.create_task(
-                    remember_message(
-                        message=chat_history,
-                        user_id=memory_user_id,
-                        chat_id=stream.stream_id,
-                        context=memory_context
-                    )
-                )
+                # 注意：记忆存储已迁移到回复生成完成后进行，不在查询阶段执行
 
                 # 转换格式以兼容现有代码
                 running_memories = []
@@ -1781,6 +1780,143 @@ class DefaultReplyer:
         except Exception as e:
             logger.error(f"获取AFC关系信息失败: {e}")
             return f"你与{sender}是普通朋友关系。"
+
+    async def _store_chat_memory_async(self, reply_to: str, reply_message: Optional[Dict[str, Any]] = None):
+        """
+        异步存储聊天记忆（从build_memory_block迁移而来）
+        
+        Args:
+            reply_to: 回复对象
+            reply_message: 回复的原始消息
+        """
+        try:
+            if not global_config.memory.enable_memory or not global_config.memory.enable_instant_memory:
+                return
+
+            # 使用增强记忆系统存储记忆
+            from src.chat.memory_system.enhanced_memory_integration import remember_message
+
+            stream = self.chat_stream
+            user_info_obj = getattr(stream, "user_info", None)
+            group_info_obj = getattr(stream, "group_info", None)
+
+            memory_user_id = str(stream.stream_id)
+            memory_user_display = None
+            memory_aliases = []
+            user_info_dict = {}
+
+            if user_info_obj is not None:
+                raw_user_id = getattr(user_info_obj, "user_id", None)
+                if raw_user_id:
+                    memory_user_id = str(raw_user_id)
+
+                if hasattr(user_info_obj, "to_dict"):
+                    try:
+                        user_info_dict = user_info_obj.to_dict()  # type: ignore[attr-defined]
+                    except Exception:
+                        user_info_dict = {}
+
+                candidate_keys = [
+                    "user_cardname",
+                    "user_nickname",
+                    "nickname",
+                    "remark",
+                    "display_name",
+                    "user_name",
+                ]
+
+                for key in candidate_keys:
+                    value = user_info_dict.get(key)
+                    if isinstance(value, str) and value.strip():
+                        stripped = value.strip()
+                        if memory_user_display is None:
+                            memory_user_display = stripped
+                        elif stripped not in memory_aliases:
+                            memory_aliases.append(stripped)
+
+                attr_keys = [
+                    "user_cardname",
+                    "user_nickname",
+                    "nickname",
+                    "remark",
+                    "display_name",
+                    "name",
+                ]
+
+                for attr in attr_keys:
+                    value = getattr(user_info_obj, attr, None)
+                    if isinstance(value, str) and value.strip():
+                        stripped = value.strip()
+                        if memory_user_display is None:
+                            memory_user_display = stripped
+                        elif stripped not in memory_aliases:
+                            memory_aliases.append(stripped)
+
+                alias_values = (
+                    user_info_dict.get("aliases")
+                    or user_info_dict.get("alias_names")
+                    or user_info_dict.get("alias")
+                )
+                if isinstance(alias_values, (list, tuple, set)):
+                    for alias in alias_values:
+                        if isinstance(alias, str) and alias.strip():
+                            stripped = alias.strip()
+                            if stripped not in memory_aliases and stripped != memory_user_display:
+                                memory_aliases.append(stripped)
+
+            memory_context = {
+                "user_id": memory_user_id,
+                "user_display_name": memory_user_display or "",
+                "user_name": memory_user_display or "",
+                "nickname": memory_user_display or "",
+                "sender_name": memory_user_display or "",
+                "platform": getattr(stream, "platform", None),
+                "chat_id": stream.stream_id,
+                "stream_id": stream.stream_id,
+            }
+
+            if memory_aliases:
+                memory_context["user_aliases"] = memory_aliases
+
+            if group_info_obj is not None:
+                group_name = getattr(group_info_obj, "group_name", None) or getattr(group_info_obj, "group_nickname", None)
+                if group_name:
+                    memory_context["group_name"] = str(group_name)
+                group_id = getattr(group_info_obj, "group_id", None)
+                if group_id:
+                    memory_context["group_id"] = str(group_id)
+
+            memory_context = {key: value for key, value in memory_context.items() if value}
+
+            # 构建聊天历史用于存储
+            message_list_before_short = await get_raw_msg_before_timestamp_with_chat(
+                chat_id=stream.stream_id,
+                timestamp=time.time(),
+                limit=int(global_config.chat.max_context_size * 0.33),
+            )
+            chat_history = await build_readable_messages(
+                message_list_before_short,
+                replace_bot_name=True,
+                merge_messages=False,
+                timestamp_mode="relative",
+                read_mark=0.0,
+                show_actions=True,
+            )
+
+            # 异步存储聊天历史（完全非阻塞）
+            asyncio.create_task(
+                remember_message(
+                    message=chat_history,
+                    user_id=memory_user_id,
+                    chat_id=stream.stream_id,
+                    context=memory_context
+                )
+            )
+            
+            logger.debug(f"已启动记忆存储任务，用户: {memory_user_display or memory_user_id}")
+
+        except Exception as e:
+            logger.error(f"存储聊天记忆失败: {e}")
 
 
 def weighted_sample_no_replacement(items, weights, k) -> list:
