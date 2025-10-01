@@ -316,7 +316,7 @@ class SetEmojiLikeAction(BaseAction):
         try:
             # 使用适配器API发送贴表情命令
             success = await self.send_command(
-                command_name="set_emoji_like",
+                command_name="set_msg_emoji_like",
                 args={"message_id": message_id, "emoji_id": emoji_id, "set": set_like},
                 storage_message=False,
             )
