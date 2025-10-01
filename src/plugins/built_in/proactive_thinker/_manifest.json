@@ -1,0 +1,25 @@
+{
+  "manifest_version": 1,
+  "name": "MoFox-Bot主动思考",
+  "version": "1.0.0",
+  "description": "主动思考插件",
+  "author": {
+    "name": "MoFox-Studio",
+    "url": "https://github.com/MoFox-Studio"
+  },
+  "license": "GPL-v3.0-or-later",
+  
+  "host_application": {
+    "min_version": "0.10.0"
+  },
+  "keywords": ["emoji", "reaction", "like", "表情", "回应", "点赞"],
+  "categories": ["Chat", "Integration"],
+  
+  "default_locale": "zh-CN",
+  "locales_path": "_locales",
+  
+  "plugin_info": {
+    "is_built_in": "true",
+    "plugin_type": "functional"
+  }
+}

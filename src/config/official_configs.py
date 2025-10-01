@@ -110,7 +110,6 @@ class ChatConfig(ValidatedConfigBase):
     mentioned_bot_inevitable_reply: bool = Field(default=False, description="提到机器人的必然回复")
     at_bot_inevitable_reply: bool = Field(default=False, description="@机器人的必然回复")
     allow_reply_self: bool = Field(default=False, description="是否允许回复自己说的话")
-    talk_frequency_adjust: list[list[str]] = Field(default_factory=lambda: [], description="聊天频率调整")
     focus_value: float = Field(default=1.0, description="专注值")
     focus_mode_quiet_groups: List[str] = Field(
         default_factory=list,
@@ -121,19 +120,6 @@ class ChatConfig(ValidatedConfigBase):
     timestamp_display_mode: Literal["normal", "normal_no_YMD", "relative"] = Field(
         default="normal_no_YMD", description="时间戳显示模式"
     )
-    enable_proactive_thinking: bool = Field(default=False, description="启用主动思考")
-    proactive_thinking_interval: int = Field(default=1500, description="主动思考间隔")
-    The_scope_that_proactive_thinking_can_trigger: str = Field(default="all", description="主动思考可以触发的范围")
-    proactive_thinking_in_private: bool = Field(default=True, description="主动思考可以在私聊里面启用")
-    proactive_thinking_in_group: bool = Field(default=True, description="主动思考可以在群聊里面启用")
-    proactive_thinking_enable_in_private: List[str] = Field(
-        default_factory=list, description="启用主动思考的私聊范围，格式：platform:user_id，为空则不限制"
-    )
-    proactive_thinking_enable_in_groups: List[str] = Field(
-        default_factory=list, description="启用主动思考的群聊范围，格式：platform:group_id，为空则不限制"
-    )
-    delta_sigma: int = Field(default=120, description="采用正态分布随机时间间隔")
-
     # 消息打断系统配置
     interruption_enabled: bool = Field(default=True, description="是否启用消息打断系统")
     interruption_max_limit: int = Field(default=3, ge=0, description="每个聊天流的最大打断次数")
@@ -162,159 +148,6 @@ class ChatConfig(ValidatedConfigBase):
         default=10, ge=1, le=100, description="最大并发处理的消息流数量"
     )
 
-    def get_current_talk_frequency(self, chat_stream_id: Optional[str] = None) -> float:
-        """
-        根据当前时间和聊天流获取对应的 talk_frequency
-
-        Args:
-            chat_stream_id: 聊天流ID，格式为 "platform:chat_id:type"
-
-        Returns:
-            float: 对应的频率值
-        """
-        if not self.talk_frequency_adjust:
-            return self.talk_frequency
-
-        # 优先检查聊天流特定的配置
-        if chat_stream_id:
-            stream_frequency = self._get_stream_specific_frequency(chat_stream_id)
-            if stream_frequency is not None:
-                return stream_frequency
-
-        # 检查全局时段配置（第一个元素为空字符串的配置）
-        global_frequency = self._get_global_frequency()
-        return self.talk_frequency if global_frequency is None else global_frequency
-
-    def _get_time_based_frequency(self, time_freq_list: list[str]) -> Optional[float]:
-        """
-        根据时间配置列表获取当前时段的频率
-
-        Args:
-            time_freq_list: 时间频率配置列表，格式为 ["HH:MM,frequency", ...]
-
-        Returns:
-            float: 频率值，如果没有配置则返回 None
-        """
-        from datetime import datetime
-
-        current_time = datetime.now().strftime("%H:%M")
-        current_hour, current_minute = map(int, current_time.split(":"))
-        current_minutes = current_hour * 60 + current_minute
-
-        # 解析时间频率配置
-        time_freq_pairs = []
-        for time_freq_str in time_freq_list:
-            try:
-                time_str, freq_str = time_freq_str.split(",")
-                hour, minute = map(int, time_str.split(":"))
-                frequency = float(freq_str)
-                minutes = hour * 60 + minute
-                time_freq_pairs.append((minutes, frequency))
-            except (ValueError, IndexError):
-                continue
-
-        if not time_freq_pairs:
-            return None
-
-        # 按时间排序
-        time_freq_pairs.sort(key=lambda x: x[0])
-
-        # 查找当前时间对应的频率
-        current_frequency = None
-        for minutes, frequency in time_freq_pairs:
-            if current_minutes >= minutes:
-                current_frequency = frequency
-            else:
-                break
-
-        # 如果当前时间在所有配置时间之前，使用最后一个时间段的频率（跨天逻辑）
-        if current_frequency is None and time_freq_pairs:
-            current_frequency = time_freq_pairs[-1][1]
-
-        return current_frequency
-
-    def _get_stream_specific_frequency(self, chat_stream_id: str):
-        """
-        获取特定聊天流在当前时间的频率
-
-        Args:
-            chat_stream_id: 聊天流ID（哈希值）
-
-        Returns:
-            float: 频率值，如果没有配置则返回 None
-        """
-        # 查找匹配的聊天流配置
-        for config_item in self.talk_frequency_adjust:
-            if not config_item or len(config_item) < 2:
-                continue
-
-            stream_config_str = config_item[0]  # 例如 "qq:1026294844:group"
-
-            # 解析配置字符串并生成对应的 chat_id
-            config_chat_id = self._parse_stream_config_to_chat_id(stream_config_str)
-            if config_chat_id is None:
-                continue
-
-            # 比较生成的 chat_id
-            if config_chat_id != chat_stream_id:
-                continue
-
-            # 使用通用的时间频率解析方法
-            return self._get_time_based_frequency(config_item[1:])
-
-        return None
-
-    def _parse_stream_config_to_chat_id(self, stream_config_str: str) -> Optional[str]:
-        """
-        解析流配置字符串并生成对应的 chat_id
-
-        Args:
-            stream_config_str: 格式为 "platform:id:type" 的字符串
-
-        Returns:
-            str: 生成的 chat_id，如果解析失败则返回 None
-        """
-        try:
-            parts = stream_config_str.split(":")
-            if len(parts) != 3:
-                return None
-
-            platform = parts[0]
-            id_str = parts[1]
-            stream_type = parts[2]
-
-            # 判断是否为群聊
-            is_group = stream_type == "group"
-
-            # 使用与 ChatStream.get_stream_id 相同的逻辑生成 chat_id
-            import hashlib
-
-            if is_group:
-                components = [platform, str(id_str)]
-            else:
-                components = [platform, str(id_str), "private"]
-            key = "_".join(components)
-            return hashlib.md5(key.encode()).hexdigest()
-
-        except (ValueError, IndexError):
-            return None
-
-    def _get_global_frequency(self) -> Optional[float]:
-        """
-        获取全局默认频率配置
-
-        Returns:
-            float: 频率值，如果没有配置则返回 None
-        """
-        for config_item in self.talk_frequency_adjust:
-            if not config_item or len(config_item) < 2:
-                continue
-
-            # 检查是否为全局默认配置（第一个元素为空字符串）
-            if config_item[0] == "":
-                return self._get_time_based_frequency(config_item[1:])
-
-        return None
 
 
 class MessageReceiveConfig(ValidatedConfigBase):
@@ -762,7 +595,6 @@ class SleepSystemConfig(ValidatedConfigBase):
         default="我准备睡觉了，请生成一句简短自然的晚安问候。", description="用于生成睡前消息的提示"
     )
 
-
 class ContextGroup(ValidatedConfigBase):
     """上下文共享组配置"""
 
@@ -824,3 +656,33 @@ class AffinityFlowConfig(ValidatedConfigBase):
     mention_bot_adjustment_threshold: float = Field(default=0.3, description="提及bot后的调整阈值")
     mention_bot_interest_score: float = Field(default=0.6, description="提及bot的兴趣分")
     base_relationship_score: float = Field(default=0.5, description="基础人物关系分")
+
+class ProactiveThinkingConfig(ValidatedConfigBase):
+    """主动思考（主动发起对话）功能配置"""
+
+    # --- 总开关 ---
+    enable: bool = Field(default=False, description="是否启用主动发起对话功能")
+
+    # --- 触发时机 ---
+    interval: int = Field(default=1500, description="基础触发间隔（秒），AI会围绕这个时间点主动发起对话")
+    interval_sigma: int = Field(default=120, description="间隔随机化标准差（秒），让触发时间更自然。设为0则为固定间隔。")
+    talk_frequency_adjust: list[list[str]] = Field(
+        default_factory=lambda: [['', '8:00,1', '12:00,1.2', '18:00,1.5', '01:00,0.6']],
+        description='每日活跃度调整，格式：[["", "HH:MM,factor", ...], ["stream_id", ...]]'
+    )
+
+    # --- 作用范围 ---
+    enable_in_private: bool = Field(default=True, description="是否允许在私聊中主动发起对话")
+    enable_in_group: bool = Field(default=True, description="是否允许在群聊中主动发起对话")
+    enabled_private_chats: List[str] = Field(
+        default_factory=list,
+        description='私聊白名单，为空则对所有私聊生效。格式: ["platform:user_id", ...]'
+    )
+    enabled_group_chats: List[str] = Field(
+        default_factory=list,
+        description='群聊白名单，为空则对所有群聊生效。格式: ["platform:group_id", ...]'
+    )
+
+    # --- 冷启动配置 (针对私聊) ---
+    enable_cold_start: bool = Field(default=True, description="对于白名单中不活跃的私聊，是否允许进行一次“冷启动”问候")
+    cold_start_cooldown: int = Field(default=86400, description="冷启动后，该私聊的下一次主动思考需要等待的最小时间（秒）")
