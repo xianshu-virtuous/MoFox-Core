@@ -537,13 +537,13 @@ class SendHandler:
         try:
             message_id = int(args["message_id"])
             emoji_id = int(args["emoji_id"])
-            set_like = str(args["set"])
+            set_like = bool(args["set"])
         except (KeyError, ValueError) as e:
             logger.error(f"处理表情回应命令时发生错误: {e}, 原始参数: {args}")
             raise ValueError(f"缺少必需参数或参数类型错误: {e}")
 
         return (
-            "set_msg_emoji_like",
+            CommandType.SET_EMOJI_LIKE.value,
             {"message_id": message_id, "emoji_id": emoji_id, "set": set_like},
         )
 

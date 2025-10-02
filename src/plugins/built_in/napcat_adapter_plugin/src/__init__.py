@@ -15,7 +15,7 @@ class CommandType(Enum):
     SEND_POKE = "send_poke"  # 戳一戳
     DELETE_MSG = "delete_msg"  # 撤回消息
     AI_VOICE_SEND = "send_group_ai_record"  # 发送群AI语音
-    SET_EMOJI_LIKE = "set_emoji_like"  # 设置表情回应
+    SET_EMOJI_LIKE = "set_msg_emoji_like"  # 设置表情回应
     SEND_AT_MESSAGE = "send_at_message"  # 艾特用户并发送消息
     SEND_LIKE = "send_like"  # 点赞
 
