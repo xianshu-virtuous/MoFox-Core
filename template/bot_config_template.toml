@@ -157,54 +157,6 @@ dynamic_distribution_max_interval = 30.0 # 最大分发间隔（秒）
 dynamic_distribution_jitter_factor = 0.2 # 分发间隔随机扰动因子
 max_concurrent_distributions = 10 # 最大并发处理的消息流数量，可以根据API性能和服务器负载调整
 
-talk_frequency_adjust = [
-    ["", "8:00,0.5", "12:00,0.6", "18:00,0.8", "01:00,0.3"],
-    ["qq:114514:group", "12:20,0.3", "16:10,0.5", "20:10,0.4", "00:10,0.1"],
-    ["qq:1919810:private", "8:20,0.3", "12:10,0.4", "20:10,0.5", "00:10,0.1"]
-]
-# 基于聊天流的个性化活跃度和专注度配置
-# 格式：[["platform:chat_id:type", "HH:MM,frequency", "HH:MM,frequency", ...], ...]
-
-# 全局配置示例：
-# [["", "8:00,1", "12:00,2", "18:00,1.5", "00:00,0.5"]]
-
-# 特定聊天流配置示例：
-# [
-#     ["", "8:00,1", "12:00,1.2", "18:00,1.5", "01:00,0.6"],  # 全局默认配置
-#     ["qq:1026294844:group", "12:20,1", "16:10,2", "20:10,1", "00:10,0.3"],  # 特定群聊配置
-#     ["qq:729957033:private", "8:20,1", "12:10,2", "20:10,1.5", "00:10,0.2"]  # 特定私聊配置
-# ]
-
-# 说明：
-# - 当第一个元素为空字符串""时，表示全局默认配置
-# - 当第一个元素为"platform:id:type"格式时，表示特定聊天流配置
-# - 后续元素是"时间,频率"格式，表示从该时间开始使用该活跃度，直到下一个时间点
-# - 优先级：特定聊天流配置 > 全局配置 > 默认 talk_frequency
-
-# 主动思考功能配置（仅在focus模式下生效）
-
-enable_proactive_thinking = false # 是否启用主动思考功能
-proactive_thinking_interval = 1500 # 主动思考触发间隔时间（秒），默认1500秒（25分钟）
-# TIPS:
-# 创意玩法：可以设置为0！设置为0时将基于delta_sigma生成纯随机间隔
-# 负数保险：如果出现了负数，会自动使用绝对值
-
-proactive_thinking_in_private = true # 主动思考可以在私聊里面启用
-proactive_thinking_in_group = true # 主动思考可以在群聊里面启用
-# 主动思考启用范围配置 - 按平台和类型分别配置，建议平台配置为小写
-# 格式：["platform:user_id", "platform:user_id", ...]
-# 示例：["qq:123456789", "telegram:user123", "bilibili:987654321"]
-proactive_thinking_enable_in_private = [] # 启用主动思考的私聊范围，为空则不限制
-proactive_thinking_enable_in_groups = [] # 启用主动思考的群聊范围，为空则不限制
-
-delta_sigma = 120 # 正态分布的标准差，控制时间间隔的随机程度
-# 特殊用法：
-#   - 设置为0：禁用正态分布，使用固定间隔
-#   - 设置得很大（如6000）：产生高度随机的间隔，即使基础间隔为0也能工作
-#   - 负数会自动转换为正数，不用担心配置错误以及极端边界情况
-# 实验建议：试试 proactive_thinking_interval=0 + delta_sigma 非常大 的纯随机模式！
-# 结果保证：生成的间隔永远为正数（负数会取绝对值），最小1秒，最大24小时
-
 
 [relationship]
 enable_relationship = true # 是否启用关系系统
@@ -629,3 +581,32 @@ relationship_weight = 0.3 # 人物关系分数权重
 mention_bot_adjustment_threshold = 0.3 # 提及bot后的调整阈值
 mention_bot_interest_score = 0.6 # 提及bot的兴趣分
 base_relationship_score = 0.3 # 基础人物关系分
+
+[proactive_thinking] # 主动思考（主动发起对话）功能配置
+# --- 总开关 ---
+enable = true # 是否启用主动发起对话功能
+
+# --- 触发时机 ---
+# 基础触发间隔（秒），AI会围绕这个时间点主动发起对话
+interval = 1500 # 默认25分钟
+# 间隔随机化标准差（秒），让触发时间更自然。设为0则为固定间隔。
+interval_sigma = 120
+# 每日活跃度调整，格式：[["", "HH:MM,factor", ...], ["stream_id", ...]]
+# factor > 1.0 会缩短思考间隔，更活跃；factor < 1.0 会延长间隔。
+talk_frequency_adjust = [['', '8:00,1', '12:00,1.2', '18:00,1.5', '01:00,0.6']]
+
+# --- 作用范围 ---
+enable_in_private = true # 是否允许在私聊中主动发起对话
+enable_in_group = true # 是否允许在群聊中主动发起对话
+# 私聊白名单，为空则对所有私聊生效
+# 格式: ["platform:user_id", ...] e.g., ["qq:123456"]
+enabled_private_chats = []
+# 群聊白名单，为空则对所有群聊生效
+# 格式: ["platform:group_id", ...] e.g., ["qq:7891011"]
+enabled_group_chats = []
+
+# --- 冷启动配置 (针对私聊) ---
+# 对于白名单中不活跃的私聊，是否允许进行一次“冷启动”问候
+enable_cold_start = true
+# 冷启动后，该私聊的下一次主动思考需要等待的最小时间（秒）
+cold_start_cooldown = 86400 # 默认24小时

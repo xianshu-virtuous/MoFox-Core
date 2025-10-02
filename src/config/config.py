@@ -434,7 +434,9 @@ class Config(ValidatedConfigBase):
         default_factory=lambda: CrossContextConfig(), description="跨群聊上下文共享配置"
     )
     affinity_flow: AffinityFlowConfig = Field(default_factory=lambda: AffinityFlowConfig(), description="亲和流配置")
-    ProactiveThinking: ProactiveThinkingConfig = Field(default_factory=lambda: AffinityFlowConfig(), description="主动思考配置")
+    proactive_thinking: ProactiveThinkingConfig = Field(
+        default_factory=lambda: ProactiveThinkingConfig(), description="主动思考配置"
+    )
 
 
 class APIAdapterConfig(ValidatedConfigBase):

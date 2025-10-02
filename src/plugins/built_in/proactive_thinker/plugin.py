@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 class ProactiveThinkerPlugin(BasePlugin):
     """一个主动思考的插件，但现在还只是个空壳子"""
     plugin_name: str = "proactive_thinker"
-    enable_plugin: bool = True
+    enable_plugin: bool = False
     dependencies: list[str] = []
     python_dependencies: list[str] = []
     config_file_name: str = "config.toml"
