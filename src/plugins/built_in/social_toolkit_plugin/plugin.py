@@ -193,16 +193,11 @@ class PokeAction(BaseAction):
 
         # 构建戳一戳的参数
         poke_args = {"user_id": str(user_id)}
-        if self.is_group and self.chat_stream.group_info:
-            poke_args["group_id"] = self.chat_stream.group_info.group_id
-            logger.info(f"在群聊 {poke_args['group_id']} 中执行戳一戳")
-        else:
-            logger.info("在私聊中执行戳一戳")
 
         for i in range(times):
             logger.info(f"正在向 {display_name} ({user_id}) 发送第 {i + 1}/{times} 次戳一戳...")
             await self.send_command(
-                "send_poke", args=poke_args, display_message=f"戳了戳 {display_name} ({i + 1}/{times})"
+                "SEND_POKE", args=poke_args, display_message=f"戳了戳 {display_name} ({i + 1}/{times})"
             )
             # 添加一个延迟，避免因发送过快导致后续戳一戳失败
             await asyncio.sleep(1.5)
@@ -302,6 +297,10 @@ class SetEmojiLikeAction(BaseAction):
 
         if not success or not response:
             logger.error("表情选择模型未能返回有效的表情名称。")
+            await self.store_action_info(
+                action_prompt_display="贴表情失败:表情选择模型未能返回有效的表情名称。",
+                action_done=False,
+            )
             return False, "无法选择合适的表情。"
 
         chosen_emoji_name = response.strip()
@@ -319,7 +318,7 @@ class SetEmojiLikeAction(BaseAction):
 
         try:
             success = await self.send_command(
-                command_name="set_emoji_like",
+                command_name="SET_EMOJI_LIKE",
                 args={"message_id": message_id, "emoji_id": emoji_id, "set": set_like},
                 storage_message=False,
             )

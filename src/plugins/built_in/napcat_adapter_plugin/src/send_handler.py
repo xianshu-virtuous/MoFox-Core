@@ -543,7 +543,7 @@ class SendHandler:
             raise ValueError(f"缺少必需参数或参数类型错误: {e}")
 
         return (
-            CommandType.SET_EMOJI_LIKE.value,
+            "set_msg_emoji_like",
             {"message_id": message_id, "emoji_id": emoji_id, "set": set_like},
         )
 
