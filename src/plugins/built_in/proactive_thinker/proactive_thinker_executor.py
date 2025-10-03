@@ -80,7 +80,7 @@ class ProactiveThinkerExecutor:
         plan_prompt = self._build_plan_prompt(context, start_mode, topic, reason)
 
         is_success, response, _, _ = await llm_api.generate_with_model(
-            prompt=plan_prompt, model_config=model_config.model_task_config.utils
+            prompt=plan_prompt, model_config=model_config.model_task_config.replyer
         )
 
         if is_success and response:
@@ -158,12 +158,12 @@ class ProactiveThinkerExecutor:
         )
 
         # 2. 构建基础上下文
+        mood_state = "暂时没有"
         if global_config.mood.enable_mood:
             try:
                 mood_state = mood_manager.get_mood_by_chat_id(stream.stream_id).mood_state
             except Exception as e:
                 logger.error(f"获取情绪失败,原因:{e}")
-                mood_state = "暂时没有"
         base_context = {
             "schedule_context": schedule_context,
             "recent_chat_history": recent_chat_history,
@@ -281,28 +281,46 @@ class ProactiveThinkerExecutor:
         # 构建通用尾部
         prompt += """
 # 决策指令
-请综合以上所有信息，做出决策。你的决策需要以JSON格式输出，包含以下字段：
+请综合以上所有信息，以稳定、真实、拟人的方式做出决策。你的决策需要以JSON格式输出，包含以下字段：
 - `should_reply`: bool, 是否应该发起对话。
-- `topic`: str, 如果 `should_reply` 为 true，你打算聊什么话题？(例如：问候一下今天的日程、关心一下昨天的某件事、分享一个你自己的趣事等)
+- `topic`: str, 如果 `should_reply` 为 true，你打算聊什么话题？
 - `reason`: str, 做出此决策的简要理由。
 
 # 决策原则
-- **避免打扰**: 如果你最近（尤其是在最近的几次决策中）已经主动发起过对话，请倾向于选择“不回复”，除非有非常重要和紧急的事情。
+- **谨慎对待未回复的对话**: 在发起新话题前，请检查【最近的聊天摘要】。如果最后一条消息是你自己发送的，请仔细评估等待的时间和上下文，判断再次主动发起对话是否礼貌和自然。如果等待时间很短（例如几分钟或半小时内），通常应该选择“不回复”。
+- **优先利用上下文**: 优先从【情境分析】中已有的信息（如最近的聊天摘要、你的日程、你对Ta的关系印象）寻找自然的话题切入点。
+- **简单问候作为备选**: 如果上下文中没有合适的话题，可以生成一个简单、真诚的日常问候（例如“在忙吗？”，“下午好呀~”）。
+- **避免抽象**: 避免创造过于复杂、抽象或需要对方思考很久才能明白的话题。目标是轻松、自然地开启对话。
+- **避免过于频繁**: 如果你最近（尤其是在最近的几次决策中）已经主动发起过对话，请倾向于选择“不回复”，除非有非常重要和紧急的事情。
 
 
 ---
-示例1 (应该回复):
+示例1 (基于上下文):
 {{
   "should_reply": true,
-  "topic": "提醒大家今天下午有'项目会议'的日程",
-  "reason": "现在是上午，下午有个重要会议，我觉得应该主动提醒一下大家，这会显得我很贴心。"
+  "topic": "关心一下Ta昨天提到的那个项目进展如何了",
+  "reason": "用户昨天在聊天中提到了一个重要的项目，现在主动关心一下进展，会显得很体贴，也能自然地开启对话。"
 }}
 
-示例2 (不应回复):
+示例2 (简单问候):
+{{
+  "should_reply": true,
+  "topic": "打个招呼，问问Ta现在在忙些什么",
+  "reason": "最近没有聊天记录，日程也很常规，没有特别的切入点。一个简单的日常问候是最安全和自然的方式来重新连接。"
+}}
+
+示例3 (不应回复 - 过于频繁):
 {{
   "should_reply": false,
   "topic": null,
   "reason": "虽然群里很活跃，但现在是深夜，而且最近的聊天话题我也不熟悉，没有合适的理由去打扰大家。"
+}}
+
+示例4 (不应回复 - 等待回应):
+{{
+  "should_reply": false,
+  "topic": null,
+  "reason": "我注意到上一条消息是我几分钟前主动发送的，对方可能正在忙。为了表现出耐心和体贴，我现在最好保持安静，等待对方的回应。"
 }}
 ---
 
@@ -399,6 +417,7 @@ class ProactiveThinkerExecutor:
 
 # 对话指引
 - 你决定和Ta聊聊关于“{topic}”的话题。
+- **重要**: 在开始你的话题前，必须先用一句通用的、礼貌的开场白进行问候（例如：“在吗？”、“上午好！”、“晚上好呀~”），然后再自然地衔接你的话题，确保整个回复在一条消息内流畅、自然、像人类的说话方式。
 - 请结合以上所有情境信息，自然地开启对话。
 - 你的语气应该符合你的人设({context["mood_state"]})以及你对Ta的好感度。
 """
@@ -436,6 +455,7 @@ class ProactiveThinkerExecutor:
 
 # 对话指引
 - 你决定和大家聊聊关于“{topic}”的话题。
+- **重要**: 在开始你的话题前，必须先用一句通用的、礼貌的开场白进行问候（例如：“哈喽，大家好呀~”、“下午好！”），然后再自然地衔接你的话题，确保整个回复在一条消息内流畅、自然、像人类的说话方式。
 - 你的语气应该更活泼、更具包容性，以吸引更多群成员参与讨论。你的语气应该符合你的人设)。
 - 请结合以上所有情境信息，自然地开启对话。
 - 可以分享你的看法、提出相关问题，或者开个合适的玩笑。
