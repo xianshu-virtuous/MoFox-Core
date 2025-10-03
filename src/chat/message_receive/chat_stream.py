@@ -464,7 +464,7 @@ class ChatManager:
     async def get_or_create_stream(
         self, platform: str, user_info: UserInfo, group_info: GroupInfo | None = None
     ) -> ChatStream:
-        """获取或创建聊天流
+        """获取或创建聊天流 - 优化版本使用缓存管理器
 
         Args:
             platform: 平台标识
@@ -478,6 +478,31 @@ class ChatManager:
         try:
             stream_id = self._generate_stream_id(platform, user_info, group_info)
 
+            # 优先使用缓存管理器（优化版本）
+            try:
+                from src.chat.message_manager.stream_cache_manager import get_stream_cache_manager
+                cache_manager = get_stream_cache_manager()
+
+                if cache_manager.is_running:
+                    optimized_stream = await cache_manager.get_or_create_stream(
+                        stream_id=stream_id,
+                        platform=platform,
+                        user_info=user_info,
+                        group_info=group_info
+                    )
+
+                    # 设置消息上下文
+                    from .message import MessageRecv
+                    if stream_id in self.last_messages and isinstance(self.last_messages[stream_id], MessageRecv):
+                        optimized_stream.set_context(self.last_messages[stream_id])
+
+                    # 转换为原始ChatStream以保持兼容性
+                    return self._convert_to_original_stream(optimized_stream)
+
+            except Exception as e:
+                logger.debug(f"缓存管理器获取流失败，使用原始方法: {e}")
+
+            # 回退到原始方法
             # 检查内存中是否存在
             if stream_id in self.streams:
                 stream = self.streams[stream_id]
@@ -634,12 +659,35 @@ class ChatManager:
 
     @staticmethod
     async def _save_stream(stream: ChatStream):
-        """保存聊天流到数据库"""
+        """保存聊天流到数据库 - 优化版本使用异步批量写入"""
         if stream.saved:
             return
         stream_data_dict = stream.to_dict()
 
-        # 尝试使用数据库批量调度器
+        # 优先使用新的批量写入器
+        try:
+            from src.chat.message_manager.batch_database_writer import get_batch_writer
+
+            batch_writer = get_batch_writer()
+            if batch_writer.is_running:
+                success = await batch_writer.schedule_stream_update(
+                    stream_id=stream_data_dict["stream_id"],
+                    update_data=ChatManager._prepare_stream_data(stream_data_dict),
+                    priority=1  # 流更新的优先级
+                )
+                if success:
+                    stream.saved = True
+                    logger.debug(f"聊天流 {stream.stream_id} 通过批量写入器调度成功")
+                    return
+                else:
+                    logger.warning(f"批量写入器队列已满，使用原始方法: {stream.stream_id}")
+            else:
+                logger.debug(f"批量写入器未运行，使用原始方法: {stream.stream_id}")
+
+        except Exception as e:
+            logger.debug(f"批量写入器保存聊天流失败，使用原始方法: {e}")
+
+        # 尝试使用数据库批量调度器（回退方案1）
         try:
             from src.common.database.db_batch_scheduler import batch_update, get_batch_session
 
@@ -657,7 +705,7 @@ class ChatManager:
         except (ImportError, Exception) as e:
             logger.debug(f"批量调度器保存聊天流失败，使用原始方法: {e}")
 
-        # 回退到原始方法
+        # 回退到原始方法（最终方案）
         async def _db_save_stream_async(s_data_dict: dict):
             async with get_db_session() as session:
                 user_info_d = s_data_dict.get("user_info")
@@ -780,6 +828,46 @@ class ChatManager:
 
 
 chat_manager = None
+
+
+def _convert_to_original_stream(self, optimized_stream) -> "ChatStream":
+        """将OptimizedChatStream转换为原始ChatStream以保持兼容性"""
+        try:
+            # 创建原始ChatStream实例
+            original_stream = ChatStream(
+                stream_id=optimized_stream.stream_id,
+                platform=optimized_stream.platform,
+                user_info=optimized_stream._get_effective_user_info(),
+                group_info=optimized_stream._get_effective_group_info()
+            )
+
+            # 复制状态
+            original_stream.create_time = optimized_stream.create_time
+            original_stream.last_active_time = optimized_stream.last_active_time
+            original_stream.sleep_pressure = optimized_stream.sleep_pressure
+            original_stream.base_interest_energy = optimized_stream.base_interest_energy
+            original_stream._focus_energy = optimized_stream._focus_energy
+            original_stream.no_reply_consecutive = optimized_stream.no_reply_consecutive
+            original_stream.saved = optimized_stream.saved
+
+            # 复制上下文信息（如果存在）
+            if hasattr(optimized_stream, '_stream_context') and optimized_stream._stream_context:
+                original_stream.stream_context = optimized_stream._stream_context
+
+            if hasattr(optimized_stream, '_context_manager') and optimized_stream._context_manager:
+                original_stream.context_manager = optimized_stream._context_manager
+
+            return original_stream
+
+        except Exception as e:
+            logger.error(f"转换OptimizedChatStream失败: {e}")
+            # 如果转换失败，创建一个新的原始流
+            return ChatStream(
+                stream_id=optimized_stream.stream_id,
+                platform=optimized_stream.platform,
+                user_info=optimized_stream._get_effective_user_info(),
+                group_info=optimized_stream._get_effective_group_info()
+            )
 
 
 def get_chat_manager():

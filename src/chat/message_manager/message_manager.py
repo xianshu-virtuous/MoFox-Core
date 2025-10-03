@@ -56,6 +56,30 @@ class MessageManager:
 
         self.is_running = True
 
+        # 启动批量数据库写入器
+        try:
+            from src.chat.message_manager.batch_database_writer import init_batch_writer
+            await init_batch_writer()
+            logger.info("📦 批量数据库写入器已启动")
+        except Exception as e:
+            logger.error(f"启动批量数据库写入器失败: {e}")
+
+        # 启动流缓存管理器
+        try:
+            from src.chat.message_manager.stream_cache_manager import init_stream_cache_manager
+            await init_stream_cache_manager()
+            logger.info("🗄️ 流缓存管理器已启动")
+        except Exception as e:
+            logger.error(f"启动流缓存管理器失败: {e}")
+
+        # 启动自适应流管理器
+        try:
+            from src.chat.message_manager.adaptive_stream_manager import init_adaptive_stream_manager
+            await init_adaptive_stream_manager()
+            logger.info("🎯 自适应流管理器已启动")
+        except Exception as e:
+            logger.error(f"启动自适应流管理器失败: {e}")
+
         # 启动睡眠和唤醒管理器
         await self.wakeup_manager.start()
 
@@ -71,6 +95,30 @@ class MessageManager:
             return
 
         self.is_running = False
+
+        # 停止批量数据库写入器
+        try:
+            from src.chat.message_manager.batch_database_writer import shutdown_batch_writer
+            await shutdown_batch_writer()
+            logger.info("📦 批量数据库写入器已停止")
+        except Exception as e:
+            logger.error(f"停止批量数据库写入器失败: {e}")
+
+        # 停止流缓存管理器
+        try:
+            from src.chat.message_manager.stream_cache_manager import shutdown_stream_cache_manager
+            await shutdown_stream_cache_manager()
+            logger.info("🗄️ 流缓存管理器已停止")
+        except Exception as e:
+            logger.error(f"停止流缓存管理器失败: {e}")
+
+        # 停止自适应流管理器
+        try:
+            from src.chat.message_manager.adaptive_stream_manager import shutdown_adaptive_stream_manager
+            await shutdown_adaptive_stream_manager()
+            logger.info("🎯 自适应流管理器已停止")
+        except Exception as e:
+            logger.error(f"停止自适应流管理器失败: {e}")
 
         # 停止睡眠和唤醒管理器
         await self.wakeup_manager.stop()
