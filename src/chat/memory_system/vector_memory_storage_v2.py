@@ -648,7 +648,7 @@ class VectorMemoryStorage:
                     limit=self.config.search_limit * 2,  # 粗筛返回更多候选
                     flexible_mode=True,  # 使用灵活匹配模式
                 )
-                logger.info(f"[JSON元数据粗筛] 完成，筛选出 {len(candidate_ids)} 个候选ID")
+                logger.debug(f"[JSON元数据粗筛] 完成，筛选出 {len(candidate_ids)} 个候选ID")
 
                 # 如果粗筛后没有结果，回退到全部记忆搜索
                 if not candidate_ids:
@@ -678,7 +678,7 @@ class VectorMemoryStorage:
                 where_conditions["memory_id"] = {"$in": candidate_ids}
                 logger.debug(f"[向量精筛] 限制在 {len(candidate_ids)} 个候选ID内搜索")
             else:
-                logger.info("[向量精筛] 在全部记忆中搜索（元数据筛选无结果回退）")
+                logger.debug("[向量精筛] 在全部记忆中搜索（元数据筛选无结果回退）")
 
             # 查询Vector DB
             logger.debug(f"[向量精筛] 开始，limit={min(limit, self.config.search_limit)}")
@@ -698,7 +698,7 @@ class VectorMemoryStorage:
                 metadatas = results.get("metadatas", [[]])[0]
                 ids = results.get("ids", [[]])[0]
 
-                logger.info(
+                logger.debug(
                     f"向量检索返回原始结果：documents={len(documents)}, ids={len(ids)}, metadatas={len(metadatas)}"
                 )
                 for i, (doc, metadata, memory_id) in enumerate(zip(documents, metadatas, ids, strict=False)):
@@ -729,13 +729,13 @@ class VectorMemoryStorage:
                             )
                         except Exception:
                             short_text = ""
-                        logger.info(f"检索结果 - id={memory_id}, similarity={similarity:.4f}, summary={short_text}")
+                        logger.debug(f"检索结果 - id={memory_id}, similarity={similarity:.4f}, summary={short_text}")
 
             # 按相似度排序
             similar_memories.sort(key=lambda x: x[1], reverse=True)
 
             self.stats["total_searches"] += 1
-            logger.info(
+            logger.debug(
                 f"搜索相似记忆: query='{query_text[:60]}...', limit={limit}, threshold={threshold}, filters={where_conditions}, 返回数={len(similar_memories)}"
             )
             logger.debug(f"搜索相似记忆 详细结果数={len(similar_memories)}")
@@ -783,7 +783,7 @@ class VectorMemoryStorage:
                 metadatas = results.get("metadatas", [{}] * len(documents))
                 ids = results.get("ids", [])
 
-                logger.info(f"按过滤条件获取返回: docs={len(documents)}, ids={len(ids)}")
+                logger.debug(f"按过滤条件获取返回: docs={len(documents)}, ids={len(ids)}")
                 for i, (doc, metadata) in enumerate(zip(documents, metadatas, strict=False)):
                     memory_id = ids[i] if i < len(ids) else None
 
