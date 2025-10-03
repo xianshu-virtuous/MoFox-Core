@@ -160,7 +160,7 @@ class ProactiveThinkerExecutor:
         # 2. 构建基础上下文
         if global_config.mood.enable_mood:
             try:
-                mood_state = mood_manager.get_mood_by_chat_id(stream.stream_id)
+                mood_state = mood_manager.get_mood_by_chat_id(stream.stream_id).mood_state
             except Exception as e:
                 logger.error(f"获取情绪失败,原因:{e}")
                 mood_state = "暂时没有"
