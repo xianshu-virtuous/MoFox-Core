@@ -77,15 +77,11 @@ async def get_message_stats_by_chat(
 
             if chat_id not in stats:
                 stats[chat_id] = {
-                    "total_stats": {"sent": 0, "received": 0, "total": 0},
+                    "total_stats": {"total": 0},
                     "user_stats": {}
                 }
 
             stats[chat_id]["total_stats"]["total"] += 1
-            if user_id == bot_qq:
-                stats[chat_id]["total_stats"]["sent"] += 1
-            else:
-                stats[chat_id]["total_stats"]["received"] += 1
 
             if group_by_user:
                 if user_id not in stats[chat_id]["user_stats"]:
@@ -97,20 +93,18 @@ async def get_message_stats_by_chat(
             stats = {chat_id: data["total_stats"] for chat_id, data in stats.items()}
 
         if format:
+            chat_manager = get_chat_manager()
             formatted_stats = {}
             for chat_id, data in stats.items():
-                # 尝试获取群聊流
-                logger.info(f"这是一个测试日志:{chat_id}")
-                group_stream = chat_api.get_stream_by_group_id(chat_id)
-                if group_stream and group_stream.group_info:
-                    chat_name = group_stream.group_info.group_name
+                stream = chat_manager.streams.get(chat_id)
+                chat_name = "未知会话"
+                if stream:
+                    if stream.group_info and stream.group_info.group_name:
+                        chat_name = stream.group_info.group_name
+                    elif stream.user_info and stream.user_info.user_nickname:
+                        chat_name = stream.user_info.user_nickname
                 else:
-                    # 只有当它不是一个已知的群聊时，才尝试作为私聊处理
-                    private_stream = chat_api.get_stream_by_user_id(chat_id)
-                    if private_stream and private_stream.user_info:
-                        chat_name = private_stream.user_info.user_nickname
-                    else:
-                        chat_name = f"未知会话 ({chat_id})"
+                    chat_name = f"未知会话 ({chat_id})"
 
                 formatted_data = {
                     "chat_name": chat_name,
