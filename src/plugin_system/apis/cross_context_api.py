@@ -37,6 +37,9 @@ async def get_context_groups(chat_id: str) -> list[list[str]] | None:
     for group in global_config.cross_context.groups:
         # 检查当前聊天的ID和类型是否在组的chat_ids中
         if [current_type, str(current_chat_raw_id)] in group.chat_ids:
+            # 排除maizone专用组
+            if group.name == "maizone_context_group":
+                continue
             # 返回组内其他聊天的 [type, id] 列表
             return [chat_info for chat_info in group.chat_ids if chat_info != [current_type, str(current_chat_raw_id)]]
 
