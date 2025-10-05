@@ -2,6 +2,7 @@ import asyncio
 from typing import Any
 
 from src.common.logger import get_logger
+from src.plugin_system.base.base_events_handler import BaseEventHandler
 
 logger = get_logger("base_event")
 

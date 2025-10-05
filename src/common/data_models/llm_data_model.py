@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from src.llm_models.payload_content.tool_option import ToolCall
+
 from . import BaseDataModel
 
 if TYPE_CHECKING:
