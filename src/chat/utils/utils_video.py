@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """纯 inkfox 视频关键帧分析工具
 
 仅依赖 `inkfox.video` 提供的 Rust 扩展能力：
@@ -14,25 +13,25 @@
 
 from __future__ import annotations
 
-import os
-import io
 import asyncio
 import base64
-import tempfile
-from pathlib import Path
-from typing import List, Tuple, Optional, Dict, Any
 import hashlib
+import io
+import os
+import tempfile
 import time
+from pathlib import Path
+from typing import Any
 
 from PIL import Image
 
+from src.common.database.sqlalchemy_models import Videos, get_db_session  # type: ignore
 from src.common.logger import get_logger
 from src.config.config import global_config, model_config
 from src.llm_models.utils_model import LLMRequest
-from src.common.database.sqlalchemy_models import Videos, get_db_session  # type: ignore
 
 # 简易并发控制：同一 hash 只处理一次
-_video_locks: Dict[str, asyncio.Lock] = {}
+_video_locks: dict[str, asyncio.Lock] = {}
 _locks_guard = asyncio.Lock()
 
 logger = get_logger("utils_video")
@@ -90,7 +89,7 @@ class VideoAnalyzer:
             logger.debug(f"获取系统信息失败: {e}")
 
     # ---- 关键帧提取 ----
-    async def extract_keyframes(self, video_path: str) -> List[Tuple[str, float]]:
+    async def extract_keyframes(self, video_path: str) -> list[tuple[str, float]]:
         """提取关键帧并返回 (base64, timestamp_seconds) 列表"""
         with tempfile.TemporaryDirectory() as tmp:
             result = video.extract_keyframes_from_video(  # type: ignore[attr-defined]
@@ -105,7 +104,7 @@ class VideoAnalyzer:
             )
             files = sorted(Path(tmp).glob("keyframe_*.jpg"))[: self.max_frames]
             total_ms = getattr(result, "total_time_ms", 0)
-            frames: List[Tuple[str, float]] = []
+            frames: list[tuple[str, float]] = []
             for i, f in enumerate(files):
                 img = Image.open(f).convert("RGB")
                 if max(img.size) > self.max_image_size:
@@ -119,7 +118,7 @@ class VideoAnalyzer:
             return frames
 
     # ---- 批量分析 ----
-    async def _analyze_batch(self, frames: List[Tuple[str, float]], question: Optional[str]) -> str:
+    async def _analyze_batch(self, frames: list[tuple[str, float]], question: str | None) -> str:
         from src.llm_models.payload_content.message import MessageBuilder, RoleType
         from src.llm_models.utils_model import RequestType
         prompt = self.batch_analysis_prompt.format(
@@ -149,8 +148,8 @@ class VideoAnalyzer:
         return resp.content or "❌ 未获得响应"
 
     # ---- 逐帧分析 ----
-    async def _analyze_sequential(self, frames: List[Tuple[str, float]], question: Optional[str]) -> str:
-        results: List[str] = []
+    async def _analyze_sequential(self, frames: list[tuple[str, float]], question: str | None) -> str:
+        results: list[str] = []
         for i, (b64, ts) in enumerate(frames):
             prompt = f"分析第{i+1}帧" + (f" (时间: {ts:.2f}s)" if self.enable_frame_timing else "")
             if question:
@@ -174,7 +173,7 @@ class VideoAnalyzer:
             return "\n".join(results)
 
     # ---- 主入口 ----
-    async def analyze_video(self, video_path: str, question: Optional[str] = None) -> Tuple[bool, str]:
+    async def analyze_video(self, video_path: str, question: str | None = None) -> tuple[bool, str]:
         if not os.path.exists(video_path):
             return False, "❌ 文件不存在"
         frames = await self.extract_keyframes(video_path)
@@ -189,10 +188,10 @@ class VideoAnalyzer:
     async def analyze_video_from_bytes(
         self,
         video_bytes: bytes,
-        filename: Optional[str] = None,
-        prompt: Optional[str] = None,
-        question: Optional[str] = None,
-    ) -> Dict[str, str]:
+        filename: str | None = None,
+        prompt: str | None = None,
+        question: str | None = None,
+    ) -> dict[str, str]:
         """从内存字节分析视频，兼容旧调用 (prompt / question 二选一) 返回 {"summary": str}."""
         if not video_bytes:
             return {"summary": "❌ 空视频数据"}
@@ -271,7 +270,7 @@ class VideoAnalyzer:
 
 
 # ---- 外部接口 ----
-_INSTANCE: Optional[VideoAnalyzer] = None
+_INSTANCE: VideoAnalyzer | None = None
 
 
 def get_video_analyzer() -> VideoAnalyzer:
@@ -285,7 +284,7 @@ def is_video_analysis_available() -> bool:
     return True
 
 
-def get_video_analysis_status() -> Dict[str, Any]:
+def get_video_analysis_status() -> dict[str, Any]:
     try:
         info = video.get_system_info()  # type: ignore[attr-defined]
     except Exception as e:  # pragma: no cover

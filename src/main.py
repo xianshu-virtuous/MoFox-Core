@@ -6,7 +6,7 @@ import time
 import traceback
 from functools import partial
 from random import choices
-from typing import Any, List, Tuple
+from typing import Any
 
 from maim_message import MessageServer
 from rich.traceback import install
@@ -36,7 +36,7 @@ install(extra_lines=3)
 logger = get_logger("main")
 
 # 预定义彩蛋短语，避免在每次初始化时重新创建
-EGG_PHRASES: List[Tuple[str, int]] = [
+EGG_PHRASES: list[tuple[str, int]] = [
     ("我们的代码里真的没有bug，只有'特性'。", 10),
     ("你知道吗？阿范喜欢被切成臊子😡", 10),
     ("你知道吗,雅诺狐的耳朵其实很好摸", 5),
@@ -69,22 +69,22 @@ def _task_done_callback(task: asyncio.Task, message_id: str, start_time: float) 
 
 class MainSystem:
     """主系统类，负责协调所有组件"""
-    
+
     def __init__(self) -> None:
         # 使用增强记忆系统
         self.memory_manager = memory_manager
         self.individuality: Individuality = get_individuality()
-        
+
         # 使用消息API替代直接的FastAPI实例
         self.app: MessageServer = get_global_api()
         self.server: Server = get_global_server()
-        
+
         # 设置信号处理器用于优雅退出
         self._shutting_down = False
         self._setup_signal_handlers()
-        
+
         # 存储清理任务的引用
-        self._cleanup_tasks: List[asyncio.Task] = []
+        self._cleanup_tasks: list[asyncio.Task] = []
 
     def _setup_signal_handlers(self) -> None:
         """设置信号处理器"""
@@ -92,7 +92,7 @@ class MainSystem:
             if self._shutting_down:
                 logger.warning("系统已经在关闭过程中，忽略重复信号")
                 return
-                
+
             self._shutting_down = True
             logger.info("收到退出信号，正在优雅关闭系统...")
 
@@ -148,7 +148,7 @@ class MainSystem:
 
             # 尝试注册所有可用的计算器
             registered_calculators = []
-            
+
             for calc_name, calc_info in interest_calculators.items():
                 enabled = getattr(calc_info, "enabled", True)
                 default_enabled = getattr(calc_info, "enabled_by_default", True)
@@ -169,7 +169,7 @@ class MainSystem:
 
                     # 创建组件实例
                     calculator_instance = component_class()
-                    
+
                     # 初始化组件
                     if not await calculator_instance.initialize():
                         logger.error(f"兴趣计算器 {calc_name} 初始化失败")
@@ -199,12 +199,12 @@ class MainSystem:
         """异步清理资源"""
         if self._shutting_down:
             return
-            
+
         self._shutting_down = True
         logger.info("开始系统清理流程...")
-        
+
         cleanup_tasks = []
-        
+
         # 停止数据库服务
         try:
             from src.common.database.database import stop_database
@@ -236,14 +236,14 @@ class MainSystem:
         # 触发停止事件
         try:
             from src.plugin_system.core.event_manager import event_manager
-            cleanup_tasks.append(("插件系统停止事件", 
+            cleanup_tasks.append(("插件系统停止事件",
                                 event_manager.trigger_event(EventType.ON_STOP, permission_group="SYSTEM")))
         except Exception as e:
             logger.error(f"准备触发停止事件时出错: {e}")
 
         # 停止表情管理器
         try:
-            cleanup_tasks.append(("表情管理器", 
+            cleanup_tasks.append(("表情管理器",
                                 asyncio.get_event_loop().run_in_executor(None, get_emoji_manager().shutdown)))
         except Exception as e:
             logger.error(f"准备停止表情管理器时出错: {e}")
@@ -270,21 +270,21 @@ class MainSystem:
             logger.info(f"开始并行执行 {len(cleanup_tasks)} 个清理任务...")
             tasks = [task for _, task in cleanup_tasks]
             task_names = [name for name, _ in cleanup_tasks]
-            
+
             # 使用asyncio.gather并行执行，设置超时防止卡死
             try:
                 results = await asyncio.wait_for(
                     asyncio.gather(*tasks, return_exceptions=True),
                     timeout=30.0  # 30秒超时
                 )
-                
+
                 # 记录结果
                 for i, (name, result) in enumerate(zip(task_names, results)):
                     if isinstance(result, Exception):
                         logger.error(f"停止 {name} 时出错: {result}")
                     else:
                         logger.info(f"🛑 {name} 已停止")
-                        
+
             except asyncio.TimeoutError:
                 logger.error("清理任务超时，强制退出")
             except Exception as e:
@@ -311,16 +311,16 @@ class MainSystem:
         try:
             start_time = time.time()
             message_id = message_data.get("message_info", {}).get("message_id", "UNKNOWN")
-            
+
             # 检查系统是否正在关闭
             if self._shutting_down:
                 logger.warning(f"系统正在关闭，拒绝处理消息 {message_id}")
                 return
-                
+
             # 创建后台任务
             task = asyncio.create_task(chat_bot.message_process(message_data))
             logger.debug(f"已为消息 {message_id} 创建后台处理任务 (ID: {id(task)})")
-            
+
             # 添加一个回调函数，当任务完成时，它会被调用
             task.add_done_callback(partial(_task_done_callback, message_id=message_id, start_time=start_time))
         except Exception:
@@ -330,19 +330,19 @@ class MainSystem:
     async def initialize(self) -> None:
         """初始化系统组件"""
         # 检查必要的配置
-        if not hasattr(global_config, 'bot') or not hasattr(global_config.bot, 'nickname'):
+        if not hasattr(global_config, "bot") or not hasattr(global_config.bot, "nickname"):
             logger.error("缺少必要的bot配置")
             raise ValueError("Bot配置不完整")
-            
+
         logger.info(f"正在唤醒{global_config.bot.nickname}......")
 
         # 初始化组件
         await self._init_components()
-        
+
         # 随机选择彩蛋
         egg_texts, weights = zip(*EGG_PHRASES)
         selected_egg = choices(egg_texts, weights=weights, k=1)[0]
-        
+
         logger.info(f"""
 全部系统初始化完成，{global_config.bot.nickname}已成功唤醒
 =========================================================
@@ -367,7 +367,7 @@ MoFox_Bot(第三方修改版)
             async_task_manager.add_task(StatisticOutputTask()),
             async_task_manager.add_task(TelemetryHeartBeatTask()),
         ]
-        
+
         await asyncio.gather(*base_init_tasks, return_exceptions=True)
         logger.info("基础定时任务初始化成功")
 
@@ -399,7 +399,7 @@ MoFox_Bot(第三方修改版)
 
         # 处理所有缓存的事件订阅（插件加载完成后）
         event_manager.process_all_pending_subscriptions()
-        
+
         # 初始化MCP工具提供器
         try:
             mcp_config = global_config.get("mcp_servers", [])
@@ -412,24 +412,24 @@ MoFox_Bot(第三方修改版)
 
         # 并行初始化其他管理器
         manager_init_tasks = []
-        
+
         # 表情管理器
         manager_init_tasks.append(self._safe_init("表情包管理器", get_emoji_manager().initialize))
-        
+
         # 情绪管理器
         manager_init_tasks.append(self._safe_init("情绪管理器", mood_manager.start))
-        
+
         # 聊天管理器
         manager_init_tasks.append(self._safe_init("聊天管理器", get_chat_manager()._initialize))
-        
+
         # 等待所有管理器初始化完成
         results = await asyncio.gather(*manager_init_tasks, return_exceptions=True)
-        
+
         # 检查初始化结果
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 logger.error(f"组件初始化失败: {result}")
-        
+
         # 启动聊天管理器的自动保存任务
         asyncio.create_task(get_chat_manager()._auto_save_task())
 
@@ -558,7 +558,7 @@ MoFox_Bot(第三方修改版)
         """关闭系统组件"""
         if self._shutting_down:
             return
-            
+
         logger.info("正在关闭MainSystem...")
         await self._async_cleanup()
         logger.info("MainSystem关闭完成")

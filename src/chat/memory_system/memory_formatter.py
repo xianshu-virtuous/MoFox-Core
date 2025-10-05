@@ -17,8 +17,9 @@
 """
 from __future__ import annotations
 
-from typing import Any, Iterable
 import time
+from collections.abc import Iterable
+from typing import Any
 
 
 def _format_timestamp(ts: Any) -> str:

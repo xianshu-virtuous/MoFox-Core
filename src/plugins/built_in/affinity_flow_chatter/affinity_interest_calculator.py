@@ -4,8 +4,9 @@
 """
 
 import time
-import orjson
 from typing import TYPE_CHECKING
+
+import orjson
 
 from src.chat.interest_system import bot_interest_manager
 from src.common.logger import get_logger

@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING, Any
 from src.common.logger import get_logger
 from src.config.config import global_config
 from src.mood.mood_manager import mood_manager
+from src.plugin_system.base.component_types import ChatMode
 from src.plugins.built_in.affinity_flow_chatter.plan_executor import ChatterPlanExecutor
 from src.plugins.built_in.affinity_flow_chatter.plan_filter import ChatterPlanFilter
 from src.plugins.built_in.affinity_flow_chatter.plan_generator import ChatterPlanGenerator
-from src.plugin_system.base.component_types import ChatMode
 
 if TYPE_CHECKING:
     from src.chat.planner_actions.action_manager import ChatterActionManager

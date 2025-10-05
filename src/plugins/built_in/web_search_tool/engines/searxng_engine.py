@@ -6,9 +6,7 @@ SearXNG search engine implementation
 
 from __future__ import annotations
 
-import asyncio
-import functools
-from typing import Any, List
+from typing import Any
 
 import httpx
 
@@ -39,13 +37,13 @@ class SearXNGSearchEngine(BaseSearchEngine):
         instances = config_api.get_global_config("web_search.searxng_instances", None)
         if isinstance(instances, list):
             # 过滤空值
-            self.instances: List[str] = [u.rstrip("/") for u in instances if isinstance(u, str) and u.strip()]
+            self.instances: list[str] = [u.rstrip("/") for u in instances if isinstance(u, str) and u.strip()]
         else:
             self.instances = []
 
         api_keys = config_api.get_global_config("web_search.searxng_api_keys", None)
         if isinstance(api_keys, list):
-            self.api_keys: List[str | None] = [k.strip() if isinstance(k, str) and k.strip() else None for k in api_keys]
+            self.api_keys: list[str | None] = [k.strip() if isinstance(k, str) and k.strip() else None for k in api_keys]
         else:
             self.api_keys = []
 
@@ -85,7 +83,7 @@ class SearXNGSearchEngine(BaseSearchEngine):
                     results.extend(instance_results)
                 if len(results) >= num_results:
                     break
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"SearXNG 实例 {base_url} 调用失败: {e}")
                 continue
 
@@ -116,12 +114,12 @@ class SearXNGSearchEngine(BaseSearchEngine):
         try:
             resp = await self._client.get(url, params=params, headers=headers)
             resp.raise_for_status()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             raise RuntimeError(f"请求失败: {e}") from e
 
         try:
             data = resp.json()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             raise RuntimeError(f"解析 JSON 失败: {e}") from e
 
         raw_results = data.get("results", []) if isinstance(data, dict) else []
@@ -141,5 +139,5 @@ class SearXNGSearchEngine(BaseSearchEngine):
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):  # noqa: D401
+    async def __aexit__(self, exc_type, exc, tb):
         await self._client.aclose()

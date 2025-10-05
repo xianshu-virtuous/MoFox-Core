@@ -3,11 +3,9 @@ MCP (Model Context Protocol) 连接器
 负责连接MCP服务器，获取和执行工具
 """
 
-import asyncio
 from typing import Any
 
 import aiohttp
-import orjson
 
 from src.common.logger import get_logger
 

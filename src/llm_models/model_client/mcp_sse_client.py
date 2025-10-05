@@ -5,7 +5,6 @@ MCP (Model Context Protocol) SSE (Server-Sent Events) 客户端实现
 
 import asyncio
 import io
-import json
 from collections.abc import Callable
 from typing import Any
 
@@ -20,7 +19,6 @@ from ..exceptions import (
     NetworkConnectionError,
     ReqAbortException,
     RespNotOkException,
-    RespParseException,
 )
 from ..payload_content.message import Message, RoleType
 from ..payload_content.resp_format import RespFormat

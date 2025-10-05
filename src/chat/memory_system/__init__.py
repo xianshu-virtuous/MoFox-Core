@@ -21,6 +21,7 @@ from .memory_chunk import MemoryChunk as Memory
 
 # 遗忘引擎
 from .memory_forgetting_engine import ForgettingConfig, MemoryForgettingEngine, get_memory_forgetting_engine
+from .memory_formatter import format_memories_bracket_style
 
 # 记忆管理器
 from .memory_manager import MemoryManager, MemoryResult, memory_manager
@@ -30,7 +31,6 @@ from .memory_system import MemorySystem, MemorySystemConfig, get_memory_system, 
 
 # Vector DB存储系统
 from .vector_memory_storage_v2 import VectorMemoryStorage, VectorStorageConfig, get_vector_memory_storage
-from .memory_formatter import format_memories_bracket_style
 
 __all__ = [
     # 核心数据结构

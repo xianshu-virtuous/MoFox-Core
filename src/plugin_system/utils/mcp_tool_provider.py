@@ -3,7 +3,6 @@ MCP工具提供器 - 简化版
 直接集成到工具系统，无需复杂的插件架构
 """
 
-import asyncio
 from typing import Any
 
 from src.common.logger import get_logger

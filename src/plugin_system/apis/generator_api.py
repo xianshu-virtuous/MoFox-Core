@@ -19,7 +19,7 @@ from src.common.logger import get_logger
 from src.plugin_system.base.component_types import ActionInfo
 
 if TYPE_CHECKING:
-    from src.chat.replyer.default_generator import DefaultReplyer
+    pass
 
 install(extra_lines=3)
 

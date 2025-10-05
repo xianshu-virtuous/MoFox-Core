@@ -2,15 +2,15 @@
 记忆元数据索引。
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Any
-from time import time
 
 from src.common.logger import get_logger
 
 logger = get_logger(__name__)
 
 from inkfox.memory import PyMetadataIndex as _RustIndex  # type: ignore
+
 
 @dataclass
 class MemoryMetadataIndexEntry:
@@ -51,7 +51,7 @@ class MemoryMetadataIndex:
         if payload:
             try:
                 self._rust.batch_add(payload)
-            except Exception as ex:  # noqa: BLE001
+            except Exception as ex:
                 logger.error(f"Rust 元数据批量添加失败: {ex}")
 
     def add_or_update(self, entry: MemoryMetadataIndexEntry):
@@ -88,7 +88,7 @@ class MemoryMetadataIndex:
             if flexible_mode:
                 return list(self._rust.search_flexible(params))
             return list(self._rust.search_strict(params))
-        except Exception as ex:  # noqa: BLE001
+        except Exception as ex:
             logger.error(f"Rust 搜索失败返回空: {ex}")
             return []
 
@@ -105,18 +105,18 @@ class MemoryMetadataIndex:
                 "keywords_count": raw.get("keywords_indexed", 0),
                 "tags_count": raw.get("tags_indexed", 0),
             }
-        except Exception as ex:  # noqa: BLE001
+        except Exception as ex:
             logger.warning(f"读取 Rust stats 失败: {ex}")
             return {"total_memories": 0}
 
     def save(self):  # 仅调用 rust save
         try:
             self._rust.save()
-        except Exception as ex:  # noqa: BLE001
+        except Exception as ex:
             logger.warning(f"Rust save 失败: {ex}")
 
 
 __all__ = [
-    "MemoryMetadataIndexEntry",
     "MemoryMetadataIndex",
+    "MemoryMetadataIndexEntry",
 ]
