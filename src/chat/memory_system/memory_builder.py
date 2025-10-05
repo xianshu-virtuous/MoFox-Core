@@ -32,7 +32,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Type, TypeVar
+from typing import Any, TypeVar
 
 E = TypeVar("E", bound=Enum)
 
@@ -503,7 +503,7 @@ class MemoryBuilder:
         logger.warning(f"无法解析未知的记忆类型 '{type_str}'，回退到上下文类型")
         return MemoryType.CONTEXTUAL
 
-    def _parse_enum_value(self, enum_cls: Type[E], raw_value: Any, default: E, field_name: str) -> E:
+    def _parse_enum_value(self, enum_cls: type[E], raw_value: Any, default: E, field_name: str) -> E:
         """解析枚举值，兼容数字/字符串表示"""
         if isinstance(raw_value, enum_cls):
             return raw_value

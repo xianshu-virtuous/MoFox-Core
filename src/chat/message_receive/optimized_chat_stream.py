@@ -3,17 +3,12 @@
 避免不必要的深拷贝开销，提升多流并发性能
 """
 
-import asyncio
-import copy
-import hashlib
 import time
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from maim_message import GroupInfo, UserInfo
 from rich.traceback import install
 
-from src.common.database.sqlalchemy_database_api import get_db_session
-from src.common.database.sqlalchemy_models import ChatStreams
 from src.common.logger import get_logger
 from src.config.config import global_config
 
@@ -28,7 +23,7 @@ logger = get_logger("optimized_chat_stream")
 class SharedContext:
     """共享上下文数据 - 只读数据结构"""
 
-    def __init__(self, stream_id: str, platform: str, user_info: UserInfo, group_info: Optional[GroupInfo] = None):
+    def __init__(self, stream_id: str, platform: str, user_info: UserInfo, group_info: GroupInfo | None = None):
         self.stream_id = stream_id
         self.platform = platform
         self.user_info = user_info
@@ -37,7 +32,7 @@ class SharedContext:
         self._frozen = True
 
     def __setattr__(self, name, value):
-        if hasattr(self, '_frozen') and self._frozen and name not in ['_frozen']:
+        if hasattr(self, "_frozen") and self._frozen and name not in ["_frozen"]:
             raise AttributeError(f"SharedContext is frozen, cannot modify {name}")
         super().__setattr__(name, value)
 
@@ -46,7 +41,7 @@ class LocalChanges:
     """本地修改跟踪器"""
 
     def __init__(self):
-        self._changes: Dict[str, Any] = {}
+        self._changes: dict[str, Any] = {}
         self._dirty = False
 
     def set_change(self, key: str, value: Any):
@@ -62,7 +57,7 @@ class LocalChanges:
         """是否有修改"""
         return self._dirty
 
-    def get_changes(self) -> Dict[str, Any]:
+    def get_changes(self) -> dict[str, Any]:
         """获取所有修改"""
         return self._changes.copy()
 
@@ -80,8 +75,8 @@ class OptimizedChatStream:
         stream_id: str,
         platform: str,
         user_info: UserInfo,
-        group_info: Optional[GroupInfo] = None,
-        data: Optional[Dict] = None,
+        group_info: GroupInfo | None = None,
+        data: dict | None = None,
     ):
         # 共享的只读数据
         self._shared_context = SharedContext(
@@ -129,42 +124,42 @@ class OptimizedChatStream:
         """修改用户信息时触发写时复制"""
         self._ensure_copy_on_write()
         # 由于SharedContext是frozen的，我们需要在本地修改中记录
-        self._local_changes.set_change('user_info', value)
+        self._local_changes.set_change("user_info", value)
 
     @property
-    def group_info(self) -> Optional[GroupInfo]:
-        if self._local_changes.has_changes() and 'group_info' in self._local_changes._changes:
-            return self._local_changes.get_change('group_info')
+    def group_info(self) -> GroupInfo | None:
+        if self._local_changes.has_changes() and "group_info" in self._local_changes._changes:
+            return self._local_changes.get_change("group_info")
         return self._shared_context.group_info
 
     @group_info.setter
-    def group_info(self, value: Optional[GroupInfo]):
+    def group_info(self, value: GroupInfo | None):
         """修改群组信息时触发写时复制"""
         self._ensure_copy_on_write()
-        self._local_changes.set_change('group_info', value)
+        self._local_changes.set_change("group_info", value)
 
     @property
     def create_time(self) -> float:
-        if self._local_changes.has_changes() and 'create_time' in self._local_changes._changes:
-            return self._local_changes.get_change('create_time')
+        if self._local_changes.has_changes() and "create_time" in self._local_changes._changes:
+            return self._local_changes.get_change("create_time")
         return self._shared_context.create_time
 
     @property
     def last_active_time(self) -> float:
-        return self._local_changes.get_change('last_active_time', self.create_time)
+        return self._local_changes.get_change("last_active_time", self.create_time)
 
     @last_active_time.setter
     def last_active_time(self, value: float):
-        self._local_changes.set_change('last_active_time', value)
+        self._local_changes.set_change("last_active_time", value)
         self.saved = False
 
     @property
     def sleep_pressure(self) -> float:
-        return self._local_changes.get_change('sleep_pressure', 0.0)
+        return self._local_changes.get_change("sleep_pressure", 0.0)
 
     @sleep_pressure.setter
     def sleep_pressure(self, value: float):
-        self._local_changes.set_change('sleep_pressure', value)
+        self._local_changes.set_change("sleep_pressure", value)
         self.saved = False
 
     def _ensure_copy_on_write(self):
@@ -176,14 +171,14 @@ class OptimizedChatStream:
 
     def _get_effective_user_info(self) -> UserInfo:
         """获取有效的用户信息"""
-        if self._local_changes.has_changes() and 'user_info' in self._local_changes._changes:
-            return self._local_changes.get_change('user_info')
+        if self._local_changes.has_changes() and "user_info" in self._local_changes._changes:
+            return self._local_changes.get_change("user_info")
         return self._shared_context.user_info
 
-    def _get_effective_group_info(self) -> Optional[GroupInfo]:
+    def _get_effective_group_info(self) -> GroupInfo | None:
         """获取有效的群组信息"""
-        if self._local_changes.has_changes() and 'group_info' in self._local_changes._changes:
-            return self._local_changes.get_change('group_info')
+        if self._local_changes.has_changes() and "group_info" in self._local_changes._changes:
+            return self._local_changes.get_change("group_info")
         return self._shared_context.group_info
 
     def update_active_time(self):
@@ -199,6 +194,7 @@ class OptimizedChatStream:
 
         # 将MessageRecv转换为DatabaseMessages并设置到stream_context
         import json
+
         from src.common.data_models.database_data_model import DatabaseMessages
 
         message_info = getattr(message, "message_info", {})
@@ -298,7 +294,7 @@ class OptimizedChatStream:
             self._create_stream_context()
         return self._context_manager
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式 - 考虑本地修改"""
         user_info = self._get_effective_user_info()
         group_info = self._get_effective_group_info()
@@ -319,7 +315,7 @@ class OptimizedChatStream:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "OptimizedChatStream":
+    def from_dict(cls, data: dict) -> "OptimizedChatStream":
         """从字典创建实例"""
         user_info = UserInfo.from_dict(data.get("user_info", {})) if data.get("user_info") else None
         group_info = GroupInfo.from_dict(data.get("group_info", {})) if data.get("group_info") else None
@@ -481,8 +477,8 @@ def create_optimized_chat_stream(
     stream_id: str,
     platform: str,
     user_info: UserInfo,
-    group_info: Optional[GroupInfo] = None,
-    data: Optional[Dict] = None,
+    group_info: GroupInfo | None = None,
+    data: dict | None = None,
 ) -> OptimizedChatStream:
     """创建优化版聊天流实例"""
     return OptimizedChatStream(

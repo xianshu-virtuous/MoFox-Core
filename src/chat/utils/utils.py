@@ -6,8 +6,8 @@ import time
 from collections import Counter
 from typing import Any
 
-import rjieba
 import numpy as np
+import rjieba
 from maim_message import UserInfo
 
 from src.chat.message_receive.chat_stream import get_chat_manager

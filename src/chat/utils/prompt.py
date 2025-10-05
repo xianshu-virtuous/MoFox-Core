@@ -540,7 +540,7 @@ class Prompt:
                         style = expr.get("style", "")
                         if situation and style:
                             formatted_expressions.append(f"- {situation}：{style}")
-                
+
                 if formatted_expressions:
                     style_habits_str = "\n".join(formatted_expressions)
                     expression_habits_block = f"你可以参考以下的语言习惯，当情景合适就使用，但不要生硬使用，以合理的方式结合到你的回复中：\n{style_habits_str}"

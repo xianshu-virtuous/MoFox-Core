@@ -313,11 +313,11 @@ class ChatStream:
         except Exception as e:
             logger.error(f"计算消息兴趣值失败: {e}", exc_info=True)
             # 异常情况下使用默认值
-            if hasattr(db_message, 'interest_value'):
+            if hasattr(db_message, "interest_value"):
                 db_message.interest_value = 0.3
-            if hasattr(db_message, 'should_reply'):
+            if hasattr(db_message, "should_reply"):
                 db_message.should_reply = False
-            if hasattr(db_message, 'should_act'):
+            if hasattr(db_message, "should_act"):
                 db_message.should_act = False
 
     def _extract_reply_from_segment(self, segment) -> str | None:
@@ -894,10 +894,10 @@ def _convert_to_original_stream(self, optimized_stream) -> "ChatStream":
             original_stream.saved = optimized_stream.saved
 
             # 复制上下文信息（如果存在）
-            if hasattr(optimized_stream, '_stream_context') and optimized_stream._stream_context:
+            if hasattr(optimized_stream, "_stream_context") and optimized_stream._stream_context:
                 original_stream.stream_context = optimized_stream._stream_context
 
-            if hasattr(optimized_stream, '_context_manager') and optimized_stream._context_manager:
+            if hasattr(optimized_stream, "_context_manager") and optimized_stream._context_manager:
                 original_stream.context_manager = optimized_stream._context_manager
 
             return original_stream

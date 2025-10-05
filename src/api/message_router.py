@@ -3,10 +3,10 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.config.config import global_config
-from src.plugin_system.apis import message_api, chat_api, person_api
 from src.chat.message_receive.chat_stream import get_chat_manager
 from src.common.logger import get_logger
+from src.config.config import global_config
+from src.plugin_system.apis import message_api, person_api
 
 logger = get_logger("HTTP消息API")
 
@@ -86,7 +86,7 @@ async def get_message_stats_by_chat(
             if group_by_user:
                 if user_id not in stats[chat_id]["user_stats"]:
                     stats[chat_id]["user_stats"][user_id] = 0
-                
+
                 stats[chat_id]["user_stats"][user_id] += 1
 
         if not group_by_user:
@@ -120,7 +120,7 @@ async def get_message_stats_by_chat(
                             "nickname": nickname,
                             "count": count
                         }
-                
+
                 formatted_stats[chat_id] = formatted_data
             return formatted_stats
 
@@ -164,7 +164,7 @@ async def get_bot_message_stats_by_chat(
                         chat_name = stream.group_info.group_name
                     elif stream.user_info and stream.user_info.user_nickname:
                         chat_name = stream.user_info.user_nickname
-                
+
                 formatted_stats[chat_id] = {
                     "chat_name": chat_name,
                     "count": count

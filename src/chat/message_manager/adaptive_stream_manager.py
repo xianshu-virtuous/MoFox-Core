@@ -4,14 +4,13 @@
 """
 
 import asyncio
-import psutil
 import time
-from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
+import psutil
+
 from src.common.logger import get_logger
-from src.chat.message_receive.chat_stream import ChatStream
 
 logger = get_logger("adaptive_stream_manager")
 
@@ -71,16 +70,16 @@ class AdaptiveStreamManager:
 
         # 当前状态
         self.current_limit = base_concurrent_limit
-        self.active_streams: Set[str] = set()
-        self.pending_streams: Set[str] = set()
-        self.stream_metrics: Dict[str, StreamMetrics] = {}
+        self.active_streams: set[str] = set()
+        self.pending_streams: set[str] = set()
+        self.stream_metrics: dict[str, StreamMetrics] = {}
 
         # 异步信号量
         self.semaphore = asyncio.Semaphore(base_concurrent_limit)
         self.priority_semaphore = asyncio.Semaphore(5)  # 高优先级专用信号量
 
         # 系统监控
-        self.system_metrics: List[SystemMetrics] = []
+        self.system_metrics: list[SystemMetrics] = []
         self.last_adjustment_time = 0.0
 
         # 统计信息
@@ -95,8 +94,8 @@ class AdaptiveStreamManager:
         }
 
         # 监控任务
-        self.monitor_task: Optional[asyncio.Task] = None
-        self.adjustment_task: Optional[asyncio.Task] = None
+        self.monitor_task: asyncio.Task | None = None
+        self.adjustment_task: asyncio.Task | None = None
         self.is_running = False
 
         logger.info(f"自适应流管理器初始化完成 (base_limit={base_concurrent_limit}, max_limit={max_concurrent_limit})")
@@ -443,7 +442,7 @@ class AdaptiveStreamManager:
             if hasattr(metrics, key):
                 setattr(metrics, key, value)
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> dict:
         """获取统计信息"""
         stats = self.stats.copy()
         stats.update({
@@ -465,7 +464,7 @@ class AdaptiveStreamManager:
 
 
 # 全局自适应管理器实例
-_adaptive_manager: Optional[AdaptiveStreamManager] = None
+_adaptive_manager: AdaptiveStreamManager | None = None
 
 
 def get_adaptive_stream_manager() -> AdaptiveStreamManager:

@@ -1,13 +1,13 @@
 # 使用基于时间戳的文件处理器，简单的轮转份数限制
 
 import logging
+import tarfile
 import threading
 import time
-import tarfile
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional, Dict
+from typing import Any
 
 import orjson
 import structlog
@@ -18,15 +18,15 @@ LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True)
 
 # 全局handler实例，避免重复创建（可能为None表示禁用文件日志）
-_file_handler: Optional[logging.Handler] = None
-_console_handler: Optional[logging.Handler] = None
+_file_handler: logging.Handler | None = None
+_console_handler: logging.Handler | None = None
 
 # 动态 logger 元数据注册表 (name -> {alias:str|None, color:str|None})
 _LOGGER_META_LOCK = threading.Lock()
-_LOGGER_META: Dict[str, Dict[str, Optional[str]]] = {}
+_LOGGER_META: dict[str, dict[str, str | None]] = {}
 
 
-def _normalize_color(color: Optional[str]) -> Optional[str]:
+def _normalize_color(color: str | None) -> str | None:
     """接受 ANSI 码 / #RRGGBB / rgb(r,g,b) / 颜色名(直接返回) -> ANSI 码.
     不做复杂解析，只支持 #RRGGBB 转 24bit ANSI。
     """
@@ -49,13 +49,13 @@ def _normalize_color(color: Optional[str]) -> Optional[str]:
             nums = color[color.find("(") + 1 : -1].split(",")
             r, g, b = (int(x) for x in nums[:3])
             return f"\033[38;2;{r};{g};{b}m"
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
     # 其他情况直接返回，假设是短ANSI或名称（控制台渲染器不做翻译，仅输出）
     return color
 
 
-def _register_logger_meta(name: str, *, alias: Optional[str] = None, color: Optional[str] = None):
+def _register_logger_meta(name: str, *, alias: str | None = None, color: str | None = None):
     """注册/更新 logger 元数据。"""
     if not name:
         return
@@ -67,7 +67,7 @@ def _register_logger_meta(name: str, *, alias: Optional[str] = None, color: Opti
             meta["color"] = _normalize_color(color)
 
 
-def get_logger_meta(name: str) -> Dict[str, Optional[str]]:
+def get_logger_meta(name: str) -> dict[str, str | None]:
     with _LOGGER_META_LOCK:
         return _LOGGER_META.get(name, {"alias": None, "color": None}).copy()
 
@@ -170,7 +170,7 @@ class TimestampedFileHandler(logging.Handler):
         try:
             self._compress_stale_logs()
             self._cleanup_old_files()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"[日志轮转] 轮转过程出错: {e}")
 
     def _compress_stale_logs(self):  # sourcery skip: extract-method
@@ -184,12 +184,12 @@ class TimestampedFileHandler(logging.Handler):
                     continue
                 # 压缩
                 try:
-                    with tarfile.open(tar_path, "w:gz") as tf:  # noqa: SIM117
+                    with tarfile.open(tar_path, "w:gz") as tf:
                         tf.add(f, arcname=f.name)
                     f.unlink(missing_ok=True)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     print(f"[日志压缩] 压缩 {f.name} 失败: {e}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"[日志压缩] 过程出错: {e}")
 
     def _cleanup_old_files(self):
@@ -206,9 +206,9 @@ class TimestampedFileHandler(logging.Handler):
                     mtime = datetime.fromtimestamp(f.stat().st_mtime)
                     if mtime < cutoff:
                         f.unlink(missing_ok=True)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     print(f"[日志清理] 删除 {f} 失败: {e}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"[日志清理] 清理过程出错: {e}")
 
     def emit(self, record):
@@ -879,7 +879,7 @@ class ModuleColoredConsoleRenderer:
         if logger_name:
             # 获取别名，如果没有别名则使用原名称
             # 若上面条件不成立需要再次获取 meta
-            if 'meta' not in locals():
+            if "meta" not in locals():
                 meta = get_logger_meta(logger_name)
             display_name = meta.get("alias") or DEFAULT_MODULE_ALIASES.get(logger_name, logger_name)
 
@@ -1106,7 +1106,7 @@ raw_logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 binds: dict[str, Callable] = {}
 
 
-def get_logger(name: str | None, *, color: Optional[str] = None, alias: Optional[str] = None) -> structlog.stdlib.BoundLogger:
+def get_logger(name: str | None, *, color: str | None = None, alias: str | None = None) -> structlog.stdlib.BoundLogger:
     """获取/创建 structlog logger。
 
     新增:
@@ -1172,10 +1172,10 @@ def cleanup_old_logs():
                 tar_path = f.with_suffix(f.suffix + ".tar.gz")
                 if tar_path.exists():
                     continue
-                with tarfile.open(tar_path, "w:gz") as tf:  # noqa: SIM117
+                with tarfile.open(tar_path, "w:gz") as tf:
                     tf.add(f, arcname=f.name)
                 f.unlink(missing_ok=True)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger = get_logger("logger")
             logger.warning(f"周期压缩日志时出错: {e}")
 
@@ -1192,7 +1192,7 @@ def cleanup_old_logs():
                     log_file.unlink(missing_ok=True)
                     deleted_count += 1
                     deleted_size += size
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger = get_logger("logger")
                 logger.warning(f"清理日志文件 {log_file} 时出错: {e}")
         if deleted_count:
@@ -1200,7 +1200,7 @@ def cleanup_old_logs():
             logger.info(
                 f"清理 {deleted_count} 个过期日志 (≈{deleted_size / 1024 / 1024:.2f}MB), 保留策略={retention_days}天"
             )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger = get_logger("logger")
         logger.error(f"清理旧日志文件时出错: {e}")
 
@@ -1223,7 +1223,7 @@ def start_log_cleanup_task():
         while True:
             try:
                 cleanup_old_logs()
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 print(f"[日志任务] 执行清理出错: {e}")
             # 再次等待到下一个午夜
             time.sleep(max(1, seconds_until_next_midnight()))

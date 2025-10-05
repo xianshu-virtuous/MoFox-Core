@@ -2,7 +2,6 @@ import inspect
 import time
 from typing import Any
 
-from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.utils.prompt import Prompt, global_prompt_manager
 from src.common.cache_manager import tool_cache
 from src.common.logger import get_logger

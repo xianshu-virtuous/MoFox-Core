@@ -117,7 +117,7 @@ class StreamLoopManager:
         # 使用自适应流管理器获取槽位
         use_adaptive = False
         try:
-            from src.chat.message_manager.adaptive_stream_manager import get_adaptive_stream_manager, StreamPriority
+            from src.chat.message_manager.adaptive_stream_manager import get_adaptive_stream_manager
             adaptive_manager = get_adaptive_stream_manager()
 
             if adaptive_manager.is_running:
@@ -137,7 +137,7 @@ class StreamLoopManager:
                 else:
                     logger.debug(f"自适应管理器拒绝槽位请求: {stream_id}，尝试回退方案")
             else:
-                logger.debug(f"自适应管理器未运行，使用原始方法")
+                logger.debug("自适应管理器未运行，使用原始方法")
 
         except Exception as e:
             logger.debug(f"自适应管理器获取槽位失败，使用原始方法: {e}")

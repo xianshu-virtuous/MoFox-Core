@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 海马体双峰分布采样器
 基于旧版海马体的采样策略，适配新版记忆系统
@@ -8,16 +7,15 @@
 import asyncio
 import random
 import time
-from datetime import datetime, timedelta
-from typing import List, Optional, Tuple, Dict, Any
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any
 
 import numpy as np
-import orjson
 
 from src.chat.utils.chat_message_builder import (
-    get_raw_msg_by_timestamp,
     build_readable_messages,
+    get_raw_msg_by_timestamp,
     get_raw_msg_by_timestamp_with_chat,
 )
 from src.chat.utils.utils import translate_timestamp_to_human_readable
@@ -47,7 +45,7 @@ class HippocampusSampleConfig:
     batch_size: int = 5               # 批处理大小
 
     @classmethod
-    def from_global_config(cls) -> 'HippocampusSampleConfig':
+    def from_global_config(cls) -> "HippocampusSampleConfig":
         """从全局配置创建海马体采样配置"""
         config = global_config.memory.hippocampus_distribution_config
         return cls(
@@ -74,12 +72,12 @@ class HippocampusSampler:
         self.is_running = False
 
         # 记忆构建模型
-        self.memory_builder_model: Optional[LLMRequest] = None
+        self.memory_builder_model: LLMRequest | None = None
 
         # 统计信息
         self.sample_count = 0
         self.success_count = 0
-        self.last_sample_results: List[Dict[str, Any]] = []
+        self.last_sample_results: list[dict[str, Any]] = []
 
     async def initialize(self):
         """初始化采样器"""
@@ -101,7 +99,7 @@ class HippocampusSampler:
             logger.error(f"❌ 海马体采样器初始化失败: {e}")
             raise
 
-    def generate_time_samples(self) -> List[datetime]:
+    def generate_time_samples(self) -> list[datetime]:
         """生成双峰分布的时间采样点"""
         # 计算每个分布的样本数
         recent_samples = max(1, int(self.config.total_samples * self.config.recent_weight))
@@ -132,7 +130,7 @@ class HippocampusSampler:
         # 按时间排序（从最早到最近）
         return sorted(timestamps)
 
-    async def collect_message_samples(self, target_timestamp: float) -> Optional[List[Dict[str, Any]]]:
+    async def collect_message_samples(self, target_timestamp: float) -> list[dict[str, Any]] | None:
         """收集指定时间戳附近的消息样本"""
         try:
             # 随机时间窗口：5-30分钟
@@ -190,7 +188,7 @@ class HippocampusSampler:
             logger.error(f"收集消息样本失败: {e}")
             return None
 
-    async def build_memory_from_samples(self, messages: List[Dict[str, Any]], target_timestamp: float) -> Optional[str]:
+    async def build_memory_from_samples(self, messages: list[dict[str, Any]], target_timestamp: float) -> str | None:
         """从消息样本构建记忆"""
         if not messages or not self.memory_system or not self.memory_builder_model:
             return None
@@ -262,7 +260,7 @@ class HippocampusSampler:
             logger.error(f"海马体采样构建记忆失败: {e}")
             return None
 
-    async def perform_sampling_cycle(self) -> Dict[str, Any]:
+    async def perform_sampling_cycle(self) -> dict[str, Any]:
         """执行一次完整的采样周期（优化版：批量融合构建）"""
         if not self.should_sample():
             return {"status": "skipped", "reason": "interval_not_met"}
@@ -363,7 +361,7 @@ class HippocampusSampler:
                 "duration": time.time() - start_time,
             }
 
-    async def _collect_all_message_samples(self, time_samples: List[datetime]) -> List[List[Dict[str, Any]]]:
+    async def _collect_all_message_samples(self, time_samples: list[datetime]) -> list[list[dict[str, Any]]]:
         """批量收集所有时间点的消息样本"""
         collected_messages = []
         max_concurrent = min(5, len(time_samples))  # 提高并发数到5
@@ -394,7 +392,7 @@ class HippocampusSampler:
 
         return collected_messages
 
-    async def _fuse_and_deduplicate_messages(self, collected_messages: List[List[Dict[str, Any]]]) -> List[List[Dict[str, Any]]]:
+    async def _fuse_and_deduplicate_messages(self, collected_messages: list[list[dict[str, Any]]]) -> list[list[dict[str, Any]]]:
         """融合和去重消息样本"""
         if not collected_messages:
             return []
@@ -450,7 +448,7 @@ class HippocampusSampler:
             # 返回原始消息组作为备选
             return collected_messages[:5]  # 限制返回数量
 
-    def _merge_adjacent_messages(self, messages: List[Dict[str, Any]], time_gap: int = 1800) -> List[List[Dict[str, Any]]]:
+    def _merge_adjacent_messages(self, messages: list[dict[str, Any]], time_gap: int = 1800) -> list[list[dict[str, Any]]]:
         """合并时间间隔内的消息"""
         if not messages:
             return []
@@ -481,7 +479,7 @@ class HippocampusSampler:
 
         return result_groups
 
-    async def _build_batch_memory(self, fused_messages: List[List[Dict[str, Any]]], time_samples: List[datetime]) -> Dict[str, Any]:
+    async def _build_batch_memory(self, fused_messages: list[list[dict[str, Any]]], time_samples: list[datetime]) -> dict[str, Any]:
         """批量构建记忆"""
         if not fused_messages:
             return {"memory_count": 0, "memories": []}
@@ -557,7 +555,7 @@ class HippocampusSampler:
             logger.error(f"批量构建记忆失败: {e}")
             return {"memory_count": 0, "error": str(e)}
 
-    async def _build_fused_conversation_text(self, fused_messages: List[List[Dict[str, Any]]]) -> str:
+    async def _build_fused_conversation_text(self, fused_messages: list[list[dict[str, Any]]]) -> str:
         """构建融合后的对话文本"""
         try:
             # 添加批次标识
@@ -589,7 +587,7 @@ class HippocampusSampler:
             logger.error(f"构建融合文本失败: {e}")
             return ""
 
-    async def _fallback_individual_build(self, fused_messages: List[List[Dict[str, Any]]]) -> Dict[str, Any]:
+    async def _fallback_individual_build(self, fused_messages: list[list[dict[str, Any]]]) -> dict[str, Any]:
         """备选方案：单独构建每个消息组"""
         total_memories = []
         total_count = 0
@@ -609,7 +607,7 @@ class HippocampusSampler:
             "fallback_mode": True
         }
 
-    async def process_sample_timestamp(self, target_timestamp: float) -> Optional[str]:
+    async def process_sample_timestamp(self, target_timestamp: float) -> str | None:
         """处理单个时间戳采样（保留作为备选方法）"""
         try:
             # 收集消息样本
@@ -676,7 +674,7 @@ class HippocampusSampler:
         self.is_running = False
         logger.info("🛑 停止海马体后台采样任务")
 
-    def get_sampling_stats(self) -> Dict[str, Any]:
+    def get_sampling_stats(self) -> dict[str, Any]:
         """获取采样统计信息"""
         success_rate = (self.success_count / self.sample_count * 100) if self.sample_count > 0 else 0
 
@@ -713,7 +711,7 @@ class HippocampusSampler:
 
 
 # 全局海马体采样器实例
-_hippocampus_sampler: Optional[HippocampusSampler] = None
+_hippocampus_sampler: HippocampusSampler | None = None
 
 
 def get_hippocampus_sampler(memory_system=None) -> HippocampusSampler:

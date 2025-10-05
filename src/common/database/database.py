@@ -2,14 +2,15 @@ import os
 
 from rich.traceback import install
 
+from src.common.database.connection_pool_manager import start_connection_pool, stop_connection_pool
+
+# 数据库批量调度器和连接池
+from src.common.database.db_batch_scheduler import get_db_batch_scheduler
+
 # SQLAlchemy相关导入
 from src.common.database.sqlalchemy_init import initialize_database_compat
 from src.common.database.sqlalchemy_models import get_db_session, get_engine
 from src.common.logger import get_logger
-
-# 数据库批量调度器和连接池
-from src.common.database.db_batch_scheduler import get_db_batch_scheduler
-from src.common.database.connection_pool_manager import start_connection_pool, stop_connection_pool
 
 install(extra_lines=3)
 

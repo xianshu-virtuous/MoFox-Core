@@ -43,21 +43,21 @@ class BasePlugin(PluginBase):
             对应类型的ComponentInfo对象
         """
         if component_type == ComponentType.COMMAND:
-            if hasattr(component_class, 'get_command_info'):
+            if hasattr(component_class, "get_command_info"):
                 return component_class.get_command_info()
             else:
                 logger.warning(f"Command类 {component_class.__name__} 缺少 get_command_info 方法")
                 return None
 
         elif component_type == ComponentType.ACTION:
-            if hasattr(component_class, 'get_action_info'):
+            if hasattr(component_class, "get_action_info"):
                 return component_class.get_action_info()
             else:
                 logger.warning(f"Action类 {component_class.__name__} 缺少 get_action_info 方法")
                 return None
 
         elif component_type == ComponentType.INTEREST_CALCULATOR:
-            if hasattr(component_class, 'get_interest_calculator_info'):
+            if hasattr(component_class, "get_interest_calculator_info"):
                 return component_class.get_interest_calculator_info()
             else:
                 logger.warning(f"InterestCalculator类 {component_class.__name__} 缺少 get_interest_calculator_info 方法")

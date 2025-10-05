@@ -52,7 +52,7 @@ class AffinityInterestCalculator(BaseInterestCalculator):
         # 用户关系数据缓存
         self.user_relationships: dict[str, float] = {}  # user_id -> relationship_score
 
-        logger.info(f"[Affinity兴趣计算器] 初始化完成:")
+        logger.info("[Affinity兴趣计算器] 初始化完成:")
         logger.info(f"  - 权重配置: {self.score_weights}")
         logger.info(f"  - 回复阈值: {self.reply_threshold}")
         logger.info(f"  - 智能匹配: {self.use_smart_matching}")
@@ -69,9 +69,9 @@ class AffinityInterestCalculator(BaseInterestCalculator):
         """执行AffinityFlow风格的兴趣值计算"""
         try:
             start_time = time.time()
-            message_id = getattr(message, 'message_id', '')
-            content = getattr(message, 'processed_plain_text', '')
-            user_id = getattr(message, 'user_info', {}).user_id if hasattr(message, 'user_info') and hasattr(message.user_info, 'user_id') else ''
+            message_id = getattr(message, "message_id", "")
+            content = getattr(message, "processed_plain_text", "")
+            user_id = getattr(message, "user_info", {}).user_id if hasattr(message, "user_info") and hasattr(message.user_info, "user_id") else ""
 
             logger.debug(f"[Affinity兴趣计算] 开始处理消息 {message_id}")
             logger.debug(f"[Affinity兴趣计算] 消息内容: {content[:50]}...")
@@ -135,7 +135,7 @@ class AffinityInterestCalculator(BaseInterestCalculator):
             logger.error(f"Affinity兴趣值计算失败: {e}", exc_info=True)
             return InterestCalculationResult(
                 success=False,
-                message_id=getattr(message, 'message_id', ''),
+                message_id=getattr(message, "message_id", ""),
                 interest_value=0.0,
                 error_message=str(e)
             )
@@ -206,9 +206,9 @@ class AffinityInterestCalculator(BaseInterestCalculator):
 
     def _calculate_mentioned_score(self, message: "DatabaseMessages", bot_nickname: str) -> float:
         """计算提及分"""
-        is_mentioned = getattr(message, 'is_mentioned', False)
-        is_at = getattr(message, 'is_at', False)
-        processed_plain_text = getattr(message, 'processed_plain_text', '')
+        is_mentioned = getattr(message, "is_mentioned", False)
+        is_at = getattr(message, "is_at", False)
+        processed_plain_text = getattr(message, "processed_plain_text", "")
 
         if is_mentioned:
             if is_at:
@@ -238,7 +238,7 @@ class AffinityInterestCalculator(BaseInterestCalculator):
         keywords = []
 
         # 尝试从 key_words 字段提取（存储的是JSON字符串）
-        key_words = getattr(message, 'key_words', '')
+        key_words = getattr(message, "key_words", "")
         if key_words:
             try:
                 import orjson
@@ -250,7 +250,7 @@ class AffinityInterestCalculator(BaseInterestCalculator):
 
         # 如果没有 keywords，尝试从 key_words_lite 提取
         if not keywords:
-            key_words_lite = getattr(message, 'key_words_lite', '')
+            key_words_lite = getattr(message, "key_words_lite", "")
             if key_words_lite:
                 try:
                     import orjson
@@ -262,7 +262,7 @@ class AffinityInterestCalculator(BaseInterestCalculator):
 
         # 如果还是没有，从消息内容中提取（降级方案）
         if not keywords:
-            content = getattr(message, 'processed_plain_text', '') or ''
+            content = getattr(message, "processed_plain_text", "") or ""
             keywords = self._extract_keywords_from_content(content)
 
         return keywords[:15]  # 返回前15个关键词

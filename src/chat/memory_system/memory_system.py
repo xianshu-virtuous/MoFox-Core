@@ -556,11 +556,11 @@ class MemorySystem:
             context = dict(context or {})
 
             # 获取配置的采样模式
-            sampling_mode = getattr(global_config.memory, 'memory_sampling_mode', 'precision')
+            sampling_mode = getattr(global_config.memory, "memory_sampling_mode", "precision")
             current_mode = MemorySamplingMode(sampling_mode)
 
 
-            context['__sampling_mode'] = current_mode.value
+            context["__sampling_mode"] = current_mode.value
             logger.debug(f"使用记忆采样模式: {current_mode.value}")
 
             # 根据采样模式处理记忆
@@ -636,7 +636,7 @@ class MemorySystem:
 
             # 检查信息价值阈值
             value_score = await self._assess_information_value(conversation_text, normalized_context)
-            threshold = getattr(global_config.memory, 'precision_memory_reply_threshold', 0.5)
+            threshold = getattr(global_config.memory, "precision_memory_reply_threshold", 0.5)
 
             if value_score < threshold:
                 logger.debug(f"信息价值评分 {value_score:.2f} 低于阈值 {threshold}，跳过记忆构建")
@@ -1614,8 +1614,8 @@ async def initialize_memory_system(llm_model: LLMRequest | None = None):
     await memory_system.initialize()
 
     # 根据配置启动海马体采样
-    sampling_mode = getattr(global_config.memory, 'memory_sampling_mode', 'immediate')
-    if sampling_mode in ['hippocampus', 'all']:
+    sampling_mode = getattr(global_config.memory, "memory_sampling_mode", "immediate")
+    if sampling_mode in ["hippocampus", "all"]:
         memory_system.start_hippocampus_sampling()
 
     return memory_system

@@ -15,8 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.common.logger import get_logger
 from src.common.database.connection_pool_manager import get_connection_pool_manager
+from src.common.logger import get_logger
 
 logger = get_logger("sqlalchemy_models")
 

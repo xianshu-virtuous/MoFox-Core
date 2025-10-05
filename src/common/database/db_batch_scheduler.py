@@ -6,19 +6,19 @@
 import asyncio
 import time
 from collections import defaultdict, deque
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar
+from collections.abc import Callable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from typing import Any, TypeVar
 
-from sqlalchemy import select, delete, insert, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete, insert, select, update
 
 from src.common.database.sqlalchemy_database_api import get_db_session
 from src.common.logger import get_logger
 
 logger = get_logger("db_batch_scheduler")
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
@@ -26,10 +26,10 @@ class BatchOperation:
     """批量操作基础类"""
     operation_type: str  # 'select', 'insert', 'update', 'delete'
     model_class: Any
-    conditions: Dict[str, Any]
-    data: Optional[Dict[str, Any]] = None
-    callback: Optional[Callable] = None
-    future: Optional[asyncio.Future] = None
+    conditions: dict[str, Any]
+    data: dict[str, Any] | None = None
+    callback: Callable | None = None
+    future: asyncio.Future | None = None
     timestamp: float = 0.0
 
     def __post_init__(self):
@@ -42,7 +42,7 @@ class BatchResult:
     """批量操作结果"""
     success: bool
     data: Any = None
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class DatabaseBatchScheduler:
@@ -57,23 +57,23 @@ class DatabaseBatchScheduler:
         self.max_queue_size = max_queue_size
 
         # 操作队列，按操作类型和模型分类
-        self.operation_queues: Dict[str, deque] = defaultdict(deque)
+        self.operation_queues: dict[str, deque] = defaultdict(deque)
 
         # 调度控制
-        self._scheduler_task: Optional[asyncio.Task] = None
+        self._scheduler_task: asyncio.Task | None = None
         self._is_running = bool = False
         self._lock = asyncio.Lock()
 
         # 统计信息
         self.stats = {
-            'total_operations': 0,
-            'batched_operations': 0,
-            'cache_hits': 0,
-            'execution_time': 0.0
+            "total_operations": 0,
+            "batched_operations": 0,
+            "cache_hits": 0,
+            "execution_time": 0.0
         }
 
         # 简单的结果缓存（用于频繁的查询）
-        self._result_cache: Dict[str, Tuple[Any, float]] = {}
+        self._result_cache: dict[str, tuple[Any, float]] = {}
         self._cache_ttl = 5.0  # 5秒缓存
 
     async def start(self):
@@ -102,7 +102,7 @@ class DatabaseBatchScheduler:
         await self._flush_all_queues()
         logger.info("数据库批量调度器已停止")
 
-    def _generate_cache_key(self, operation_type: str, model_class: Any, conditions: Dict[str, Any]) -> str:
+    def _generate_cache_key(self, operation_type: str, model_class: Any, conditions: dict[str, Any]) -> str:
         """生成缓存键"""
         # 简单的缓存键生成，实际可以根据需要优化
         key_parts = [
@@ -112,12 +112,12 @@ class DatabaseBatchScheduler:
         ]
         return "|".join(key_parts)
 
-    def _get_from_cache(self, cache_key: str) -> Optional[Any]:
+    def _get_from_cache(self, cache_key: str) -> Any | None:
         """从缓存获取结果"""
         if cache_key in self._result_cache:
             result, timestamp = self._result_cache[cache_key]
             if time.time() - timestamp < self._cache_ttl:
-                self.stats['cache_hits'] += 1
+                self.stats["cache_hits"] += 1
                 return result
             else:
                 # 清理过期缓存
@@ -131,7 +131,7 @@ class DatabaseBatchScheduler:
     async def add_operation(self, operation: BatchOperation) -> asyncio.Future:
         """添加操作到队列"""
         # 检查是否可以立即返回缓存结果
-        if operation.operation_type == 'select':
+        if operation.operation_type == "select":
             cache_key = self._generate_cache_key(
                 operation.operation_type,
                 operation.model_class,
@@ -158,7 +158,7 @@ class DatabaseBatchScheduler:
                 await self._execute_operations([operation])
             else:
                 self.operation_queues[queue_key].append(operation)
-                self.stats['total_operations'] += 1
+                self.stats["total_operations"] += 1
 
         return future
 
@@ -193,7 +193,7 @@ class DatabaseBatchScheduler:
             if operations:
                 await self._execute_operations(list(operations))
 
-    async def _execute_operations(self, operations: List[BatchOperation]):
+    async def _execute_operations(self, operations: list[BatchOperation]):
         """执行批量操作"""
         if not operations:
             return
@@ -209,13 +209,13 @@ class DatabaseBatchScheduler:
             # 为每种操作类型创建批量执行任务
             tasks = []
             for op_type, ops in op_groups.items():
-                if op_type == 'select':
+                if op_type == "select":
                     tasks.append(self._execute_select_batch(ops))
-                elif op_type == 'insert':
+                elif op_type == "insert":
                     tasks.append(self._execute_insert_batch(ops))
-                elif op_type == 'update':
+                elif op_type == "update":
                     tasks.append(self._execute_update_batch(ops))
-                elif op_type == 'delete':
+                elif op_type == "delete":
                     tasks.append(self._execute_delete_batch(ops))
 
             # 并发执行所有操作
@@ -238,7 +238,7 @@ class DatabaseBatchScheduler:
                         operation.future.set_result(result)
 
                     # 缓存查询结果
-                    if operation.operation_type == 'select':
+                    if operation.operation_type == "select":
                         cache_key = self._generate_cache_key(
                             operation.operation_type,
                             operation.model_class,
@@ -246,7 +246,7 @@ class DatabaseBatchScheduler:
                         )
                         self._set_cache(cache_key, result)
 
-            self.stats['batched_operations'] += len(operations)
+            self.stats["batched_operations"] += len(operations)
 
         except Exception as e:
             logger.error(f"批量操作执行失败: {e}", exc_info="")
@@ -255,9 +255,9 @@ class DatabaseBatchScheduler:
                 if operation.future and not operation.future.done():
                     operation.future.set_exception(e)
         finally:
-            self.stats['execution_time'] += time.time() - start_time
+            self.stats["execution_time"] += time.time() - start_time
 
-    async def _execute_select_batch(self, operations: List[BatchOperation]):
+    async def _execute_select_batch(self, operations: list[BatchOperation]):
         """批量执行查询操作"""
         # 合并相似的查询条件
         merged_conditions = self._merge_select_conditions(operations)
@@ -302,7 +302,7 @@ class DatabaseBatchScheduler:
 
             return results if len(results) > 1 else results[0] if results else []
 
-    async def _execute_insert_batch(self, operations: List[BatchOperation]):
+    async def _execute_insert_batch(self, operations: list[BatchOperation]):
         """批量执行插入操作"""
         async with get_db_session() as session:
             try:
@@ -323,7 +323,7 @@ class DatabaseBatchScheduler:
                 logger.error(f"批量插入失败: {e}", exc_info=True)
                 return [0] * len(operations)
 
-    async def _execute_update_batch(self, operations: List[BatchOperation]):
+    async def _execute_update_batch(self, operations: list[BatchOperation]):
         """批量执行更新操作"""
         async with get_db_session() as session:
             try:
@@ -353,7 +353,7 @@ class DatabaseBatchScheduler:
                 logger.error(f"批量更新失败: {e}", exc_info=True)
                 return [0] * len(operations)
 
-    async def _execute_delete_batch(self, operations: List[BatchOperation]):
+    async def _execute_delete_batch(self, operations: list[BatchOperation]):
         """批量执行删除操作"""
         async with get_db_session() as session:
             try:
@@ -382,7 +382,7 @@ class DatabaseBatchScheduler:
                 logger.error(f"批量删除失败: {e}", exc_info=True)
                 return [0] * len(operations)
 
-    def _merge_select_conditions(self, operations: List[BatchOperation]) -> Dict[Tuple, List[BatchOperation]]:
+    def _merge_select_conditions(self, operations: list[BatchOperation]) -> dict[tuple, list[BatchOperation]]:
         """合并相似的查询条件"""
         merged = {}
 
@@ -405,15 +405,15 @@ class DatabaseBatchScheduler:
 
             # 记录操作
             if condition_key not in merged:
-                merged[condition_key] = {'_operations': []}
-            if '_operations' not in merged[condition_key]:
-                merged[condition_key]['_operations'] = []
-            merged[condition_key]['_operations'].append(op)
+                merged[condition_key] = {"_operations": []}
+            if "_operations" not in merged[condition_key]:
+                merged[condition_key]["_operations"] = []
+            merged[condition_key]["_operations"].append(op)
 
         # 去重并构建最终条件
         final_merged = {}
         for condition_key, conditions in merged.items():
-            operations = conditions.pop('_operations')
+            operations = conditions.pop("_operations")
 
             # 去重
             for field_name, values in conditions.items():
@@ -423,13 +423,13 @@ class DatabaseBatchScheduler:
 
         return final_merged
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取统计信息"""
         return {
             **self.stats,
-            'cache_size': len(self._result_cache),
-            'queue_sizes': {k: len(v) for k, v in self.operation_queues.items()},
-            'is_running': self._is_running
+            "cache_size": len(self._result_cache),
+            "queue_sizes": {k: len(v) for k, v in self.operation_queues.items()},
+            "is_running": self._is_running
         }
 
 
@@ -450,20 +450,20 @@ async def get_batch_session():
 
 
 # 便捷函数
-async def batch_select(model_class: Any, conditions: Dict[str, Any]) -> Any:
+async def batch_select(model_class: Any, conditions: dict[str, Any]) -> Any:
     """批量查询"""
     operation = BatchOperation(
-        operation_type='select',
+        operation_type="select",
         model_class=model_class,
         conditions=conditions
     )
     return await db_batch_scheduler.add_operation(operation)
 
 
-async def batch_insert(model_class: Any, data: Dict[str, Any]) -> int:
+async def batch_insert(model_class: Any, data: dict[str, Any]) -> int:
     """批量插入"""
     operation = BatchOperation(
-        operation_type='insert',
+        operation_type="insert",
         model_class=model_class,
         conditions={},
         data=data
@@ -471,10 +471,10 @@ async def batch_insert(model_class: Any, data: Dict[str, Any]) -> int:
     return await db_batch_scheduler.add_operation(operation)
 
 
-async def batch_update(model_class: Any, conditions: Dict[str, Any], data: Dict[str, Any]) -> int:
+async def batch_update(model_class: Any, conditions: dict[str, Any], data: dict[str, Any]) -> int:
     """批量更新"""
     operation = BatchOperation(
-        operation_type='update',
+        operation_type="update",
         model_class=model_class,
         conditions=conditions,
         data=data
@@ -482,10 +482,10 @@ async def batch_update(model_class: Any, conditions: Dict[str, Any], data: Dict[
     return await db_batch_scheduler.add_operation(operation)
 
 
-async def batch_delete(model_class: Any, conditions: Dict[str, Any]) -> int:
+async def batch_delete(model_class: Any, conditions: dict[str, Any]) -> int:
     """批量删除"""
     operation = BatchOperation(
-        operation_type='delete',
+        operation_type="delete",
         model_class=model_class,
         conditions=conditions
     )

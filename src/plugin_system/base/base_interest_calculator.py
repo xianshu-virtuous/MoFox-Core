@@ -113,7 +113,7 @@ class BaseInterestCalculator(ABC):
         try:
             self._enabled = True
             return True
-        except Exception as e:
+        except Exception:
             self._enabled = False
             return False
 
@@ -170,7 +170,7 @@ class BaseInterestCalculator(ABC):
         if not self._enabled:
             return InterestCalculationResult(
                 success=False,
-                message_id=getattr(message, 'message_id', ''),
+                message_id=getattr(message, "message_id", ""),
                 interest_value=0.0,
                 error_message="组件未启用"
             )
@@ -184,9 +184,9 @@ class BaseInterestCalculator(ABC):
         except Exception as e:
             result = InterestCalculationResult(
                 success=False,
-                message_id=getattr(message, 'message_id', ''),
+                message_id=getattr(message, "message_id", ""),
                 interest_value=0.0,
-                error_message=f"计算执行失败: {str(e)}",
+                error_message=f"计算执行失败: {e!s}",
                 calculation_time=time.time() - start_time
             )
             self._update_statistics(result)
@@ -201,7 +201,7 @@ class BaseInterestCalculator(ABC):
         Returns:
             InterestCalculatorInfo: 生成的兴趣计算器信息对象
         """
-        name = getattr(cls, 'component_name', cls.__name__.lower().replace('calculator', ''))
+        name = getattr(cls, "component_name", cls.__name__.lower().replace("calculator", ""))
         if "." in name:
             logger.error(f"InterestCalculator名称 '{name}' 包含非法字符 '.'，请使用下划线替代")
             raise ValueError(f"InterestCalculator名称 '{name}' 包含非法字符 '.'，请使用下划线替代")
@@ -209,8 +209,8 @@ class BaseInterestCalculator(ABC):
         return InterestCalculatorInfo(
             name=name,
             component_type=ComponentType.INTEREST_CALCULATOR,
-            description=getattr(cls, 'component_description', cls.__doc__ or "兴趣度计算器"),
-            enabled_by_default=getattr(cls, 'enabled_by_default', True),
+            description=getattr(cls, "component_description", cls.__doc__ or "兴趣度计算器"),
+            enabled_by_default=getattr(cls, "enabled_by_default", True),
         )
 
     def __repr__(self) -> str:

@@ -107,9 +107,9 @@ class ChatterActionPlanner:
                 # 直接使用消息中已计算的标志，无需重复计算兴趣值
                 for message in unread_messages:
                     try:
-                        message_interest = getattr(message, 'interest_value', 0.3)
-                        message_should_reply = getattr(message, 'should_reply', False)
-                        message_should_act = getattr(message, 'should_act', False)
+                        message_interest = getattr(message, "interest_value", 0.3)
+                        message_should_reply = getattr(message, "should_reply", False)
+                        message_should_act = getattr(message, "should_act", False)
 
                         # 确保interest_value不是None
                         if message_interest is None:

@@ -65,10 +65,10 @@ class ColdStartTask(AsyncTask):
                         nickname = await person_api.get_person_value(person_id, "nickname")
                         user_nickname = nickname or f"用户{user_id}"
                         user_info = UserInfo(platform=platform, user_id=str(user_id), user_nickname=user_nickname)
-                        
+
                         # 使用 get_or_create_stream 来安全地获取或创建流
                         stream = await self.chat_manager.get_or_create_stream(platform, user_info)
-                        
+
                         formatted_stream_id = f"{stream.user_info.platform}:{stream.user_info.user_id}:private"
                         await self.executor.execute(stream_id=formatted_stream_id, start_mode="cold_start")
                         logger.info(f"【冷启动】已为用户 {chat_id} (昵称: {user_nickname}) 发送唤醒/问候消息。")

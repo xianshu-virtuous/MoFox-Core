@@ -5,13 +5,13 @@
 
 import asyncio
 import time
-from typing import Dict, List, Optional, Set
-from dataclasses import dataclass
 from collections import OrderedDict
+from dataclasses import dataclass
 
 from maim_message import GroupInfo, UserInfo
-from src.common.logger import get_logger
+
 from src.chat.message_receive.optimized_chat_stream import OptimizedChatStream, create_optimized_chat_stream
+from src.common.logger import get_logger
 
 logger = get_logger("stream_cache_manager")
 
@@ -52,14 +52,14 @@ class TieredStreamCache:
 
         # 三层缓存存储
         self.hot_cache: OrderedDict[str, OptimizedChatStream] = OrderedDict()  # 热数据（LRU）
-        self.warm_storage: Dict[str, tuple[OptimizedChatStream, float]] = {}   # 温数据（最后访问时间）
-        self.cold_storage: Dict[str, tuple[OptimizedChatStream, float]] = {}   # 冷数据（最后访问时间）
+        self.warm_storage: dict[str, tuple[OptimizedChatStream, float]] = {}   # 温数据（最后访问时间）
+        self.cold_storage: dict[str, tuple[OptimizedChatStream, float]] = {}   # 冷数据（最后访问时间）
 
         # 统计信息
         self.stats = StreamCacheStats()
 
         # 清理任务
-        self.cleanup_task: Optional[asyncio.Task] = None
+        self.cleanup_task: asyncio.Task | None = None
         self.is_running = False
 
         logger.info(f"分层流缓存管理器初始化完成 (hot:{max_hot_size}, warm:{max_warm_size}, cold:{max_cold_size})")
@@ -96,8 +96,8 @@ class TieredStreamCache:
         stream_id: str,
         platform: str,
         user_info: UserInfo,
-        group_info: Optional[GroupInfo] = None,
-        data: Optional[Dict] = None,
+        group_info: GroupInfo | None = None,
+        data: dict | None = None,
     ) -> OptimizedChatStream:
         """获取或创建流 - 优化版本"""
         current_time = time.time()
@@ -255,7 +255,7 @@ class TieredStreamCache:
         hot_to_demote = []
         for stream_id, stream in self.hot_cache.items():
             # 获取最后访问时间（简化：使用创建时间作为近似）
-            last_access = getattr(stream, 'last_active_time', stream.create_time)
+            last_access = getattr(stream, "last_active_time", stream.create_time)
             if current_time - last_access > self.hot_timeout:
                 hot_to_demote.append(stream_id)
 
@@ -341,7 +341,7 @@ class TieredStreamCache:
 
         logger.info("所有缓存已清空")
 
-    async def get_stream_snapshot(self, stream_id: str) -> Optional[OptimizedChatStream]:
+    async def get_stream_snapshot(self, stream_id: str) -> OptimizedChatStream | None:
         """获取流的快照（不修改缓存状态）"""
         if stream_id in self.hot_cache:
             return self.hot_cache[stream_id].create_snapshot()
@@ -351,13 +351,13 @@ class TieredStreamCache:
             return self.cold_storage[stream_id][0].create_snapshot()
         return None
 
-    def get_cached_stream_ids(self) -> Set[str]:
+    def get_cached_stream_ids(self) -> set[str]:
         """获取所有缓存的流ID"""
         return set(self.hot_cache.keys()) | set(self.warm_storage.keys()) | set(self.cold_storage.keys())
 
 
 # 全局缓存管理器实例
-_cache_manager: Optional[TieredStreamCache] = None
+_cache_manager: TieredStreamCache | None = None
 
 
 def get_stream_cache_manager() -> TieredStreamCache:

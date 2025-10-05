@@ -1,7 +1,6 @@
 import asyncio
 import importlib
 import os
-import traceback
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import Any, Optional
@@ -104,7 +103,7 @@ class PluginManager:
                 return False, 1
 
             module = self.plugin_modules.get(plugin_name)
-            
+
             if not module or not hasattr(module, "__plugin_meta__"):
                 self.failed_plugins[plugin_name] = "插件模块中缺少 __plugin_meta__"
                 logger.error(f"❌ 插件加载失败: {plugin_name} - 缺少 __plugin_meta__")
@@ -288,7 +287,7 @@ class PluginManager:
 
         return loaded_count, failed_count
 
-    def _load_plugin_module_file(self, plugin_file: str) -> Optional[Any]:
+    def _load_plugin_module_file(self, plugin_file: str) -> Any | None:
         # sourcery skip: extract-method
         """加载单个插件模块文件
 

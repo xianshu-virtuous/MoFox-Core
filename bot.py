@@ -103,7 +103,7 @@ async def graceful_shutdown(main_system_instance):
         logger.info("正在优雅关闭麦麦...")
 
         # 停止MainSystem中的组件，它会处理服务器等
-        if main_system_instance and hasattr(main_system_instance, 'shutdown'):
+        if main_system_instance and hasattr(main_system_instance, "shutdown"):
             logger.info("正在关闭MainSystem...")
             await main_system_instance.shutdown()
 
@@ -111,7 +111,7 @@ async def graceful_shutdown(main_system_instance):
         try:
             from src.chat.message_receive.chat_stream import get_chat_manager
             chat_manager = get_chat_manager()
-            if hasattr(chat_manager, '_stop_auto_save'):
+            if hasattr(chat_manager, "_stop_auto_save"):
                 logger.info("正在停止聊天管理器...")
                 chat_manager._stop_auto_save()
         except Exception as e:
@@ -120,7 +120,7 @@ async def graceful_shutdown(main_system_instance):
         # 停止情绪管理器
         try:
             from src.mood.mood_manager import mood_manager
-            if hasattr(mood_manager, 'stop'):
+            if hasattr(mood_manager, "stop"):
                 logger.info("正在停止情绪管理器...")
                 await mood_manager.stop()
         except Exception as e:
@@ -129,7 +129,7 @@ async def graceful_shutdown(main_system_instance):
         # 停止记忆系统
         try:
             from src.chat.memory_system.memory_manager import memory_manager
-            if hasattr(memory_manager, 'shutdown'):
+            if hasattr(memory_manager, "shutdown"):
                 logger.info("正在停止记忆系统...")
                 await memory_manager.shutdown()
         except Exception as e:

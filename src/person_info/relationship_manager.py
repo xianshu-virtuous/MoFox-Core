@@ -4,8 +4,8 @@ from datetime import datetime
 from difflib import SequenceMatcher
 from typing import Any
 
-import rjieba
 import orjson
+import rjieba
 from json_repair import repair_json
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity

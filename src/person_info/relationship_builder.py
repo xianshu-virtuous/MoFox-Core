@@ -5,7 +5,6 @@ import time
 import traceback
 from typing import Any
 
-from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.utils.chat_message_builder import (
     get_raw_msg_before_timestamp_with_chat,
     get_raw_msg_by_timestamp_with_chat,

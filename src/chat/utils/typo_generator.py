@@ -9,8 +9,8 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-import rjieba
 import orjson
+import rjieba
 from pypinyin import Style, pinyin
 
 from src.common.logger import get_logger

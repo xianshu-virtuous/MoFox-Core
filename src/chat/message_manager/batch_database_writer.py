@@ -5,9 +5,9 @@
 
 import asyncio
 import time
-from typing import Any, Dict, List, Optional
-from dataclasses import dataclass, field
 from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import Any
 
 from src.common.database.sqlalchemy_database_api import get_db_session
 from src.common.database.sqlalchemy_models import ChatStreams
@@ -21,7 +21,7 @@ logger = get_logger("batch_database_writer")
 class StreamUpdatePayload:
     """流更新数据结构"""
     stream_id: str
-    update_data: Dict[str, Any]
+    update_data: dict[str, Any]
     priority: int = 0  # 优先级，数字越大优先级越高
     timestamp: float = field(default_factory=time.time)
 
@@ -47,7 +47,7 @@ class BatchDatabaseWriter:
 
         # 运行状态
         self.is_running = False
-        self.writer_task: Optional[asyncio.Task] = None
+        self.writer_task: asyncio.Task | None = None
 
         # 统计信息
         self.stats = {
@@ -60,7 +60,7 @@ class BatchDatabaseWriter:
         }
 
         # 按优先级分类的批次
-        self.priority_batches: Dict[int, List[StreamUpdatePayload]] = defaultdict(list)
+        self.priority_batches: dict[int, list[StreamUpdatePayload]] = defaultdict(list)
 
         logger.info(f"批量数据库写入器初始化完成 (batch_size={batch_size}, interval={flush_interval}s)")
 
@@ -98,7 +98,7 @@ class BatchDatabaseWriter:
     async def schedule_stream_update(
         self,
         stream_id: str,
-        update_data: Dict[str, Any],
+        update_data: dict[str, Any],
         priority: int = 0
     ) -> bool:
         """
@@ -166,7 +166,7 @@ class BatchDatabaseWriter:
         await self._flush_all_batches()
         logger.info("批量写入循环结束")
 
-    async def _collect_batch(self) -> List[StreamUpdatePayload]:
+    async def _collect_batch(self) -> list[StreamUpdatePayload]:
         """收集一个批次的数据"""
         batch = []
         deadline = time.time() + self.flush_interval
@@ -189,7 +189,7 @@ class BatchDatabaseWriter:
 
         return batch
 
-    async def _write_batch(self, batch: List[StreamUpdatePayload]):
+    async def _write_batch(self, batch: list[StreamUpdatePayload]):
         """批量写入数据库"""
         if not batch:
             return
@@ -228,7 +228,7 @@ class BatchDatabaseWriter:
                 except Exception as single_e:
                     logger.error(f"单个写入也失败: {single_e}")
 
-    async def _batch_write_to_database(self, payloads: List[StreamUpdatePayload]):
+    async def _batch_write_to_database(self, payloads: list[StreamUpdatePayload]):
         """批量写入数据库"""
         async with get_db_session() as session:
             for payload in payloads:
@@ -268,7 +268,7 @@ class BatchDatabaseWriter:
 
             await session.commit()
 
-    async def _direct_write(self, stream_id: str, update_data: Dict[str, Any]):
+    async def _direct_write(self, stream_id: str, update_data: dict[str, Any]):
         """直接写入数据库（降级方案）"""
         async with get_db_session() as session:
             if global_config.database.database_type == "sqlite":
@@ -315,7 +315,7 @@ class BatchDatabaseWriter:
         if remaining_batch:
             await self._write_batch(remaining_batch)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取统计信息"""
         stats = self.stats.copy()
         stats["is_running"] = self.is_running
@@ -324,7 +324,7 @@ class BatchDatabaseWriter:
 
 
 # 全局批量写入器实例
-_batch_writer: Optional[BatchDatabaseWriter] = None
+_batch_writer: BatchDatabaseWriter | None = None
 
 
 def get_batch_writer() -> BatchDatabaseWriter:

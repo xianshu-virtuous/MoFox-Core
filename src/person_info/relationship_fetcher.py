@@ -5,7 +5,6 @@ from typing import Any
 import orjson
 from json_repair import repair_json
 
-from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.utils.prompt import Prompt, global_prompt_manager
 from src.common.logger import get_logger
 from src.config.config import global_config, model_config

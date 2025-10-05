@@ -112,7 +112,7 @@ class InterestManager:
             # 返回默认结果
             return InterestCalculationResult(
                 success=False,
-                message_id=getattr(message, 'message_id', ''),
+                message_id=getattr(message, "message_id", ""),
                 interest_value=0.3,
                 error_message="没有可用的兴趣值计算组件"
             )
@@ -129,7 +129,7 @@ class InterestManager:
             logger.warning(f"兴趣值计算超时 ({timeout}s)，消息 {getattr(message, 'message_id', '')} 使用默认兴趣值 0.5")
             return InterestCalculationResult(
                 success=True,
-                message_id=getattr(message, 'message_id', ''),
+                message_id=getattr(message, "message_id", ""),
                 interest_value=0.5,  # 固定默认兴趣值
                 should_reply=False,
                 should_act=False,
@@ -140,9 +140,9 @@ class InterestManager:
             logger.error(f"兴趣值计算异常: {e}")
             return InterestCalculationResult(
                 success=False,
-                message_id=getattr(message, 'message_id', ''),
+                message_id=getattr(message, "message_id", ""),
                 interest_value=0.3,
-                error_message=f"计算异常: {str(e)}"
+                error_message=f"计算异常: {e!s}"
             )
 
     async def _async_calculate(self, message: "DatabaseMessages") -> InterestCalculationResult:
@@ -168,9 +168,9 @@ class InterestManager:
             logger.error(f"兴趣值计算异常: {e}", exc_info=True)
             return InterestCalculationResult(
                 success=False,
-                message_id=getattr(message, 'message_id', ''),
+                message_id=getattr(message, "message_id", ""),
                 interest_value=0.0,
-                error_message=f"计算异常: {str(e)}",
+                error_message=f"计算异常: {e!s}",
                 calculation_time=time.time() - start_time
             )
 

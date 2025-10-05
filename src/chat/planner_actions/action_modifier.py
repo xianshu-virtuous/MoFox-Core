@@ -15,7 +15,7 @@ from src.plugin_system.base.component_types import ActionActivationType, ActionI
 from src.plugin_system.core.global_announcement_manager import global_announcement_manager
 
 if TYPE_CHECKING:
-    from src.chat.message_receive.chat_stream import ChatStream
+    pass
 
 logger = get_logger("action_manager")
 
