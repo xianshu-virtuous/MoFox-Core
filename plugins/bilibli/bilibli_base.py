@@ -245,7 +245,7 @@ class BilibiliVideoAnalyzer:
             logger.exception("详细错误信息:")
             return None
 
-    async def analyze_bilibili_video(self, url: str, prompt: str = None) -> dict[str, Any]:
+    async def analyze_bilibili_video(self, url: str, prompt: str | None = None) -> dict[str, Any]:
         """分析哔哩哔哩视频并返回详细信息和AI分析结果"""
         try:
             logger.info(f"🎬 开始分析哔哩哔哩视频: {url}")
