@@ -4,7 +4,7 @@ from typing import Any
 
 import orjson
 
-from src.chat.utils.chat_message_builder import get_actions_by_timestamp_with_chat
+from src.chat.utils.chat_message_builder import build_readable_actions, get_actions_by_timestamp_with_chat
 from src.common.logger import get_logger
 from src.config.config import global_config, model_config
 from src.mood.mood_manager import mood_manager
@@ -154,11 +154,7 @@ class ProactiveThinkerExecutor:
             limit=7,
         )
 
-        action_history_context = (
-            "\n".join([f"- {a['action_data']}" for a in action_history_list if isinstance(a, dict)])
-            if isinstance(action_history_list, list)
-            else "无"
-        )
+        action_history_context = build_readable_actions(actions=action_history_list)
 
         # 2. 构建基础上下文
         mood_state = "暂时没有"
