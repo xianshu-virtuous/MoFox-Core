@@ -10,17 +10,7 @@ from src.common.logger import get_logger
 
 logger = get_logger(__name__)
 
-# 仅允许规范导入路径：from inkfox.memory import PyMetadataIndex
-try:  # pragma: no cover
-    from inkfox.memory import PyMetadataIndex as _RustIndex  # type: ignore
-    logger.debug("已从 inkfox.memory 成功导入 PyMetadataIndex")
-except Exception as ex:  # noqa: BLE001
-    # 不再做任何回退；强制要求正确的 Rust 模块子模块注册
-    raise RuntimeError(
-        "无法导入 inkfox.memory.PyMetadataIndex: %s\n"
-        "请确认: 1) 已在当前虚拟环境下执行 'maturin develop --release' 安装扩展; "
-        "2) 运行进程使用同一个 venv; 3) 没有旧的 'inkfox' 目录遮蔽 so/pyd; 4) Python 版本与编译匹配" % ex
-    ) from ex
+from inkfox.memory import PyMetadataIndex as _RustIndex  # type: ignore
 
 @dataclass
 class MemoryMetadataIndexEntry:
