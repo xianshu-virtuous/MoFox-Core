@@ -73,10 +73,10 @@ class MemoryManager:
             global_memory_manager = self.memory_system
 
             self.is_initialized = True
-            logger.info("✅ 记忆系统初始化完成")
+            logger.info(" 记忆系统初始化完成")
 
         except Exception as e:
-            logger.error(f"❌ 记忆系统初始化失败: {e}")
+            logger.error(f"记忆系统初始化失败: {e}")
             # 如果系统初始化失败，创建一个空的管理器避免系统崩溃
             self.memory_system = None
             self.is_initialized = True  # 标记为已初始化但系统不可用
@@ -471,7 +471,7 @@ class MemoryManager:
         try:
             if self.memory_system:
                 await self.memory_system.shutdown()
-            logger.info("✅ 记忆系统已关闭")
+            logger.info(" 记忆系统已关闭")
         except Exception as e:
             logger.error(f"关闭记忆系统失败: {e}")
 

@@ -162,7 +162,6 @@ class MemorySystem:
     async def initialize(self):
         """异步初始化记忆系统"""
         try:
-            logger.info("正在初始化记忆系统...")
 
             # 初始化LLM模型
             fallback_task = getattr(self.llm_model, "model_for_task", None) if self.llm_model else None
@@ -269,10 +268,8 @@ class MemorySystem:
                     self.hippocampus_sampler = None
 
             # 统一存储已经自动加载数据，无需额外加载
-            logger.info("✅ 简化版记忆系统初始化完成")
 
             self.status = MemorySystemStatus.READY
-            logger.info("✅ 记忆系统初始化完成")
 
         except Exception as e:
             self.status = MemorySystemStatus.ERROR
@@ -1489,7 +1486,7 @@ class MemorySystem:
         """启动海马体采样"""
         if self.hippocampus_sampler:
             asyncio.create_task(self.hippocampus_sampler.start_background_sampling())
-            logger.info("🚀 海马体后台采样已启动")
+            logger.info("海马体后台采样已启动")
         else:
             logger.warning("海马体采样器未初始化，无法启动采样")
 
@@ -1497,7 +1494,7 @@ class MemorySystem:
         """停止海马体采样"""
         if self.hippocampus_sampler:
             self.hippocampus_sampler.stop_background_sampling()
-            logger.info("🛑 海马体后台采样已停止")
+            logger.info("海马体后台采样已停止")
 
     def get_system_stats(self) -> dict[str, Any]:
         """获取系统统计信息"""
@@ -1536,10 +1533,10 @@ class MemorySystem:
             if self.unified_storage:
                 self.unified_storage.cleanup()
 
-            logger.info("✅ 简化记忆系统已关闭")
+            logger.info("简化记忆系统已关闭")
 
         except Exception as e:
-            logger.error(f"❌ 记忆系统关闭失败: {e}", exc_info=True)
+            logger.error(f"记忆系统关闭失败: {e}", exc_info=True)
 
     async def _rebuild_vector_storage_if_needed(self):
         """重建向量存储（如果需要）"""
@@ -1590,7 +1587,7 @@ class MemorySystem:
             logger.info(f"✅ 向量存储重建完成，最终向量数量: {final_count}")
 
         except Exception as e:
-            logger.error(f"❌ 向量存储重建失败: {e}", exc_info=True)
+            logger.error(f"向量存储重建失败: {e}", exc_info=True)
 
 
 # 全局记忆系统实例
