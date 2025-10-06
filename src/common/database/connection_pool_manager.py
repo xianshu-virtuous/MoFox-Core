@@ -78,7 +78,7 @@ class ConnectionPoolManager:
             "total_expired": 0,
             "active_connections": 0,
             "pool_hits": 0,
-            "pool_misses": 0
+            "pool_misses": 0,
         }
 
         # 后台清理任务
@@ -156,7 +156,9 @@ class ConnectionPoolManager:
             if connection_info:
                 connection_info.mark_released()
 
-    async def _get_reusable_connection(self, session_factory: async_sessionmaker[AsyncSession]) -> ConnectionInfo | None:
+    async def _get_reusable_connection(
+        self, session_factory: async_sessionmaker[AsyncSession]
+    ) -> ConnectionInfo | None:
         """获取可复用的连接"""
         async with self._lock:
             # 清理过期连接
@@ -164,9 +166,7 @@ class ConnectionPoolManager:
 
             # 查找可复用的连接
             for connection_info in list(self._connections):
-                if (not connection_info.in_use and
-                    not connection_info.is_expired(self.max_lifetime, self.max_idle)):
-
+                if not connection_info.in_use and not connection_info.is_expired(self.max_lifetime, self.max_idle):
                     # 验证连接是否仍然有效
                     try:
                         # 执行一个简单的查询来验证连接
@@ -191,8 +191,7 @@ class ConnectionPoolManager:
         expired_connections = []
 
         for connection_info in list(self._connections):
-            if (connection_info.is_expired(self.max_lifetime, self.max_idle) and
-                not connection_info.in_use):
+            if connection_info.is_expired(self.max_lifetime, self.max_idle) and not connection_info.in_use:
                 expired_connections.append(connection_info)
 
         for connection_info in expired_connections:
@@ -238,7 +237,8 @@ class ConnectionPoolManager:
             "max_pool_size": self.max_pool_size,
             "pool_efficiency": (
                 self._stats["pool_hits"] / max(1, self._stats["pool_hits"] + self._stats["pool_misses"])
-            ) * 100
+            )
+            * 100,
         }
 
 

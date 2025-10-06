@@ -69,6 +69,7 @@ class RelationshipBuilder:
         if not self._log_prefix_initialized:
             try:
                 from src.chat.message_receive.chat_stream import get_chat_manager
+
                 chat_name = await get_chat_manager().get_stream_name(self.chat_id)
                 self.log_prefix = f"[{chat_name}]"
             except Exception:

@@ -85,6 +85,7 @@ class RelationshipFetcher:
         """异步初始化log_prefix"""
         if not self._log_prefix_initialized:
             from src.chat.message_receive.chat_stream import get_chat_manager
+
             name = await get_chat_manager().get_stream_name(self.chat_id)
             self.log_prefix = f"[{name}] 实时信息"
             self._log_prefix_initialized = True

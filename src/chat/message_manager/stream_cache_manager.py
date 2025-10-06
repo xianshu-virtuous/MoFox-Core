@@ -19,6 +19,7 @@ logger = get_logger("stream_cache_manager")
 @dataclass
 class StreamCacheStats:
     """缓存统计信息"""
+
     hot_cache_size: int = 0
     warm_storage_size: int = 0
     cold_storage_size: int = 0
@@ -38,9 +39,9 @@ class TieredStreamCache:
         max_warm_size: int = 500,
         max_cold_size: int = 2000,
         cleanup_interval: float = 300.0,  # 5分钟清理一次
-        hot_timeout: float = 1800.0,      # 30分钟未访问降级到warm
-        warm_timeout: float = 7200.0,     # 2小时未访问降级到cold
-        cold_timeout: float = 86400.0,    # 24小时未访问删除
+        hot_timeout: float = 1800.0,  # 30分钟未访问降级到warm
+        warm_timeout: float = 7200.0,  # 2小时未访问降级到cold
+        cold_timeout: float = 86400.0,  # 24小时未访问删除
     ):
         self.max_hot_size = max_hot_size
         self.max_warm_size = max_warm_size
@@ -52,8 +53,8 @@ class TieredStreamCache:
 
         # 三层缓存存储
         self.hot_cache: OrderedDict[str, OptimizedChatStream] = OrderedDict()  # 热数据（LRU）
-        self.warm_storage: dict[str, tuple[OptimizedChatStream, float]] = {}   # 温数据（最后访问时间）
-        self.cold_storage: dict[str, tuple[OptimizedChatStream, float]] = {}   # 冷数据（最后访问时间）
+        self.warm_storage: dict[str, tuple[OptimizedChatStream, float]] = {}  # 温数据（最后访问时间）
+        self.cold_storage: dict[str, tuple[OptimizedChatStream, float]] = {}  # 冷数据（最后访问时间）
 
         # 统计信息
         self.stats = StreamCacheStats()
@@ -134,11 +135,7 @@ class TieredStreamCache:
         # 4. 缓存未命中，创建新流
         self.stats.cache_misses += 1
         stream = create_optimized_chat_stream(
-            stream_id=stream_id,
-            platform=platform,
-            user_info=user_info,
-            group_info=group_info,
-            data=data
+            stream_id=stream_id, platform=platform, user_info=user_info, group_info=group_info, data=data
         )
         logger.debug(f"缓存未命中，创建新流: {stream_id}")
 
@@ -294,9 +291,9 @@ class TieredStreamCache:
 
         # 估算内存使用（粗略估计）
         self.stats.total_memory_usage = (
-            len(self.hot_cache) * 1024 +      # 每个热流约1KB
-            len(self.warm_storage) * 512 +    # 每个温流约512B
-            len(self.cold_storage) * 256      # 每个冷流约256B
+            len(self.hot_cache) * 1024  # 每个热流约1KB
+            + len(self.warm_storage) * 512  # 每个温流约512B
+            + len(self.cold_storage) * 256  # 每个冷流约256B
         )
 
         if sum(cleanup_stats.values()) > 0:

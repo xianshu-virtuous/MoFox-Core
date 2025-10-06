@@ -28,7 +28,7 @@ class InterestCalculationResult:
         should_reply: bool = False,
         should_act: bool = False,
         error_message: str | None = None,
-        calculation_time: float = 0.0
+        calculation_time: float = 0.0,
     ):
         self.success = success
         self.message_id = message_id
@@ -51,17 +51,19 @@ class InterestCalculationResult:
             "should_act": self.should_act,
             "error_message": self.error_message,
             "calculation_time": self.calculation_time,
-            "timestamp": self.timestamp
+            "timestamp": self.timestamp,
         }
 
     def __repr__(self) -> str:
-        return (f"InterestCalculationResult("
-                f"success={self.success}, "
-                f"message_id={self.message_id}, "
-                f"interest_value={self.interest_value:.3f}, "
-                f"should_take_action={self.should_take_action}, "
-                f"should_reply={self.should_reply}, "
-                f"should_act={self.should_act})")
+        return (
+            f"InterestCalculationResult("
+            f"success={self.success}, "
+            f"message_id={self.message_id}, "
+            f"interest_value={self.interest_value:.3f}, "
+            f"should_take_action={self.should_take_action}, "
+            f"should_reply={self.should_reply}, "
+            f"should_act={self.should_act})"
+        )
 
 
 class BaseInterestCalculator(ABC):
@@ -144,7 +146,7 @@ class BaseInterestCalculator(ABC):
             "failed_calculations": self._failed_calculations,
             "success_rate": 1.0 - (self._failed_calculations / max(1, self._total_calculations)),
             "average_calculation_time": self._average_calculation_time,
-            "last_calculation_time": self._last_calculation_time
+            "last_calculation_time": self._last_calculation_time,
         }
 
     def _update_statistics(self, result: InterestCalculationResult):
@@ -159,8 +161,7 @@ class BaseInterestCalculator(ABC):
         else:
             alpha = 0.1  # 指数移动平均的平滑因子
             self._average_calculation_time = (
-                alpha * result.calculation_time +
-                (1 - alpha) * self._average_calculation_time
+                alpha * result.calculation_time + (1 - alpha) * self._average_calculation_time
             )
 
         self._last_calculation_time = result.timestamp
@@ -172,7 +173,7 @@ class BaseInterestCalculator(ABC):
                 success=False,
                 message_id=getattr(message, "message_id", ""),
                 interest_value=0.0,
-                error_message="组件未启用"
+                error_message="组件未启用",
             )
 
         start_time = time.time()
@@ -187,7 +188,7 @@ class BaseInterestCalculator(ABC):
                 message_id=getattr(message, "message_id", ""),
                 interest_value=0.0,
                 error_message=f"计算执行失败: {e!s}",
-                calculation_time=time.time() - start_time
+                calculation_time=time.time() - start_time,
             )
             self._update_statistics(result)
             return result
@@ -214,7 +215,9 @@ class BaseInterestCalculator(ABC):
         )
 
     def __repr__(self) -> str:
-        return (f"{self.__class__.__name__}("
-                f"name={self.component_name}, "
-                f"version={self.component_version}, "
-                f"enabled={self._enabled})")
+        return (
+            f"{self.__class__.__name__}("
+            f"name={self.component_name}, "
+            f"version={self.component_version}, "
+            f"enabled={self._enabled})"
+        )

@@ -80,10 +80,7 @@ class OptimizedChatStream:
     ):
         # 共享的只读数据
         self._shared_context = SharedContext(
-            stream_id=stream_id,
-            platform=platform,
-            user_info=user_info,
-            group_info=group_info
+            stream_id=stream_id, platform=platform, user_info=user_info, group_info=group_info
         )
 
         # 本地修改数据
@@ -269,14 +266,13 @@ class OptimizedChatStream:
         self._stream_context = StreamContext(
             stream_id=self.stream_id,
             chat_type=ChatType.GROUP if self.group_info else ChatType.PRIVATE,
-            chat_mode=ChatMode.NORMAL
+            chat_mode=ChatMode.NORMAL,
         )
 
         # 创建单流上下文管理器
         from src.chat.message_manager.context_manager import SingleStreamContextManager
-        self._context_manager = SingleStreamContextManager(
-            stream_id=self.stream_id, context=self._stream_context
-        )
+
+        self._context_manager = SingleStreamContextManager(stream_id=self.stream_id, context=self._stream_context)
 
     @property
     def stream_context(self):
@@ -331,9 +327,11 @@ class OptimizedChatStream:
         # 恢复stream_context信息
         if "stream_context_chat_type" in data:
             from src.plugin_system.base.component_types import ChatMode, ChatType
+
             instance.stream_context.chat_type = ChatType(data["stream_context_chat_type"])
         if "stream_context_chat_mode" in data:
             from src.plugin_system.base.component_types import ChatMode, ChatType
+
             instance.stream_context.chat_mode = ChatMode(data["stream_context_chat_mode"])
 
         # 恢复interruption_count信息
@@ -352,6 +350,7 @@ class OptimizedChatStream:
             if isinstance(actions, str):
                 try:
                     import json
+
                     actions = json.loads(actions)
                 except json.JSONDecodeError:
                     logger.warning(f"无法解析actions JSON字符串: {actions}")
@@ -458,7 +457,7 @@ class OptimizedChatStream:
             stream_id=self.stream_id,
             platform=self.platform,
             user_info=self._get_effective_user_info(),
-            group_info=self._get_effective_group_info()
+            group_info=self._get_effective_group_info(),
         )
 
         # 复制本地修改（但不触发写时复制）
@@ -482,9 +481,5 @@ def create_optimized_chat_stream(
 ) -> OptimizedChatStream:
     """创建优化版聊天流实例"""
     return OptimizedChatStream(
-        stream_id=stream_id,
-        platform=platform,
-        user_info=user_info,
-        group_info=group_info,
-        data=data
+        stream_id=stream_id, platform=platform, user_info=user_info, group_info=group_info, data=data
     )

@@ -43,7 +43,9 @@ class SearXNGSearchEngine(BaseSearchEngine):
 
         api_keys = config_api.get_global_config("web_search.searxng_api_keys", None)
         if isinstance(api_keys, list):
-            self.api_keys: list[str | None] = [k.strip() if isinstance(k, str) and k.strip() else None for k in api_keys]
+            self.api_keys: list[str | None] = [
+                k.strip() if isinstance(k, str) and k.strip() else None for k in api_keys
+            ]
         else:
             self.api_keys = []
 
@@ -51,9 +53,7 @@ class SearXNGSearchEngine(BaseSearchEngine):
         if self.api_keys and len(self.api_keys) < len(self.instances):
             self.api_keys.extend([None] * (len(self.instances) - len(self.api_keys)))
 
-        logger.debug(
-            f"SearXNG 引擎配置: instances={self.instances}, api_keys={'yes' if any(self.api_keys) else 'no'}"
-        )
+        logger.debug(f"SearXNG 引擎配置: instances={self.instances}, api_keys={'yes' if any(self.api_keys) else 'no'}")
 
     def is_available(self) -> bool:
         return bool(self.instances)

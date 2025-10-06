@@ -280,7 +280,9 @@ class _PromptProcessor:
 这有助于我判断你的输出是否被截断。请不要在 `{self.end_marker}` 前后添加任何其他文字或标点。
 """
 
-    async def prepare_prompt(self, prompt: str, model_info: ModelInfo, api_provider: APIProvider, task_name: str) -> str:
+    async def prepare_prompt(
+        self, prompt: str, model_info: ModelInfo, api_provider: APIProvider, task_name: str
+    ) -> str:
         """
         为请求准备最终的提示词。
 

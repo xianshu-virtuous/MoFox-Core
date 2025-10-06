@@ -59,6 +59,7 @@ class ChatMood:
         """异步初始化方法"""
         if not self._initialized:
             from src.chat.message_receive.chat_stream import get_chat_manager
+
             chat_manager = get_chat_manager()
             self.chat_stream = await chat_manager.get_stream(self.chat_id)
 

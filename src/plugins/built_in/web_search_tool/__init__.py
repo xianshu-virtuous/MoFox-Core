@@ -12,5 +12,5 @@ __plugin_meta__ = PluginMetadata(
     categories=["Tools"],
     extra={
         "is_built_in": True,
-    }
+    },
 )

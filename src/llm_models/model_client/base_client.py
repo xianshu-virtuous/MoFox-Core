@@ -189,11 +189,11 @@ class ClientRegistry:
             bool: 事件循环是否变化
         """
         current_loop_id = self._get_current_loop_id()
-        
+
         # 如果没有缓存的循环ID，说明是首次创建
         if provider_name not in self._event_loop_cache:
             return False
-        
+
         # 比较当前循环ID与缓存的循环ID
         cached_loop_id = self._event_loop_cache[provider_name]
         return current_loop_id != cached_loop_id
@@ -208,7 +208,7 @@ class ClientRegistry:
             BaseClient: 注册的API客户端实例
         """
         provider_name = api_provider.name
-        
+
         # 如果强制创建新实例，直接创建不使用缓存
         if force_new:
             if client_class := self.client_registry.get(api_provider.client_type):
@@ -224,7 +224,7 @@ class ClientRegistry:
             # 事件循环已变化，需要重新创建实例
             logger.debug(f"检测到事件循环变化，为 {provider_name} 重新创建客户端实例")
             self._loop_change_count += 1
-            
+
             # 移除旧实例
             if provider_name in self.client_instance_cache:
                 del self.client_instance_cache[provider_name]
@@ -237,7 +237,7 @@ class ClientRegistry:
                 self._event_loop_cache[provider_name] = self._get_current_loop_id()
             else:
                 raise KeyError(f"'{api_provider.client_type}' 类型的 Client 未注册")
-        
+
         return self.client_instance_cache[provider_name]
 
     def get_cache_stats(self) -> dict:

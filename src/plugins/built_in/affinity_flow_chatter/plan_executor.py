@@ -405,7 +405,6 @@ class ChatterPlanExecutor:
         # 移除执行时间列表以避免返回过大数据
         stats.pop("execution_times", None)
 
-
         return stats
 
     def reset_stats(self):
@@ -434,12 +433,12 @@ class ChatterPlanExecutor:
             for i, time_val in enumerate(recent_times)
         ]
 
-
     async def _flush_action_manager_batch_storage(self, plan: Plan):
         """使用 action_manager 的批量存储功能存储所有待处理的动作"""
         try:
             # 通过 chat_id 获取真实的 chat_stream 对象
             from src.plugin_system.apis.chat_api import get_chat_manager
+
             chat_manager = get_chat_manager()
             chat_stream = await chat_manager.get_stream(plan.chat_id)
 
@@ -455,4 +454,3 @@ class ChatterPlanExecutor:
             logger.error(f"批量存储动作记录时发生错误: {e}")
             # 确保在出错时也禁用批量存储模式
             self.action_manager.disable_batch_storage()
-

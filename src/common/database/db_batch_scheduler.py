@@ -24,6 +24,7 @@ T = TypeVar("T")
 @dataclass
 class BatchOperation:
     """批量操作基础类"""
+
     operation_type: str  # 'select', 'insert', 'update', 'delete'
     model_class: Any
     conditions: dict[str, Any]
@@ -40,6 +41,7 @@ class BatchOperation:
 @dataclass
 class BatchResult:
     """批量操作结果"""
+
     success: bool
     data: Any = None
     error: str | None = None
@@ -48,10 +50,12 @@ class BatchResult:
 class DatabaseBatchScheduler:
     """数据库批量调度器"""
 
-    def __init__(self,
-                 batch_size: int = 50,
-                 max_wait_time: float = 0.1,  # 100ms
-                 max_queue_size: int = 1000):
+    def __init__(
+        self,
+        batch_size: int = 50,
+        max_wait_time: float = 0.1,  # 100ms
+        max_queue_size: int = 1000,
+    ):
         self.batch_size = batch_size
         self.max_wait_time = max_wait_time
         self.max_queue_size = max_queue_size
@@ -65,12 +69,7 @@ class DatabaseBatchScheduler:
         self._lock = asyncio.Lock()
 
         # 统计信息
-        self.stats = {
-            "total_operations": 0,
-            "batched_operations": 0,
-            "cache_hits": 0,
-            "execution_time": 0.0
-        }
+        self.stats = {"total_operations": 0, "batched_operations": 0, "cache_hits": 0, "execution_time": 0.0}
 
         # 简单的结果缓存（用于频繁的查询）
         self._result_cache: dict[str, tuple[Any, float]] = {}
@@ -105,11 +104,7 @@ class DatabaseBatchScheduler:
     def _generate_cache_key(self, operation_type: str, model_class: Any, conditions: dict[str, Any]) -> str:
         """生成缓存键"""
         # 简单的缓存键生成，实际可以根据需要优化
-        key_parts = [
-            operation_type,
-            model_class.__name__,
-            str(sorted(conditions.items()))
-        ]
+        key_parts = [operation_type, model_class.__name__, str(sorted(conditions.items()))]
         return "|".join(key_parts)
 
     def _get_from_cache(self, cache_key: str) -> Any | None:
@@ -132,11 +127,7 @@ class DatabaseBatchScheduler:
         """添加操作到队列"""
         # 检查是否可以立即返回缓存结果
         if operation.operation_type == "select":
-            cache_key = self._generate_cache_key(
-                operation.operation_type,
-                operation.model_class,
-                operation.conditions
-            )
+            cache_key = self._generate_cache_key(operation.operation_type, operation.model_class, operation.conditions)
             cached_result = self._get_from_cache(cache_key)
             if cached_result is not None:
                 if operation.callback:
@@ -180,10 +171,7 @@ class DatabaseBatchScheduler:
                 return
 
             # 复制队列内容，避免长时间占用锁
-            queues_copy = {
-                key: deque(operations)
-                for key, operations in self.operation_queues.items()
-            }
+            queues_copy = {key: deque(operations) for key, operations in self.operation_queues.items()}
             # 清空原队列
             for queue in self.operation_queues.values():
                 queue.clear()
@@ -240,9 +228,7 @@ class DatabaseBatchScheduler:
                     # 缓存查询结果
                     if operation.operation_type == "select":
                         cache_key = self._generate_cache_key(
-                            operation.operation_type,
-                            operation.model_class,
-                            operation.conditions
+                            operation.operation_type, operation.model_class, operation.conditions
                         )
                         self._set_cache(cache_key, result)
 
@@ -287,12 +273,9 @@ class DatabaseBatchScheduler:
                         else:
                             # 需要根据条件过滤结果
                             op_result = [
-                                item for item in data
-                                if all(
-                                    getattr(item, k) == v
-                                    for k, v in op.conditions.items()
-                                    if hasattr(item, k)
-                                )
+                                item
+                                for item in data
+                                if all(getattr(item, k) == v for k, v in op.conditions.items() if hasattr(item, k))
                             ]
                         results.append(op_result)
 
@@ -429,7 +412,7 @@ class DatabaseBatchScheduler:
             **self.stats,
             "cache_size": len(self._result_cache),
             "queue_sizes": {k: len(v) for k, v in self.operation_queues.items()},
-            "is_running": self._is_running
+            "is_running": self._is_running,
         }
 
 
@@ -452,43 +435,25 @@ async def get_batch_session():
 # 便捷函数
 async def batch_select(model_class: Any, conditions: dict[str, Any]) -> Any:
     """批量查询"""
-    operation = BatchOperation(
-        operation_type="select",
-        model_class=model_class,
-        conditions=conditions
-    )
+    operation = BatchOperation(operation_type="select", model_class=model_class, conditions=conditions)
     return await db_batch_scheduler.add_operation(operation)
 
 
 async def batch_insert(model_class: Any, data: dict[str, Any]) -> int:
     """批量插入"""
-    operation = BatchOperation(
-        operation_type="insert",
-        model_class=model_class,
-        conditions={},
-        data=data
-    )
+    operation = BatchOperation(operation_type="insert", model_class=model_class, conditions={}, data=data)
     return await db_batch_scheduler.add_operation(operation)
 
 
 async def batch_update(model_class: Any, conditions: dict[str, Any], data: dict[str, Any]) -> int:
     """批量更新"""
-    operation = BatchOperation(
-        operation_type="update",
-        model_class=model_class,
-        conditions=conditions,
-        data=data
-    )
+    operation = BatchOperation(operation_type="update", model_class=model_class, conditions=conditions, data=data)
     return await db_batch_scheduler.add_operation(operation)
 
 
 async def batch_delete(model_class: Any, conditions: dict[str, Any]) -> int:
     """批量删除"""
-    operation = BatchOperation(
-        operation_type="delete",
-        model_class=model_class,
-        conditions=conditions
-    )
+    operation = BatchOperation(operation_type="delete", model_class=model_class, conditions=conditions)
     return await db_batch_scheduler.add_operation(operation)
 
 

@@ -12,5 +12,5 @@ __plugin_meta__ = PluginMetadata(
     categories=["protocol"],
     extra={
         "is_built_in": False,
-    }
+    },
 )

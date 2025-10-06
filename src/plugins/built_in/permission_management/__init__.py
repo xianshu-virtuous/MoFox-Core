@@ -12,5 +12,5 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "is_built_in": True,
         "plugin_type": "permission",
-    }
+    },
 )

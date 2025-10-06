@@ -313,7 +313,9 @@ class EnergyManager:
 
                 # 确保 score 是 float 类型
                 if not isinstance(score, int | float):
-                    logger.warning(f"计算器 {calculator.__class__.__name__} 返回了非数值类型: {type(score)}，跳过此组件")
+                    logger.warning(
+                        f"计算器 {calculator.__class__.__name__} 返回了非数值类型: {type(score)}，跳过此组件"
+                    )
                     continue
 
                 component_scores[calculator.__class__.__name__] = float(score)

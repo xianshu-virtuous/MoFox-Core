@@ -8,8 +8,5 @@ __plugin_meta__ = PluginMetadata(
     author="MoFox",
     keywords=["chatter", "affinity", "conversation"],
     categories=["Chat", "AI"],
-    extra={
-        "is_built_in": True
-    }
+    extra={"is_built_in": True},
 )
-

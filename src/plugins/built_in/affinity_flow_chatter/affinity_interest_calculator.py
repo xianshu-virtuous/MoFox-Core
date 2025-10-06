@@ -111,9 +111,11 @@ class AffinityInterestCalculator(BaseInterestCalculator):
                 + mentioned_score * self.score_weights["mentioned"]
             )
 
-            logger.debug(f"[Affinity兴趣计算] 综合得分计算: {interest_match_score:.3f}*{self.score_weights['interest_match']} + "
-                        f"{relationship_score:.3f}*{self.score_weights['relationship']} + "
-                        f"{mentioned_score:.3f}*{self.score_weights['mentioned']} = {total_score:.3f}")
+            logger.debug(
+                f"[Affinity兴趣计算] 综合得分计算: {interest_match_score:.3f}*{self.score_weights['interest_match']} + "
+                f"{relationship_score:.3f}*{self.score_weights['relationship']} + "
+                f"{mentioned_score:.3f}*{self.score_weights['mentioned']} = {total_score:.3f}"
+            )
 
             # 5. 考虑连续不回复的概率提升
             adjusted_score = self._apply_no_reply_boost(total_score)
@@ -135,8 +137,10 @@ class AffinityInterestCalculator(BaseInterestCalculator):
 
             calculation_time = time.time() - start_time
 
-            logger.debug(f"Affinity兴趣值计算完成 - 消息 {message_id}: {adjusted_score:.3f} "
-                        f"(匹配:{interest_match_score:.2f}, 关系:{relationship_score:.2f}, 提及:{mentioned_score:.2f})")
+            logger.debug(
+                f"Affinity兴趣值计算完成 - 消息 {message_id}: {adjusted_score:.3f} "
+                f"(匹配:{interest_match_score:.2f}, 关系:{relationship_score:.2f}, 提及:{mentioned_score:.2f})"
+            )
 
             return InterestCalculationResult(
                 success=True,
@@ -145,16 +149,13 @@ class AffinityInterestCalculator(BaseInterestCalculator):
                 should_take_action=should_take_action,
                 should_reply=should_reply,
                 should_act=should_take_action,
-                calculation_time=calculation_time
+                calculation_time=calculation_time,
             )
 
         except Exception as e:
             logger.error(f"Affinity兴趣值计算失败: {e}", exc_info=True)
             return InterestCalculationResult(
-                success=False,
-                message_id=getattr(message, "message_id", ""),
-                interest_value=0.0,
-                error_message=str(e)
+                success=False, message_id=getattr(message, "message_id", ""), interest_value=0.0, error_message=str(e)
             )
 
     async def _calculate_interest_match_score(self, content: str, keywords: list[str] | None = None) -> float:

@@ -8,10 +8,7 @@ __plugin_meta__ = PluginMetadata(
     author="MoFox-Studio",
     license="GPL-v3.0-or-later",
     repository_url="https://github.com/MoFox-Studio",
-    keywords=["主动思考","自己发消息"],
+    keywords=["主动思考", "自己发消息"],
     categories=["Chat", "Integration"],
-    extra={
-        "is_built_in": True,
-        "plugin_type": "functional"
-    }
+    extra={"is_built_in": True, "plugin_type": "functional"},
 )

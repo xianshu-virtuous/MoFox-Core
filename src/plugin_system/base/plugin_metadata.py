@@ -7,6 +7,7 @@ class PluginMetadata:
     """
     插件元数据，用于存储插件的开发者信息和用户帮助信息。
     """
+
     name: str  # 插件名称 (供用户查看)
     description: str  # 插件功能描述
     usage: str  # 插件使用方法

@@ -548,7 +548,7 @@ class SetEmojiLikePlugin(BasePlugin):
     config_section_descriptions = {"plugin": "插件基本信息", "components": "插件组件"}
 
     # 配置Schema定义
-    config_schema: ClassVar[dict ]= {
+    config_schema: ClassVar[dict] = {
         "plugin": {
             "name": ConfigField(type=str, default="set_emoji_like", description="插件名称"),
             "version": ConfigField(type=str, default="1.0.0", description="插件版本"),

@@ -79,7 +79,7 @@ class StreamLoopManager:
                 logger.info(f"正在取消 {len(cancel_tasks)} 个流循环任务...")
                 await asyncio.gather(
                     *[self._wait_for_task_cancel(stream_id, task) for stream_id, task in cancel_tasks],
-                    return_exceptions=True
+                    return_exceptions=True,
                 )
 
             # 取消所有活跃的 chatter 处理任务
@@ -115,6 +115,7 @@ class StreamLoopManager:
         # 使用自适应流管理器获取槽位
         try:
             from src.chat.message_manager.adaptive_stream_manager import get_adaptive_stream_manager
+
             adaptive_manager = get_adaptive_stream_manager()
 
             if adaptive_manager.is_running:
@@ -123,9 +124,7 @@ class StreamLoopManager:
 
                 # 获取处理槽位
                 slot_acquired = await adaptive_manager.acquire_stream_slot(
-                    stream_id=stream_id,
-                    priority=priority,
-                    force=force
+                    stream_id=stream_id, priority=priority, force=force
                 )
 
                 if slot_acquired:
@@ -140,10 +139,7 @@ class StreamLoopManager:
 
         # 创建流循环任务
         try:
-            loop_task = asyncio.create_task(
-                self._stream_loop_worker(stream_id),
-                name=f"stream_loop_{stream_id}"
-            )
+            loop_task = asyncio.create_task(self._stream_loop_worker(stream_id), name=f"stream_loop_{stream_id}")
             self.stream_loops[stream_id] = loop_task
             # 更新统计信息
             self.stats["active_streams"] += 1
@@ -156,6 +152,7 @@ class StreamLoopManager:
             logger.error(f"启动流循环任务失败 {stream_id}: {e}")
             # 释放槽位
             from src.chat.message_manager.adaptive_stream_manager import get_adaptive_stream_manager
+
             adaptive_manager = get_adaptive_stream_manager()
             adaptive_manager.release_stream_slot(stream_id)
 
@@ -179,8 +176,8 @@ class StreamLoopManager:
 
         except Exception:
             from src.chat.message_manager.adaptive_stream_manager import StreamPriority
-            return StreamPriority.NORMAL
 
+            return StreamPriority.NORMAL
 
     async def stop_stream_loop(self, stream_id: str) -> bool:
         """停止指定流的循环任务
@@ -244,11 +241,12 @@ class StreamLoopManager:
                     # 3. 更新自适应管理器指标
                     try:
                         from src.chat.message_manager.adaptive_stream_manager import get_adaptive_stream_manager
+
                         adaptive_manager = get_adaptive_stream_manager()
                         adaptive_manager.update_stream_metrics(
                             stream_id,
                             message_rate=unread_count / 5.0 if unread_count > 0 else 0.0,  # 简化计算
-                            last_activity=time.time()
+                            last_activity=time.time(),
                         )
                     except Exception as e:
                         logger.debug(f"更新流指标失败: {e}")
@@ -300,6 +298,7 @@ class StreamLoopManager:
             # 释放自适应管理器的槽位
             try:
                 from src.chat.message_manager.adaptive_stream_manager import get_adaptive_stream_manager
+
                 adaptive_manager = get_adaptive_stream_manager()
                 adaptive_manager.release_stream_slot(stream_id)
                 logger.debug(f"释放自适应流处理槽位: {stream_id}")
@@ -553,12 +552,12 @@ class StreamLoopManager:
                     existing_task.cancel()
                     # 创建异步任务来等待取消完成，并添加异常处理
                     cancel_task = asyncio.create_task(
-                        self._wait_for_task_cancel(stream_id, existing_task),
-                        name=f"cancel_existing_loop_{stream_id}"
+                        self._wait_for_task_cancel(stream_id, existing_task), name=f"cancel_existing_loop_{stream_id}"
                     )
                     # 为取消任务添加异常处理，避免孤儿任务
                     cancel_task.add_done_callback(
-                        lambda task: logger.debug(f"取消任务完成: {stream_id}") if not task.exception()
+                        lambda task: logger.debug(f"取消任务完成: {stream_id}")
+                        if not task.exception()
                         else logger.error(f"取消任务异常: {stream_id} - {task.exception()}")
                     )
                 # 从字典中移除
@@ -582,10 +581,7 @@ class StreamLoopManager:
             logger.info(f"流 {stream_id} 当前未读消息数: {unread_count}")
 
             # 创建新的流循环任务
-            new_task = asyncio.create_task(
-                self._stream_loop(stream_id),
-                name=f"force_stream_loop_{stream_id}"
-            )
+            new_task = asyncio.create_task(self._stream_loop(stream_id), name=f"force_stream_loop_{stream_id}")
             self.stream_loops[stream_id] = new_task
             self.stats["total_loops"] += 1
 

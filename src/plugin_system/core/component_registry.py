@@ -319,7 +319,9 @@ class ComponentRegistry:
         return True
 
     def _register_interest_calculator_component(
-        self, interest_calculator_info: "InterestCalculatorInfo", interest_calculator_class: type["BaseInterestCalculator"]
+        self,
+        interest_calculator_info: "InterestCalculatorInfo",
+        interest_calculator_class: type["BaseInterestCalculator"],
     ) -> bool:
         """注册InterestCalculator组件到特定注册表"""
         calculator_name = interest_calculator_info.name
@@ -327,7 +329,9 @@ class ComponentRegistry:
         if not calculator_name:
             logger.error(f"InterestCalculator组件 {interest_calculator_class.__name__} 必须指定名称")
             return False
-        if not isinstance(interest_calculator_info, InterestCalculatorInfo) or not issubclass(interest_calculator_class, BaseInterestCalculator):
+        if not isinstance(interest_calculator_info, InterestCalculatorInfo) or not issubclass(
+            interest_calculator_class, BaseInterestCalculator
+        ):
             logger.error(f"注册失败: {calculator_name} 不是有效的InterestCalculator")
             return False
 

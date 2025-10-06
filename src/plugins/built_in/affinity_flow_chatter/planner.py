@@ -132,7 +132,6 @@ class ChatterActionPlanner:
                         if message_should_act:
                             aggregate_should_act = True
 
-
                     except Exception as e:
                         logger.warning(f"处理消息 {message.message_id} 失败: {e}")
                         message.interest_value = 0.0

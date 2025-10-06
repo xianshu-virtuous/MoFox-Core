@@ -17,6 +17,7 @@ logger = get_logger("adaptive_stream_manager")
 
 class StreamPriority(Enum):
     """流优先级"""
+
     LOW = 1
     NORMAL = 2
     HIGH = 3
@@ -26,6 +27,7 @@ class StreamPriority(Enum):
 @dataclass
 class SystemMetrics:
     """系统指标"""
+
     cpu_usage: float = 0.0
     memory_usage: float = 0.0
     active_coroutines: int = 0
@@ -36,6 +38,7 @@ class SystemMetrics:
 @dataclass
 class StreamMetrics:
     """流指标"""
+
     stream_id: str
     priority: StreamPriority
     message_rate: float = 0.0  # 消息速率（消息/分钟）
@@ -56,7 +59,7 @@ class AdaptiveStreamManager:
         metrics_window: float = 60.0,  # 指标窗口时间
         adjustment_interval: float = 30.0,  # 调整间隔
         cpu_threshold_high: float = 0.8,  # CPU高负载阈值
-        cpu_threshold_low: float = 0.3,   # CPU低负载阈值
+        cpu_threshold_low: float = 0.3,  # CPU低负载阈值
         memory_threshold_high: float = 0.85,  # 内存高负载阈值
     ):
         self.base_concurrent_limit = base_concurrent_limit
@@ -139,10 +142,7 @@ class AdaptiveStreamManager:
         logger.info("自适应流管理器已停止")
 
     async def acquire_stream_slot(
-        self,
-        stream_id: str,
-        priority: StreamPriority = StreamPriority.NORMAL,
-        force: bool = False
+        self, stream_id: str, priority: StreamPriority = StreamPriority.NORMAL, force: bool = False
     ) -> bool:
         """
         获取流处理槽位
@@ -165,10 +165,7 @@ class AdaptiveStreamManager:
 
         # 更新流指标
         if stream_id not in self.stream_metrics:
-            self.stream_metrics[stream_id] = StreamMetrics(
-                stream_id=stream_id,
-                priority=priority
-            )
+            self.stream_metrics[stream_id] = StreamMetrics(stream_id=stream_id, priority=priority)
         self.stream_metrics[stream_id].last_activity = current_time
 
         # 检查是否已经活跃
@@ -271,8 +268,10 @@ class AdaptiveStreamManager:
 
         # 如果最近有活跃且响应时间较长，可能需要强制分发
         current_time = time.time()
-        if (current_time - metrics.last_activity < 300 and  # 5分钟内有活动
-            metrics.response_time > 5.0):  # 响应时间超过5秒
+        if (
+            current_time - metrics.last_activity < 300  # 5分钟内有活动
+            and metrics.response_time > 5.0
+        ):  # 响应时间超过5秒
             return True
 
         return False
@@ -324,26 +323,20 @@ class AdaptiveStreamManager:
                 memory_usage=memory_usage,
                 active_coroutines=active_coroutines,
                 event_loop_lag=event_loop_lag,
-                timestamp=time.time()
+                timestamp=time.time(),
             )
 
             self.system_metrics.append(metrics)
 
             # 保持指标窗口大小
             cutoff_time = time.time() - self.metrics_window
-            self.system_metrics = [
-                m for m in self.system_metrics
-                if m.timestamp > cutoff_time
-            ]
+            self.system_metrics = [m for m in self.system_metrics if m.timestamp > cutoff_time]
 
             # 更新统计信息
             self.stats["avg_concurrent_streams"] = (
                 self.stats["avg_concurrent_streams"] * 0.9 + len(self.active_streams) * 0.1
             )
-            self.stats["peak_concurrent_streams"] = max(
-                self.stats["peak_concurrent_streams"],
-                len(self.active_streams)
-            )
+            self.stats["peak_concurrent_streams"] = max(self.stats["peak_concurrent_streams"], len(self.active_streams))
 
         except Exception as e:
             logger.error(f"收集系统指标失败: {e}")
@@ -445,14 +438,16 @@ class AdaptiveStreamManager:
     def get_stats(self) -> dict:
         """获取统计信息"""
         stats = self.stats.copy()
-        stats.update({
-            "current_limit": self.current_limit,
-            "active_streams": len(self.active_streams),
-            "pending_streams": len(self.pending_streams),
-            "is_running": self.is_running,
-            "system_cpu": self.system_metrics[-1].cpu_usage if self.system_metrics else 0,
-            "system_memory": self.system_metrics[-1].memory_usage if self.system_metrics else 0,
-        })
+        stats.update(
+            {
+                "current_limit": self.current_limit,
+                "active_streams": len(self.active_streams),
+                "pending_streams": len(self.pending_streams),
+                "is_running": self.is_running,
+                "system_cpu": self.system_metrics[-1].cpu_usage if self.system_metrics else 0,
+                "system_memory": self.system_metrics[-1].memory_usage if self.system_metrics else 0,
+            }
+        )
 
         # 计算接受率
         if stats["total_requests"] > 0:

@@ -386,7 +386,7 @@ class OpenaiClient(BaseClient):
     # 类级别的全局缓存：所有 OpenaiClient 实例共享
     _global_client_cache: dict[int, AsyncOpenAI] = {}
     """全局 AsyncOpenAI 客户端缓存：config_hash -> AsyncOpenAI 实例"""
-    
+
     def __init__(self, api_provider: APIProvider):
         super().__init__(api_provider)
         self._config_hash = self._calculate_config_hash()
@@ -404,33 +404,31 @@ class OpenaiClient(BaseClient):
     def _create_client(self) -> AsyncOpenAI:
         """
         获取或创建 OpenAI 客户端实例（全局缓存）
-        
+
         多个 OpenaiClient 实例如果配置相同（base_url + api_key + timeout），
         将共享同一个 AsyncOpenAI 客户端实例，最大化连接池复用。
         """
         # 检查全局缓存
         if self._config_hash in self._global_client_cache:
             return self._global_client_cache[self._config_hash]
-        
+
         # 创建新的 AsyncOpenAI 实例
         logger.debug(
-            f"创建新的 AsyncOpenAI 客户端实例 "
-            f"(base_url={self.api_provider.base_url}, "
-            f"config_hash={self._config_hash})"
+            f"创建新的 AsyncOpenAI 客户端实例 (base_url={self.api_provider.base_url}, config_hash={self._config_hash})"
         )
-        
+
         client = AsyncOpenAI(
             base_url=self.api_provider.base_url,
             api_key=self.api_provider.get_api_key(),
             max_retries=0,
             timeout=self.api_provider.timeout,
         )
-        
+
         # 存入全局缓存
         self._global_client_cache[self._config_hash] = client
-        
+
         return client
-    
+
     @classmethod
     def get_cache_stats(cls) -> dict:
         """获取全局缓存统计信息"""

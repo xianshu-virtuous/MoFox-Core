@@ -121,13 +121,14 @@ class VideoAnalyzer:
     async def _analyze_batch(self, frames: list[tuple[str, float]], question: str | None) -> str:
         from src.llm_models.payload_content.message import MessageBuilder, RoleType
         from src.llm_models.utils_model import RequestType
+
         prompt = self.batch_analysis_prompt.format(
             personality_core=self.personality_core, personality_side=self.personality_side
         )
         if question:
             prompt += f"\n用户关注: {question}"
         desc = [
-            (f"第{i+1}帧 (时间: {ts:.2f}s)" if self.enable_frame_timing else f"第{i+1}帧")
+            (f"第{i + 1}帧 (时间: {ts:.2f}s)" if self.enable_frame_timing else f"第{i + 1}帧")
             for i, (_b, ts) in enumerate(frames)
         ]
         prompt += "\n帧列表: " + ", ".join(desc)
@@ -151,16 +152,16 @@ class VideoAnalyzer:
     async def _analyze_sequential(self, frames: list[tuple[str, float]], question: str | None) -> str:
         results: list[str] = []
         for i, (b64, ts) in enumerate(frames):
-            prompt = f"分析第{i+1}帧" + (f" (时间: {ts:.2f}s)" if self.enable_frame_timing else "")
+            prompt = f"分析第{i + 1}帧" + (f" (时间: {ts:.2f}s)" if self.enable_frame_timing else "")
             if question:
                 prompt += f"\n关注: {question}"
             try:
                 text, _ = await self.video_llm.generate_response_for_image(
                     prompt=prompt, image_base64=b64, image_format="jpeg"
                 )
-                results.append(f"第{i+1}帧: {text}")
+                results.append(f"第{i + 1}帧: {text}")
             except Exception as e:  # pragma: no cover
-                results.append(f"第{i+1}帧: 失败 {e}")
+                results.append(f"第{i + 1}帧: 失败 {e}")
             if i < len(frames) - 1:
                 await asyncio.sleep(self.frame_analysis_delay)
         summary_prompt = "基于以下逐帧结果给出完整总结:\n\n" + "\n".join(results)
@@ -182,7 +183,9 @@ class VideoAnalyzer:
         mode = self.analysis_mode
         if mode == "auto":
             mode = "batch" if len(frames) <= 20 else "sequential"
-        text = await (self._analyze_batch(frames, question) if mode == "batch" else self._analyze_sequential(frames, question))
+        text = await (
+            self._analyze_batch(frames, question) if mode == "batch" else self._analyze_sequential(frames, question)
+        )
         return True, text
 
     async def analyze_video_from_bytes(

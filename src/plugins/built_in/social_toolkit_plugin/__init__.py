@@ -10,8 +10,5 @@ __plugin_meta__ = PluginMetadata(
     repository_url="https://github.com/MoFox-Studio",
     keywords=["emoji", "reaction", "like", "表情", "回应", "点赞"],
     categories=["Chat", "Integration"],
-    extra={
-        "is_built_in": "true",
-        "plugin_type": "functional"
-    }
+    extra={"is_built_in": "true", "plugin_type": "functional"},
 )

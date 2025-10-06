@@ -79,7 +79,9 @@ class InterestManager:
 
                 # 如果已有组件在运行，先清理并替换
                 if self._current_calculator:
-                    logger.info(f"替换现有兴趣值计算组件: {self._current_calculator.component_name} -> {calculator.component_name}")
+                    logger.info(
+                        f"替换现有兴趣值计算组件: {self._current_calculator.component_name} -> {calculator.component_name}"
+                    )
                     await self._current_calculator.cleanup()
                 else:
                     logger.info(f"注册新的兴趣值计算组件: {calculator.component_name}")
@@ -114,7 +116,7 @@ class InterestManager:
                 success=False,
                 message_id=getattr(message, "message_id", ""),
                 interest_value=0.3,
-                error_message="没有可用的兴趣值计算组件"
+                error_message="没有可用的兴趣值计算组件",
             )
 
         # 使用 create_task 异步执行计算
@@ -133,7 +135,7 @@ class InterestManager:
                 interest_value=0.5,  # 固定默认兴趣值
                 should_reply=False,
                 should_act=False,
-                error_message=f"计算超时({timeout}s)，使用默认值"
+                error_message=f"计算超时({timeout}s)，使用默认值",
             )
         except Exception as e:
             # 发生异常，返回默认结果
@@ -142,7 +144,7 @@ class InterestManager:
                 success=False,
                 message_id=getattr(message, "message_id", ""),
                 interest_value=0.3,
-                error_message=f"计算异常: {e!s}"
+                error_message=f"计算异常: {e!s}",
             )
 
     async def _async_calculate(self, message: "DatabaseMessages") -> InterestCalculationResult:
@@ -171,7 +173,7 @@ class InterestManager:
                 message_id=getattr(message, "message_id", ""),
                 interest_value=0.0,
                 error_message=f"计算异常: {e!s}",
-                calculation_time=time.time() - start_time
+                calculation_time=time.time() - start_time,
             )
 
     async def _calculation_worker(self):
@@ -179,10 +181,7 @@ class InterestManager:
         while not self._shutdown_event.is_set():
             try:
                 # 等待计算任务或关闭信号
-                await asyncio.wait_for(
-                    self._calculation_queue.get(),
-                    timeout=1.0
-                )
+                await asyncio.wait_for(self._calculation_queue.get(), timeout=1.0)
 
                 # 处理计算任务
                 # 这里可以实现批量处理逻辑
@@ -210,7 +209,7 @@ class InterestManager:
                 "failed_calculations": self._failed_calculations,
                 "success_rate": success_rate,
                 "last_calculation_time": self._last_calculation_time,
-                "current_calculator": self._current_calculator.component_name if self._current_calculator else None
+                "current_calculator": self._current_calculator.component_name if self._current_calculator else None,
             }
         }
 

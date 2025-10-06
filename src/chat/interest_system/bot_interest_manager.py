@@ -429,7 +429,9 @@ class BotInterestManager:
         except Exception as e:
             logger.error(f"❌ 计算相似度分数失败: {e}")
 
-    async def calculate_interest_match(self, message_text: str, keywords: list[str] | None = None) -> InterestMatchResult:
+    async def calculate_interest_match(
+        self, message_text: str, keywords: list[str] | None = None
+    ) -> InterestMatchResult:
         """计算消息与机器人兴趣的匹配度"""
         if not self.current_interests or not self._initialized:
             raise RuntimeError("❌ 兴趣标签系统未初始化")

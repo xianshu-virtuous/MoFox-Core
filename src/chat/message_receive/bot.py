@@ -561,7 +561,11 @@ class ChatBot:
 
                 # 将兴趣度结果同步回原始消息，便于后续流程使用
                 message.interest_value = getattr(db_message, "interest_value", getattr(message, "interest_value", 0.0))
-                setattr(message, "should_reply", getattr(db_message, "should_reply", getattr(message, "should_reply", False)))
+                setattr(
+                    message,
+                    "should_reply",
+                    getattr(db_message, "should_reply", getattr(message, "should_reply", False)),
+                )
                 setattr(message, "should_act", getattr(db_message, "should_act", getattr(message, "should_act", False)))
 
                 # 存储消息到数据库，只进行一次写入

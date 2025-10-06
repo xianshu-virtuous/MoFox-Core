@@ -63,7 +63,9 @@ class ColdStartTask(AsyncTask):
                         logger.info(f"【冷启动】发现全新用户 {chat_id}，准备发起第一次问候。")
                     elif stream.last_active_time < self.bot_start_time:
                         should_wake_up = True
-                        logger.info(f"【冷启动】发现沉睡的聊天流 {chat_id} (最后活跃于 {datetime.fromtimestamp(stream.last_active_time)})，准备唤醒。")
+                        logger.info(
+                            f"【冷启动】发现沉睡的聊天流 {chat_id} (最后活跃于 {datetime.fromtimestamp(stream.last_active_time)})，准备唤醒。"
+                        )
 
                     if should_wake_up:
                         person_id = person_api.get_person_id(platform, user_id)
@@ -166,7 +168,9 @@ class ProactiveThinkingTask(AsyncTask):
                                 continue
 
                             # 检查冷却时间
-                            recent_messages = await message_api.get_recent_messages(chat_id=stream.stream_id, limit=1,limit_mode="latest")
+                            recent_messages = await message_api.get_recent_messages(
+                                chat_id=stream.stream_id, limit=1, limit_mode="latest"
+                            )
                             last_message_time = recent_messages[0]["time"] if recent_messages else stream.create_time
                             time_since_last_active = time.time() - last_message_time
                             if time_since_last_active > next_interval:
@@ -209,7 +213,7 @@ class ProactiveThinkingTask(AsyncTask):
                 logger.info("日常唤醒任务被正常取消。")
                 break
             except Exception as e:
-                traceback.print_exc() # 打印完整的堆栈跟踪
+                traceback.print_exc()  # 打印完整的堆栈跟踪
                 logger.error(f"【日常唤醒】任务出现错误，将在60秒后重试: {e}", exc_info=True)
                 await asyncio.sleep(60)
 

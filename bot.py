@@ -33,6 +33,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
 logger.info("工作目录已设置")
 
+
 class ConfigManager:
     """配置管理器"""
 
@@ -96,6 +97,7 @@ class ConfigManager:
             logger.error(f"加载环境变量失败: {e}")
             return False
 
+
 class EULAManager:
     """EULA管理类"""
 
@@ -134,7 +136,9 @@ class EULAManager:
                     return
 
                 if attempts % 5 == 0:
-                    confirm_logger.critical(f"请修改 .env 文件中的 EULA_CONFIRMED=true (尝试 {attempts}/{MAX_EULA_CHECK_ATTEMPTS})")
+                    confirm_logger.critical(
+                        f"请修改 .env 文件中的 EULA_CONFIRMED=true (尝试 {attempts}/{MAX_EULA_CHECK_ATTEMPTS})"
+                    )
 
             except KeyboardInterrupt:
                 confirm_logger.info("用户取消，程序退出")
@@ -148,16 +152,14 @@ class EULAManager:
         confirm_logger.error("EULA确认超时，程序退出")
         sys.exit(1)
 
+
 class TaskManager:
     """任务管理器"""
 
     @staticmethod
     async def cancel_pending_tasks(loop, timeout=SHUTDOWN_TIMEOUT):
         """取消所有待处理的任务"""
-        remaining_tasks = [
-            t for t in asyncio.all_tasks(loop)
-            if t is not asyncio.current_task(loop) and not t.done()
-        ]
+        remaining_tasks = [t for t in asyncio.all_tasks(loop) if t is not asyncio.current_task(loop) and not t.done()]
 
         if not remaining_tasks:
             logger.info("没有待取消的任务")
@@ -171,10 +173,7 @@ class TaskManager:
 
         # 等待任务完成
         try:
-            results = await asyncio.wait_for(
-                asyncio.gather(*remaining_tasks, return_exceptions=True),
-                timeout=timeout
-            )
+            results = await asyncio.wait_for(asyncio.gather(*remaining_tasks, return_exceptions=True), timeout=timeout)
 
             # 检查任务结果
             for i, result in enumerate(results):
@@ -195,6 +194,7 @@ class TaskManager:
         """停止所有异步任务"""
         try:
             from src.manager.async_task_manager import async_task_manager
+
             await async_task_manager.stop_and_wait_all_tasks()
             return True
         except ImportError:
@@ -203,6 +203,7 @@ class TaskManager:
         except Exception as e:
             logger.error(f"停止异步任务失败: {e}")
             return False
+
 
 class ShutdownManager:
     """关闭管理器"""
@@ -236,6 +237,7 @@ class ShutdownManager:
             logger.error(f"麦麦关闭失败: {e}", exc_info=True)
             return False
 
+
 @asynccontextmanager
 async def create_event_loop_context():
     """创建事件循环的上下文管理器"""
@@ -260,6 +262,7 @@ async def create_event_loop_context():
                 except Exception as e:
                     logger.error(f"关闭事件循环失败: {e}")
 
+
 class DatabaseManager:
     """数据库连接管理器"""
 
@@ -278,7 +281,9 @@ class DatabaseManager:
             # 使用线程执行器运行潜在的阻塞操作
             await asyncio.to_thread(initialize_sql_database, global_config.database)
             elapsed_time = time.time() - start_time
-            logger.info(f"数据库连接初始化成功，使用 {global_config.database.database_type} 数据库，耗时: {elapsed_time:.2f}秒")
+            logger.info(
+                f"数据库连接初始化成功，使用 {global_config.database.database_type} 数据库，耗时: {elapsed_time:.2f}秒"
+            )
 
             return self
         except Exception as e:
@@ -290,6 +295,7 @@ class DatabaseManager:
         if exc_type:
             logger.error(f"数据库操作发生异常: {exc_val}")
         return False
+
 
 class ConfigurationValidator:
     """配置验证器"""
@@ -328,6 +334,7 @@ class ConfigurationValidator:
             logger.error(f"配置验证失败: {e}")
             return False
 
+
 class EasterEgg:
     """彩蛋功能"""
 
@@ -346,6 +353,7 @@ class EasterEgg:
         for i, char in enumerate(text):
             rainbow_text += rainbow_colors[i % len(rainbow_colors)] + char
         logger.info(rainbow_text)
+
 
 class MaiBotMain:
     """麦麦机器人主程序类"""
@@ -375,6 +383,7 @@ class MaiBotMain:
         try:
             start_time = time.time()
             from src.common.database.sqlalchemy_models import initialize_database as init_db
+
             await init_db()
             elapsed_time = time.time() - start_time
             logger.info(f"数据库表结构初始化完成，耗时: {elapsed_time:.2f}秒")
@@ -385,6 +394,7 @@ class MaiBotMain:
     def create_main_system(self):
         """创建MainSystem实例"""
         from src.main import MainSystem
+
         self.main_system = MainSystem()
         return self.main_system
 
@@ -411,10 +421,12 @@ class MaiBotMain:
 
         # 初始化知识库
         from src.chat.knowledge.knowledge_lib import initialize_lpmm_knowledge
+
         initialize_lpmm_knowledge()
 
         # 显示彩蛋
         EasterEgg.show()
+
 
 async def wait_for_user_input():
     """等待用户输入（异步方式）"""
@@ -431,6 +443,7 @@ async def wait_for_user_input():
     except Exception as e:
         logger.error(f"等待用户输入时发生错误: {e}")
         return False
+
 
 async def main_async():
     """主异步函数"""
@@ -455,10 +468,7 @@ async def main_async():
             user_input_done = asyncio.create_task(wait_for_user_input())
 
             # 使用wait等待任意一个任务完成
-            done, pending = await asyncio.wait(
-                [main_task, user_input_done],
-                return_when=asyncio.FIRST_COMPLETED
-            )
+            done, pending = await asyncio.wait([main_task, user_input_done], return_when=asyncio.FIRST_COMPLETED)
 
             # 如果用户输入任务完成（用户按了Ctrl+C），取消主任务
             if user_input_done in done and main_task not in done:
@@ -481,6 +491,7 @@ async def main_async():
             exit_code = 1
 
     return exit_code
+
 
 if __name__ == "__main__":
     exit_code = 0

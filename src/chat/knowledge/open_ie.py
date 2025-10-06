@@ -125,19 +125,19 @@ class OpenIE:
     def extract_entity_dict(self):
         """提取实体列表"""
         ner_output_dict = {
-                doc_item["idx"]: doc_item["extracted_entities"]
-                for doc_item in self.docs
-                if len(doc_item["extracted_entities"]) > 0
-            }
+            doc_item["idx"]: doc_item["extracted_entities"]
+            for doc_item in self.docs
+            if len(doc_item["extracted_entities"]) > 0
+        }
         return ner_output_dict
 
     def extract_triple_dict(self):
         """提取三元组列表"""
         triple_output_dict = {
-                doc_item["idx"]: doc_item["extracted_triples"]
-                for doc_item in self.docs
-                if len(doc_item["extracted_triples"]) > 0
-            }
+            doc_item["idx"]: doc_item["extracted_triples"]
+            for doc_item in self.docs
+            if len(doc_item["extracted_triples"]) > 0
+        }
         return triple_output_dict
 
     def extract_raw_paragraph_dict(self):

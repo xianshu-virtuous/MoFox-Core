@@ -64,7 +64,6 @@ class ChatterPlanFilter:
 
             llm_content, _ = await self.planner_llm.generate_response_async(prompt=prompt)
 
-
             if llm_content:
                 if global_config.debug.show_prompt:
                     logger.info(f"LLM规划器原始响应:{llm_content}")

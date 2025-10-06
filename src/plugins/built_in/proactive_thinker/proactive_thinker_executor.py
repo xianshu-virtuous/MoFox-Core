@@ -143,14 +143,16 @@ class ProactiveThinkerExecutor:
             else "今天没有日程安排。"
         )
 
-        recent_messages = await message_api.get_recent_messages(stream.stream_id,limit=50,limit_mode="latest",hours=12)
+        recent_messages = await message_api.get_recent_messages(
+            stream.stream_id, limit=50, limit_mode="latest", hours=12
+        )
         recent_chat_history = (
             await message_api.build_readable_messages_to_str(recent_messages) if recent_messages else "无"
         )
 
         action_history_list = await get_actions_by_timestamp_with_chat(
             chat_id=stream.stream_id,
-            timestamp_start=time.time() - 3600 * 24,  #过去24小时
+            timestamp_start=time.time() - 3600 * 24,  # 过去24小时
             timestamp_end=time.time(),
             limit=7,
         )
@@ -195,11 +197,9 @@ class ProactiveThinkerExecutor:
             person_id = person_api.get_person_id(user_info.platform, int(user_info.user_id))
             person_info_manager = get_person_info_manager()
             person_info = await person_info_manager.get_values(person_id, ["user_id", "platform", "person_name"])
-            cross_context_block = await Prompt.build_cross_context(
-                stream.stream_id, "s4u", person_info
-            )
+            cross_context_block = await Prompt.build_cross_context(stream.stream_id, "s4u", person_info)
 
-             # 获取关系信息
+            # 获取关系信息
             short_impression = await person_info_manager.get_value(person_id, "short_impression") or "无"
             impression = await person_info_manager.get_value(person_id, "impression") or "无"
             attitude = await person_info_manager.get_value(person_id, "attitude") or 50

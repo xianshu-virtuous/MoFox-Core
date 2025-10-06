@@ -60,7 +60,9 @@ class BasePlugin(PluginBase):
             if hasattr(component_class, "get_interest_calculator_info"):
                 return component_class.get_interest_calculator_info()
             else:
-                logger.warning(f"InterestCalculator类 {component_class.__name__} 缺少 get_interest_calculator_info 方法")
+                logger.warning(
+                    f"InterestCalculator类 {component_class.__name__} 缺少 get_interest_calculator_info 方法"
+                )
                 return None
 
         elif component_type == ComponentType.PLUS_COMMAND:
@@ -96,6 +98,7 @@ class BasePlugin(PluginBase):
             对应类型的ComponentInfo对象
         """
         return cls._get_component_info_from_class(component_class, component_type)
+
     @abstractmethod
     def get_plugin_components(
         self,

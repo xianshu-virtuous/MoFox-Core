@@ -67,6 +67,7 @@ class ToolExecutor:
         """异步初始化log_prefix和chat_stream"""
         if not self._log_prefix_initialized:
             from src.chat.message_receive.chat_stream import get_chat_manager
+
             self.chat_stream = await get_chat_manager().get_stream(self.chat_id)
             stream_name = await get_chat_manager().get_stream_name(self.chat_id)
             self.log_prefix = f"[{stream_name or self.chat_id}]"
@@ -283,6 +284,7 @@ class ToolExecutor:
             # 检查是否是MCP工具
             try:
                 from src.plugin_system.utils.mcp_tool_provider import mcp_tool_provider
+
                 if function_name in mcp_tool_provider.mcp_tools:
                     logger.info(f"{self.log_prefix}执行MCP工具: {function_name}")
                     result = await mcp_tool_provider.call_mcp_tool(function_name, function_args)

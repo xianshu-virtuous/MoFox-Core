@@ -273,8 +273,10 @@ class SingleStreamContextManager:
                     message.should_reply = result.should_reply
                     message.should_act = result.should_act
 
-                    logger.debug(f"消息 {message.message_id} 兴趣值已更新: {result.interest_value:.3f}, "
-                                f"should_reply: {result.should_reply}, should_act: {result.should_act}")
+                    logger.debug(
+                        f"消息 {message.message_id} 兴趣值已更新: {result.interest_value:.3f}, "
+                        f"should_reply: {result.should_reply}, should_act: {result.should_act}"
+                    )
                     return result.interest_value
                 else:
                     logger.warning(f"消息 {message.message_id} 兴趣值计算失败: {result.error_message}")

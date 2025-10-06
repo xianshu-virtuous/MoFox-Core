@@ -37,7 +37,9 @@ class DatabaseConfig(ValidatedConfigBase):
     connection_timeout: int = Field(default=10, ge=1, description="连接超时时间")
 
     # 批量动作记录存储配置
-    batch_action_storage_enabled: bool = Field(default=True, description="是否启用批量保存动作记录（开启后将多个动作一次性写入数据库，提升性能）")
+    batch_action_storage_enabled: bool = Field(
+        default=True, description="是否启用批量保存动作记录（开启后将多个动作一次性写入数据库，提升性能）"
+    )
 
 
 class BotConfig(ValidatedConfigBase):
@@ -355,7 +357,7 @@ class MemoryConfig(ValidatedConfigBase):
     # 双峰分布配置 [近期均值, 近期标准差, 近期权重, 远期均值, 远期标准差, 远期权重]
     hippocampus_distribution_config: list[float] = Field(
         default=[12.0, 8.0, 0.7, 48.0, 24.0, 0.3],
-        description="海马体双峰分布配置：[近期均值(h), 近期标准差(h), 近期权重, 远期均值(h), 远期标准差(h), 远期权重]"
+        description="海马体双峰分布配置：[近期均值(h), 近期标准差(h), 近期权重, 远期均值(h), 远期标准差(h), 远期权重]",
     )
 
     # 自适应采样配置
@@ -688,7 +690,6 @@ class AffinityFlowConfig(ValidatedConfigBase):
     mention_bot_adjustment_threshold: float = Field(default=0.3, description="提及bot后的调整阈值")
     mention_bot_interest_score: float = Field(default=0.6, description="提及bot的兴趣分")
     base_relationship_score: float = Field(default=0.5, description="基础人物关系分")
-
 
 
 class ProactiveThinkingConfig(ValidatedConfigBase):

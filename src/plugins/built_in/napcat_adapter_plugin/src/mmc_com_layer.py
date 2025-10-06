@@ -13,8 +13,8 @@ def create_router(plugin_config: dict):
     """创建路由器实例"""
     global router
     platform_name = config_api.get_plugin_config(plugin_config, "maibot_server.platform_name", "qq")
-    host = os.getenv("HOST","127.0.0.1")
-    port = os.getenv("PORT","8000")
+    host = os.getenv("HOST", "127.0.0.1")
+    port = os.getenv("PORT", "8000")
     logger.debug(f"初始化MaiBot连接，使用地址：{host}:{port}")
     route_config = RouteConfig(
         route_config={

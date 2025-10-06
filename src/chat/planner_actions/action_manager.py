@@ -196,18 +196,20 @@ class ChatterActionManager:
                         thinking_id=thinking_id or "",
                         action_done=True,
                         action_build_into_prompt=False,
-                        action_prompt_display=reason
+                        action_prompt_display=reason,
                     )
                 else:
-                    asyncio.create_task(database_api.store_action_info(
-                        chat_stream=chat_stream,
-                        action_build_into_prompt=False,
-                        action_prompt_display=reason,
-                        action_done=True,
-                        thinking_id=thinking_id,
-                        action_data={"reason": reason},
-                        action_name="no_reply",
-                    ))
+                    asyncio.create_task(
+                        database_api.store_action_info(
+                            chat_stream=chat_stream,
+                            action_build_into_prompt=False,
+                            action_prompt_display=reason,
+                            action_done=True,
+                            thinking_id=thinking_id,
+                            action_data={"reason": reason},
+                            action_name="no_reply",
+                        )
+                    )
 
                 # 自动清空所有未读消息
                 asyncio.create_task(self._clear_all_unread_messages(chat_stream.stream_id, "no_reply"))
@@ -228,7 +230,9 @@ class ChatterActionManager:
 
                 # 记录执行的动作到目标消息
                 if success:
-                    asyncio.create_task(self._record_action_to_message(chat_stream, action_name, target_message, action_data))
+                    asyncio.create_task(
+                        self._record_action_to_message(chat_stream, action_name, target_message, action_data)
+                    )
                     # 自动清空所有未读消息
                     if clear_unread_messages:
                         asyncio.create_task(self._clear_all_unread_messages(chat_stream.stream_id, action_name))
@@ -496,7 +500,7 @@ class ChatterActionManager:
                 thinking_id=thinking_id or "",
                 action_done=True,
                 action_build_into_prompt=False,
-                action_prompt_display=action_prompt_display
+                action_prompt_display=action_prompt_display,
             )
         else:
             await database_api.store_action_info(
@@ -618,9 +622,15 @@ class ChatterActionManager:
         self._pending_actions = []  # 清空队列
         logger.debug("已禁用批量存储模式")
 
-    def add_action_to_batch(self, action_name: str, action_data: dict, thinking_id: str = "",
-                           action_done: bool = True, action_build_into_prompt: bool = False,
-                           action_prompt_display: str = ""):
+    def add_action_to_batch(
+        self,
+        action_name: str,
+        action_data: dict,
+        thinking_id: str = "",
+        action_done: bool = True,
+        action_build_into_prompt: bool = False,
+        action_prompt_display: str = "",
+    ):
         """添加动作到批量存储列表"""
         if not self._batch_storage_enabled:
             return False
@@ -632,7 +642,7 @@ class ChatterActionManager:
             "action_done": action_done,
             "action_build_into_prompt": action_build_into_prompt,
             "action_prompt_display": action_prompt_display,
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
         self._pending_actions.append(action_record)
         logger.debug(f"已添加动作到批量存储列表: {action_name} (当前待处理: {len(self._pending_actions)} 个)")
@@ -658,7 +668,7 @@ class ChatterActionManager:
                         action_done=action_data.get("action_done", True),
                         action_build_into_prompt=action_data.get("action_build_into_prompt", False),
                         action_prompt_display=action_data.get("action_prompt_display", ""),
-                        thinking_id=action_data.get("thinking_id", "")
+                        thinking_id=action_data.get("thinking_id", ""),
                     )
                     if result:
                         stored_count += 1

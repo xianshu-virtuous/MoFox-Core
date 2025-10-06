@@ -149,7 +149,6 @@ class AffinityChatter(BaseChatter):
         """
         return self.planner.get_mood_stats()
 
-
     def reset_stats(self):
         """重置统计信息"""
         self.stats = {

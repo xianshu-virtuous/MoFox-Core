@@ -24,9 +24,12 @@ from src.chat.memory_system.memory_query_planner import MemoryQueryPlanner
 # 记忆采样模式枚举
 class MemorySamplingMode(Enum):
     """记忆采样模式"""
+
     HIPPOCAMPUS = "hippocampus"  # 海马体模式：定时任务采样
-    IMMEDIATE = "immediate"       # 即时模式：回复后立即采样
-    ALL = "all"                   # 所有模式：同时使用海马体和即时采样
+    IMMEDIATE = "immediate"  # 即时模式：回复后立即采样
+    ALL = "all"  # 所有模式：同时使用海马体和即时采样
+
+
 from src.common.logger import get_logger
 from src.config.config import global_config, model_config
 from src.llm_models.utils_model import LLMRequest
@@ -165,7 +168,6 @@ class MemorySystem:
     async def initialize(self):
         """异步初始化记忆系统"""
         try:
-
             # 初始化LLM模型
             fallback_task = getattr(self.llm_model, "model_for_task", None) if self.llm_model else None
 
@@ -264,6 +266,7 @@ class MemorySystem:
             if global_config.memory.enable_hippocampus_sampling:
                 try:
                     from .hippocampus_sampler import initialize_hippocampus_sampler
+
                     self.hippocampus_sampler = await initialize_hippocampus_sampler(self)
                     logger.info("✅ 海马体采样器初始化成功")
                 except Exception as e:
@@ -321,7 +324,11 @@ class MemorySystem:
             return []
 
     async def build_memory_from_conversation(
-        self, conversation_text: str, context: dict[str, Any], timestamp: float | None = None, bypass_interval: bool = False
+        self,
+        conversation_text: str,
+        context: dict[str, Any],
+        timestamp: float | None = None,
+        bypass_interval: bool = False,
     ) -> list[MemoryChunk]:
         """从对话中构建记忆
 
@@ -559,7 +566,6 @@ class MemorySystem:
             # 获取配置的采样模式
             sampling_mode = getattr(global_config.memory, "memory_sampling_mode", "precision")
             current_mode = MemorySamplingMode(sampling_mode)
-
 
             context["__sampling_mode"] = current_mode.value
             logger.debug(f"使用记忆采样模式: {current_mode.value}")

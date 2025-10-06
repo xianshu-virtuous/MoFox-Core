@@ -15,6 +15,7 @@
 
 返回: 适合直接嵌入提示词的大段文本；若无有效记忆返回空串。
 """
+
 from __future__ import annotations
 
 import time

@@ -53,8 +53,6 @@ class StreamContext(BaseDataModel):
     priority_mode: str | None = None
     priority_info: dict | None = None
 
-
-
     def add_action_to_message(self, message_id: str, action: str):
         """
         向指定消息添加执行的动作
@@ -74,9 +72,6 @@ class StreamContext(BaseDataModel):
             if message.message_id == message_id:
                 message.add_action(action)
                 break
-
-
-
 
     def mark_message_as_read(self, message_id: str):
         """标记消息为已读"""

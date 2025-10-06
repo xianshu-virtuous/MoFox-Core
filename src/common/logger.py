@@ -304,8 +304,7 @@ def load_log_config():  # sourcery skip: use-contextlib-suppress
         "library_log_levels": {"aiohttp": "WARNING"},
     }
 
-
-        # 误加的即刻线程启动已移除；真正的线程在 start_log_cleanup_task 中按午夜调度
+    # 误加的即刻线程启动已移除；真正的线程在 start_log_cleanup_task 中按午夜调度
 
     try:
         if config_path.exists():

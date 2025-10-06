@@ -50,14 +50,16 @@ def _convert_messages_to_mcp(messages: list[Message]) -> list[dict[str, Any]]:
             for item in message.content:
                 if isinstance(item, tuple):
                     # 图片内容
-                    content_parts.append({
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": f"image/{item[0].lower()}",
-                            "data": item[1],
-                        },
-                    })
+                    content_parts.append(
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": f"image/{item[0].lower()}",
+                                "data": item[1],
+                            },
+                        }
+                    )
                 elif isinstance(item, str):
                     # 文本内容
                     content_parts.append({"type": "text", "text": item})
@@ -138,9 +140,7 @@ async def _parse_sse_stream(
         async with session.post(url, json=payload, headers=headers) as response:
             if response.status != 200:
                 error_text = await response.text()
-                raise RespNotOkException(
-                    response.status, f"MCP SSE请求失败: {error_text}"
-                )
+                raise RespNotOkException(response.status, f"MCP SSE请求失败: {error_text}")
 
             # 解析SSE流
             async for line in response.content:
@@ -258,10 +258,7 @@ async def _parse_sse_stream(
         response.reasoning_content = reasoning_buffer.getvalue()
 
     if tool_calls_buffer:
-        response.tool_calls = [
-            ToolCall(call_id, func_name, args)
-            for call_id, func_name, args in tool_calls_buffer
-        ]
+        response.tool_calls = [ToolCall(call_id, func_name, args) for call_id, func_name, args in tool_calls_buffer]
 
     # 关闭缓冲区
     content_buffer.close()
@@ -351,9 +348,7 @@ class MCPSSEClient(BaseClient):
         url = f"{self.api_provider.base_url}/v1/messages"
 
         try:
-            response, usage_record = await _parse_sse_stream(
-                session, url, payload, headers, interrupt_flag
-            )
+            response, usage_record = await _parse_sse_stream(session, url, payload, headers, interrupt_flag)
         except Exception as e:
             logger.error(f"MCP SSE请求失败: {e}")
             raise

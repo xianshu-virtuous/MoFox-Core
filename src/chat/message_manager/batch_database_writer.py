@@ -20,6 +20,7 @@ logger = get_logger("batch_database_writer")
 @dataclass
 class StreamUpdatePayload:
     """流更新数据结构"""
+
     stream_id: str
     update_data: dict[str, Any]
     priority: int = 0  # 优先级，数字越大优先级越高
@@ -95,12 +96,7 @@ class BatchDatabaseWriter:
 
         logger.info("批量数据库写入器已停止")
 
-    async def schedule_stream_update(
-        self,
-        stream_id: str,
-        update_data: dict[str, Any],
-        priority: int = 0
-    ) -> bool:
+    async def schedule_stream_update(self, stream_id: str, update_data: dict[str, Any], priority: int = 0) -> bool:
         """
         调度流更新
 
@@ -119,11 +115,7 @@ class BatchDatabaseWriter:
                 return True
 
             # 创建更新载荷
-            payload = StreamUpdatePayload(
-                stream_id=stream_id,
-                update_data=update_data,
-                priority=priority
-            )
+            payload = StreamUpdatePayload(stream_id=stream_id, update_data=update_data, priority=priority)
 
             # 非阻塞方式加入队列
             try:
@@ -178,10 +170,7 @@ class BatchDatabaseWriter:
                 if remaining_time == 0:
                     break
 
-                payload = await asyncio.wait_for(
-                    self.write_queue.get(),
-                    timeout=remaining_time
-                )
+                payload = await asyncio.wait_for(self.write_queue.get(), timeout=remaining_time)
                 batch.append(payload)
 
             except asyncio.TimeoutError:
@@ -203,7 +192,10 @@ class BatchDatabaseWriter:
             # 合并同一流ID的更新（保留最新的）
             merged_updates = {}
             for payload in batch:
-                if payload.stream_id not in merged_updates or payload.timestamp > merged_updates[payload.stream_id].timestamp:
+                if (
+                    payload.stream_id not in merged_updates
+                    or payload.timestamp > merged_updates[payload.stream_id].timestamp
+                ):
                     merged_updates[payload.stream_id] = payload
 
             # 批量写入
@@ -211,9 +203,7 @@ class BatchDatabaseWriter:
 
             # 更新统计
             self.stats["batch_writes"] += 1
-            self.stats["avg_batch_size"] = (
-                self.stats["avg_batch_size"] * 0.9 + len(batch) * 0.1
-            )  # 滑动平均
+            self.stats["avg_batch_size"] = self.stats["avg_batch_size"] * 0.9 + len(batch) * 0.1  # 滑动平均
             self.stats["last_flush_time"] = start_time
 
             logger.debug(f"批量写入完成: {len(batch)} 个更新，耗时 {time.time() - start_time:.3f}s")
@@ -238,31 +228,22 @@ class BatchDatabaseWriter:
                 # 根据数据库类型选择不同的插入/更新策略
                 if global_config.database.database_type == "sqlite":
                     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-                    stmt = sqlite_insert(ChatStreams).values(
-                        stream_id=stream_id, **update_data
-                    )
-                    stmt = stmt.on_conflict_do_update(
-                        index_elements=["stream_id"],
-                        set_=update_data
-                    )
+
+                    stmt = sqlite_insert(ChatStreams).values(stream_id=stream_id, **update_data)
+                    stmt = stmt.on_conflict_do_update(index_elements=["stream_id"], set_=update_data)
                 elif global_config.database.database_type == "mysql":
                     from sqlalchemy.dialects.mysql import insert as mysql_insert
-                    stmt = mysql_insert(ChatStreams).values(
-                        stream_id=stream_id, **update_data
-                    )
+
+                    stmt = mysql_insert(ChatStreams).values(stream_id=stream_id, **update_data)
                     stmt = stmt.on_duplicate_key_update(
                         **{key: value for key, value in update_data.items() if key != "stream_id"}
                     )
                 else:
                     # 默认使用SQLite语法
                     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-                    stmt = sqlite_insert(ChatStreams).values(
-                        stream_id=stream_id, **update_data
-                    )
-                    stmt = stmt.on_conflict_do_update(
-                        index_elements=["stream_id"],
-                        set_=update_data
-                    )
+
+                    stmt = sqlite_insert(ChatStreams).values(stream_id=stream_id, **update_data)
+                    stmt = stmt.on_conflict_do_update(index_elements=["stream_id"], set_=update_data)
 
                 await session.execute(stmt)
 
@@ -273,30 +254,21 @@ class BatchDatabaseWriter:
         async with get_db_session() as session:
             if global_config.database.database_type == "sqlite":
                 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-                stmt = sqlite_insert(ChatStreams).values(
-                    stream_id=stream_id, **update_data
-                )
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["stream_id"],
-                    set_=update_data
-                )
+
+                stmt = sqlite_insert(ChatStreams).values(stream_id=stream_id, **update_data)
+                stmt = stmt.on_conflict_do_update(index_elements=["stream_id"], set_=update_data)
             elif global_config.database.database_type == "mysql":
                 from sqlalchemy.dialects.mysql import insert as mysql_insert
-                stmt = mysql_insert(ChatStreams).values(
-                    stream_id=stream_id, **update_data
-                )
+
+                stmt = mysql_insert(ChatStreams).values(stream_id=stream_id, **update_data)
                 stmt = stmt.on_duplicate_key_update(
                     **{key: value for key, value in update_data.items() if key != "stream_id"}
                 )
             else:
                 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-                stmt = sqlite_insert(ChatStreams).values(
-                    stream_id=stream_id, **update_data
-                )
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["stream_id"],
-                    set_=update_data
-                )
+
+                stmt = sqlite_insert(ChatStreams).values(stream_id=stream_id, **update_data)
+                stmt = stmt.on_conflict_do_update(index_elements=["stream_id"], set_=update_data)
 
             await session.execute(stmt)
             await session.commit()

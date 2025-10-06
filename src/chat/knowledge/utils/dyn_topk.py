@@ -19,10 +19,10 @@ def dyn_select_top_k(
     for score_item in sorted_score:
         normalized_score.append(
             (
-                    score_item[0],
-                    score_item[1],
-                    (score_item[1] - min_score) / (max_score - min_score),
-                )
+                score_item[0],
+                score_item[1],
+                (score_item[1] - min_score) / (max_score - min_score),
+            )
         )
 
     # 寻找跳变点：score变化最大的位置

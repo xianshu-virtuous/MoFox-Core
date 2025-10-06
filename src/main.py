@@ -88,6 +88,7 @@ class MainSystem:
 
     def _setup_signal_handlers(self) -> None:
         """设置信号处理器"""
+
         def signal_handler(signum, frame):
             if self._shutting_down:
                 logger.warning("系统已经在关闭过程中，忽略重复信号")
@@ -132,6 +133,7 @@ class MainSystem:
             try:
                 from src.plugin_system.apis.component_manage_api import get_components_info_by_type
                 from src.plugin_system.base.component_types import ComponentType
+
                 interest_calculators = get_components_info_by_type(ComponentType.INTEREST_CALCULATOR)
                 logger.info(f"通过组件注册表发现 {len(interest_calculators)} 个兴趣计算器组件")
             except Exception as e:
@@ -143,6 +145,7 @@ class MainSystem:
 
             # 初始化兴趣度管理器
             from src.chat.interest_system.interest_manager import get_interest_manager
+
             interest_manager = get_interest_manager()
             await interest_manager.initialize()
 
@@ -159,7 +162,10 @@ class MainSystem:
 
                 try:
                     from src.plugin_system.core.component_registry import component_registry
-                    component_class = component_registry.get_component_class(calc_name, ComponentType.INTEREST_CALCULATOR)
+
+                    component_class = component_registry.get_component_class(
+                        calc_name, ComponentType.INTEREST_CALCULATOR
+                    )
 
                     if not component_class:
                         logger.warning(f"无法找到 {calc_name} 的组件类")
@@ -208,6 +214,7 @@ class MainSystem:
         # 停止数据库服务
         try:
             from src.common.database.database import stop_database
+
             cleanup_tasks.append(("数据库服务", stop_database()))
         except Exception as e:
             logger.error(f"准备停止数据库服务时出错: {e}")
@@ -215,6 +222,7 @@ class MainSystem:
         # 停止消息管理器
         try:
             from src.chat.message_manager import message_manager
+
             cleanup_tasks.append(("消息管理器", message_manager.stop()))
         except Exception as e:
             logger.error(f"准备停止消息管理器时出错: {e}")
@@ -222,6 +230,7 @@ class MainSystem:
         # 停止消息重组器
         try:
             from src.utils.message_chunker import reassembler
+
             cleanup_tasks.append(("消息重组器", reassembler.stop_cleanup_task()))
         except Exception as e:
             logger.error(f"准备停止消息重组器时出错: {e}")
@@ -236,15 +245,18 @@ class MainSystem:
         # 触发停止事件
         try:
             from src.plugin_system.core.event_manager import event_manager
-            cleanup_tasks.append(("插件系统停止事件",
-                                event_manager.trigger_event(EventType.ON_STOP, permission_group="SYSTEM")))
+
+            cleanup_tasks.append(
+                ("插件系统停止事件", event_manager.trigger_event(EventType.ON_STOP, permission_group="SYSTEM"))
+            )
         except Exception as e:
             logger.error(f"准备触发停止事件时出错: {e}")
 
         # 停止表情管理器
         try:
-            cleanup_tasks.append(("表情管理器",
-                                asyncio.get_event_loop().run_in_executor(None, get_emoji_manager().shutdown)))
+            cleanup_tasks.append(
+                ("表情管理器", asyncio.get_event_loop().run_in_executor(None, get_emoji_manager().shutdown))
+            )
         except Exception as e:
             logger.error(f"准备停止表情管理器时出错: {e}")
 
@@ -275,7 +287,7 @@ class MainSystem:
             try:
                 results = await asyncio.wait_for(
                     asyncio.gather(*tasks, return_exceptions=True),
-                    timeout=30.0  # 30秒超时
+                    timeout=30.0,  # 30秒超时
                 )
 
                 # 记录结果
@@ -389,6 +401,7 @@ MoFox_Bot(第三方修改版)
         # 注册API路由
         try:
             from src.api.message_router import router as message_router
+
             self.server.register_router(message_router, prefix="/api")
             logger.info("API路由注册成功")
         except Exception as e:
@@ -405,6 +418,7 @@ MoFox_Bot(第三方修改版)
             mcp_config = global_config.get("mcp_servers", [])
             if mcp_config:
                 from src.plugin_system.utils.mcp_tool_provider import mcp_tool_provider
+
                 await mcp_tool_provider.initialize(mcp_config)
                 logger.info("MCP工具提供器初始化成功")
         except Exception as e:
@@ -445,6 +459,7 @@ MoFox_Bot(第三方修改版)
         # 初始化LPMM知识库
         try:
             from src.chat.knowledge.knowledge_lib import initialize_lpmm_knowledge
+
             initialize_lpmm_knowledge()
             logger.info("LPMM知识库初始化成功")
         except Exception as e:
@@ -456,6 +471,7 @@ MoFox_Bot(第三方修改版)
         # 启动消息重组器
         try:
             from src.utils.message_chunker import reassembler
+
             await reassembler.start_cleanup_task()
             logger.info("消息重组器已启动")
         except Exception as e:
@@ -464,6 +480,7 @@ MoFox_Bot(第三方修改版)
         # 启动消息管理器
         try:
             from src.chat.message_manager import message_manager
+
             await message_manager.start()
             logger.info("消息管理器已启动")
         except Exception as e:
@@ -504,6 +521,7 @@ MoFox_Bot(第三方修改版)
 
     def _safe_init(self, component_name: str, init_func) -> callable:
         """安全初始化组件，捕获异常"""
+
         async def wrapper():
             try:
                 result = init_func()
@@ -514,6 +532,7 @@ MoFox_Bot(第三方修改版)
             except Exception as e:
                 logger.error(f"{component_name}初始化失败: {e}")
                 return False
+
         return wrapper
 
     async def schedule_tasks(self) -> None:

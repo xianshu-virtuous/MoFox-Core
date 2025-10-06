@@ -86,7 +86,9 @@ class HandlerResultsCollection:
 
 
 class BaseEvent:
-    def __init__(self, name: str, allowed_subscribers: list[str] | None = None, allowed_triggers: list[str] | None = None):
+    def __init__(
+        self, name: str, allowed_subscribers: list[str] | None = None, allowed_triggers: list[str] | None = None
+    ):
         self.name = name
         self.enabled = True
         self.allowed_subscribers = allowed_subscribers  # 记录事件处理器名

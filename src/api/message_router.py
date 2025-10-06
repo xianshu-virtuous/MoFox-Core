@@ -12,10 +12,13 @@ logger = get_logger("HTTP消息API")
 
 router = APIRouter()
 
+
 @router.get("/messages/recent")
 async def get_message_stats(
     days: int = Query(1, ge=1, description="指定查询过去多少天的数据"),
-    message_type: Literal["all", "sent", "received"] = Query("all", description="筛选消息类型: 'sent' (BOT发送的), 'received' (BOT接收的), or 'all' (全部)")
+    message_type: Literal["all", "sent", "received"] = Query(
+        "all", description="筛选消息类型: 'sent' (BOT发送的), 'received' (BOT接收的), or 'all' (全部)"
+    ),
 ):
     """
     获取BOT在指定天数内的消息统计数据。
@@ -45,7 +48,7 @@ async def get_message_stats(
                 "message_type": message_type,
                 "sent_count": sent_count,
                 "received_count": received_count,
-                "total_count": len(messages)
+                "total_count": len(messages),
             }
 
     except Exception as e:
@@ -76,10 +79,7 @@ async def get_message_stats_by_chat(
             user_id = msg.get("user_id")
 
             if chat_id not in stats:
-                stats[chat_id] = {
-                    "total_stats": {"total": 0},
-                    "user_stats": {}
-                }
+                stats[chat_id] = {"total_stats": {"total": 0}, "user_stats": {}}
 
             stats[chat_id]["total_stats"]["total"] += 1
 
@@ -116,10 +116,7 @@ async def get_message_stats_by_chat(
                     for user_id, count in data["user_stats"].items():
                         person_id = person_api.get_person_id("qq", user_id)
                         nickname = await person_api.get_person_value(person_id, "nickname", "未知用户")
-                        formatted_data["user_stats"][user_id] = {
-                            "nickname": nickname,
-                            "count": count
-                        }
+                        formatted_data["user_stats"][user_id] = {"nickname": nickname, "count": count}
 
                 formatted_stats[chat_id] = formatted_data
             return formatted_stats
@@ -128,6 +125,7 @@ async def get_message_stats_by_chat(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/messages/bot_stats_by_chat")
 async def get_bot_message_stats_by_chat(
@@ -165,10 +163,7 @@ async def get_bot_message_stats_by_chat(
                     elif stream.user_info and stream.user_info.user_nickname:
                         chat_name = stream.user_info.user_nickname
 
-                formatted_stats[chat_id] = {
-                    "chat_name": chat_name,
-                    "count": count
-                }
+                formatted_stats[chat_id] = {"chat_name": chat_name, "count": count}
             return formatted_stats
 
         return stats

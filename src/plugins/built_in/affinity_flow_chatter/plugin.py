@@ -39,6 +39,7 @@ class AffinityChatterPlugin(BasePlugin):
         try:
             # 延迟导入 AffinityChatter
             from .affinity_chatter import AffinityChatter
+
             components.append((AffinityChatter.get_chatter_info(), AffinityChatter))
         except Exception as e:
             logger.error(f"加载 AffinityChatter 时出错: {e}")
@@ -46,9 +47,9 @@ class AffinityChatterPlugin(BasePlugin):
         try:
             # 延迟导入 AffinityInterestCalculator
             from .affinity_interest_calculator import AffinityInterestCalculator
+
             components.append((AffinityInterestCalculator.get_interest_calculator_info(), AffinityInterestCalculator))
         except Exception as e:
             logger.error(f"加载 AffinityInterestCalculator 时出错: {e}")
 
         return components
-

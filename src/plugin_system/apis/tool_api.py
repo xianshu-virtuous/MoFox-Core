@@ -39,6 +39,7 @@ def get_llm_available_tool_definitions():
     # 添加MCP工具
     try:
         from src.plugin_system.utils.mcp_tool_provider import mcp_tool_provider
+
         mcp_tools = mcp_tool_provider.get_mcp_tool_definitions()
         tool_definitions.extend(mcp_tools)
         if mcp_tools:

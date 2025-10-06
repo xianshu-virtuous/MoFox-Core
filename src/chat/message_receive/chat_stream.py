@@ -298,8 +298,10 @@ class ChatStream:
                     db_message.should_reply = result.should_reply
                     db_message.should_act = result.should_act
 
-                    logger.debug(f"消息 {db_message.message_id} 兴趣值已更新: {result.interest_value:.3f}, "
-                                f"should_reply: {result.should_reply}, should_act: {result.should_act}")
+                    logger.debug(
+                        f"消息 {db_message.message_id} 兴趣值已更新: {result.interest_value:.3f}, "
+                        f"should_reply: {result.should_reply}, should_act: {result.should_act}"
+                    )
                 else:
                     logger.warning(f"消息 {db_message.message_id} 兴趣值计算失败: {result.error_message}")
                     # 使用默认值
@@ -521,18 +523,17 @@ class ChatManager:
             # 优先使用缓存管理器（优化版本）
             try:
                 from src.chat.message_manager.stream_cache_manager import get_stream_cache_manager
+
                 cache_manager = get_stream_cache_manager()
 
                 if cache_manager.is_running:
                     optimized_stream = await cache_manager.get_or_create_stream(
-                        stream_id=stream_id,
-                        platform=platform,
-                        user_info=user_info,
-                        group_info=group_info
+                        stream_id=stream_id, platform=platform, user_info=user_info, group_info=group_info
                     )
 
                     # 设置消息上下文
                     from .message import MessageRecv
+
                     if stream_id in self.last_messages and isinstance(self.last_messages[stream_id], MessageRecv):
                         optimized_stream.set_context(self.last_messages[stream_id])
 
@@ -715,7 +716,7 @@ class ChatManager:
                 success = await batch_writer.schedule_stream_update(
                     stream_id=stream_data_dict["stream_id"],
                     update_data=ChatManager._prepare_stream_data(stream_data_dict),
-                    priority=1  # 流更新的优先级
+                    priority=1,  # 流更新的优先级
                 )
                 if success:
                     stream.saved = True
@@ -738,7 +739,7 @@ class ChatManager:
                 result = await batch_update(
                     model_class=ChatStreams,
                     conditions={"stream_id": stream_data_dict["stream_id"]},
-                    data=ChatManager._prepare_stream_data(stream_data_dict)
+                    data=ChatManager._prepare_stream_data(stream_data_dict),
                 )
                 if result and result > 0:
                     stream.saved = True
@@ -874,43 +875,43 @@ chat_manager = None
 
 
 def _convert_to_original_stream(self, optimized_stream) -> "ChatStream":
-        """将OptimizedChatStream转换为原始ChatStream以保持兼容性"""
-        try:
-            # 创建原始ChatStream实例
-            original_stream = ChatStream(
-                stream_id=optimized_stream.stream_id,
-                platform=optimized_stream.platform,
-                user_info=optimized_stream._get_effective_user_info(),
-                group_info=optimized_stream._get_effective_group_info()
-            )
+    """将OptimizedChatStream转换为原始ChatStream以保持兼容性"""
+    try:
+        # 创建原始ChatStream实例
+        original_stream = ChatStream(
+            stream_id=optimized_stream.stream_id,
+            platform=optimized_stream.platform,
+            user_info=optimized_stream._get_effective_user_info(),
+            group_info=optimized_stream._get_effective_group_info(),
+        )
 
-            # 复制状态
-            original_stream.create_time = optimized_stream.create_time
-            original_stream.last_active_time = optimized_stream.last_active_time
-            original_stream.sleep_pressure = optimized_stream.sleep_pressure
-            original_stream.base_interest_energy = optimized_stream.base_interest_energy
-            original_stream._focus_energy = optimized_stream._focus_energy
-            original_stream.no_reply_consecutive = optimized_stream.no_reply_consecutive
-            original_stream.saved = optimized_stream.saved
+        # 复制状态
+        original_stream.create_time = optimized_stream.create_time
+        original_stream.last_active_time = optimized_stream.last_active_time
+        original_stream.sleep_pressure = optimized_stream.sleep_pressure
+        original_stream.base_interest_energy = optimized_stream.base_interest_energy
+        original_stream._focus_energy = optimized_stream._focus_energy
+        original_stream.no_reply_consecutive = optimized_stream.no_reply_consecutive
+        original_stream.saved = optimized_stream.saved
 
-            # 复制上下文信息（如果存在）
-            if hasattr(optimized_stream, "_stream_context") and optimized_stream._stream_context:
-                original_stream.stream_context = optimized_stream._stream_context
+        # 复制上下文信息（如果存在）
+        if hasattr(optimized_stream, "_stream_context") and optimized_stream._stream_context:
+            original_stream.stream_context = optimized_stream._stream_context
 
-            if hasattr(optimized_stream, "_context_manager") and optimized_stream._context_manager:
-                original_stream.context_manager = optimized_stream._context_manager
+        if hasattr(optimized_stream, "_context_manager") and optimized_stream._context_manager:
+            original_stream.context_manager = optimized_stream._context_manager
 
-            return original_stream
+        return original_stream
 
-        except Exception as e:
-            logger.error(f"转换OptimizedChatStream失败: {e}")
-            # 如果转换失败，创建一个新的原始流
-            return ChatStream(
-                stream_id=optimized_stream.stream_id,
-                platform=optimized_stream.platform,
-                user_info=optimized_stream._get_effective_user_info(),
-                group_info=optimized_stream._get_effective_group_info()
-            )
+    except Exception as e:
+        logger.error(f"转换OptimizedChatStream失败: {e}")
+        # 如果转换失败，创建一个新的原始流
+        return ChatStream(
+            stream_id=optimized_stream.stream_id,
+            platform=optimized_stream.platform,
+            user_info=optimized_stream._get_effective_user_info(),
+            group_info=optimized_stream._get_effective_group_info(),
+        )
 
 
 def get_chat_manager():

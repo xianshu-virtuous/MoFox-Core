@@ -491,7 +491,7 @@ class ExpressionLearnerManager:
                 os.makedirs(directory, exist_ok=True)
             logger.debug(f"确保目录存在: {directory}")
         except Exception as e:
-                logger.error(f"创建目录失败 {directory}: {e}")
+            logger.error(f"创建目录失败 {directory}: {e}")
 
     @staticmethod
     async def _auto_migrate_json_to_db():
