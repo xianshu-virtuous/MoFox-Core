@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import re
 from pathlib import Path
 from re import Pattern
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 
 from src.common.logger import get_logger
 from src.plugin_system.base.base_action import BaseAction
@@ -26,6 +28,23 @@ from src.plugin_system.base.plus_command import PlusCommand
 
 logger = get_logger("component_registry")
 
+# 统一的组件类类型别名
+ComponentClassType = (
+    type[BaseCommand]
+    | type[BaseAction]
+    | type[BaseTool]
+    | type[BaseEventHandler]
+    | type[PlusCommand]
+    | type[BaseChatter]
+    | type[BaseInterestCalculator]
+)
+
+
+def _assign_plugin_attrs(cls: Any, plugin_name: str, plugin_config: dict) -> None:
+    """为组件类动态赋予插件相关属性（避免在各注册函数中重复代码）。"""
+    setattr(cls, "plugin_name", plugin_name)
+    setattr(cls, "plugin_config", plugin_config)
+
 
 class ComponentRegistry:
     """统一的组件注册中心
@@ -41,9 +60,8 @@ class ComponentRegistry:
             types: {} for types in ComponentType
         }
         """类型 -> 组件原名称 -> 组件信息"""
-        self._components_classes: dict[
-            str, type["BaseCommand" | "BaseAction" | "BaseTool" | "BaseEventHandler" | "PlusCommand" | "BaseChatter"]
-        ] = {}
+        # 组件类注册表（命名空间式组件名 -> 组件类）
+        self._components_classes: dict[str, ComponentClassType] = {}
         """命名空间式组件名 -> 组件类"""
 
         # 插件注册表
@@ -100,10 +118,8 @@ class ComponentRegistry:
         return True
 
     def register_component(
-        self,
-        component_info: ComponentInfo,
-        component_class: type[Union["BaseCommand", "BaseAction", "BaseEventHandler", "BaseTool", "BaseChatter"]],
-    ) -> bool:
+        self, self_component_info: ComponentInfo, component_class: ComponentClassType
+    ) -> bool:  # noqa: C901 (保持原有结构, 以后可再拆)
         """注册组件
 
         Args:
@@ -113,9 +129,11 @@ class ComponentRegistry:
         Returns:
             bool: 是否注册成功
         """
+        component_info = self_component_info  # 局部别名
         component_name = component_info.name
         component_type = component_info.component_type
         plugin_name = getattr(component_info, "plugin_name", "unknown")
+
         if "." in component_name:
             logger.error(f"组件名称 '{component_name}' 包含非法字符 '.'，请使用下划线替代")
             return False
@@ -123,22 +141,19 @@ class ComponentRegistry:
             logger.error(f"插件名称 '{plugin_name}' 包含非法字符 '.'，请使用下划线替代")
             return False
 
-        namespaced_name = f"{component_type}.{component_name}"
-
+        namespaced_name = f"{component_type.value}.{component_name}"
         if namespaced_name in self._components:
             existing_info = self._components[namespaced_name]
             existing_plugin = getattr(existing_info, "plugin_name", "unknown")
-
             logger.warning(
                 f"组件名冲突: '{plugin_name}' 插件的 {component_type} 类型组件 '{component_name}' 已被插件 '{existing_plugin}' 注册，跳过此组件注册"
             )
             return False
 
-        self._components[namespaced_name] = component_info  # 注册到通用注册表（使用命名空间化的名称）
-        self._components_by_type[component_type][component_name] = component_info  # 类型内部仍使用原名
+        self._components[namespaced_name] = component_info
+        self._components_by_type[component_type][component_name] = component_info
         self._components_classes[namespaced_name] = component_class
 
-        # 根据组件类型进行特定注册（使用原始名称）
         match component_type:
             case ComponentType.ACTION:
                 assert isinstance(component_info, ActionInfo)
@@ -175,12 +190,11 @@ class ComponentRegistry:
         if not ret:
             return False
         logger.debug(
-            f"已注册{component_type}组件: '{component_name}' -> '{namespaced_name}' "
-            f"({component_class.__name__}) [插件: {plugin_name}]"
+            f"已注册{component_type}组件: '{component_name}' -> '{namespaced_name}' ({component_class.__name__}) [插件: {plugin_name}]"
         )
         return True
 
-    def _register_action_component(self, action_info: "ActionInfo", action_class: type["BaseAction"]) -> bool:
+    def _register_action_component(self, action_info: ActionInfo, action_class: type[BaseAction]) -> bool:
         """注册Action组件到Action特定注册表"""
         if not (action_name := action_info.name):
             logger.error(f"Action组件 {action_class.__name__} 必须指定名称")
@@ -188,19 +202,13 @@ class ComponentRegistry:
         if not isinstance(action_info, ActionInfo) or not issubclass(action_class, BaseAction):
             logger.error(f"注册失败: {action_name} 不是有效的Action")
             return False
-
-        action_class.plugin_name = action_info.plugin_name
-        # 设置插件配置
-        action_class.plugin_config = self.get_plugin_config(action_info.plugin_name) or {}
+        _assign_plugin_attrs(action_class, action_info.plugin_name, self.get_plugin_config(action_info.plugin_name) or {})
         self._action_registry[action_name] = action_class
-
-        # 如果启用，添加到默认动作集
         if action_info.enabled:
             self._default_actions[action_name] = action_info
-
         return True
 
-    def _register_command_component(self, command_info: "CommandInfo", command_class: type["BaseCommand"]) -> bool:
+    def _register_command_component(self, command_info: CommandInfo, command_class: type[BaseCommand]) -> bool:
         """注册Command组件到Command特定注册表"""
         if not (command_name := command_info.name):
             logger.error(f"Command组件 {command_class.__name__} 必须指定名称")
@@ -208,13 +216,10 @@ class ComponentRegistry:
         if not isinstance(command_info, CommandInfo) or not issubclass(command_class, BaseCommand):
             logger.error(f"注册失败: {command_name} 不是有效的Command")
             return False
-
-        command_class.plugin_name = command_info.plugin_name
-        # 设置插件配置
-        command_class.plugin_config = self.get_plugin_config(command_info.plugin_name) or {}
+        _assign_plugin_attrs(
+            command_class, command_info.plugin_name, self.get_plugin_config(command_info.plugin_name) or {}
+        )
         self._command_registry[command_name] = command_class
-
-        # 如果启用了且有匹配模式
         if command_info.enabled and command_info.command_pattern:
             pattern = re.compile(command_info.command_pattern, re.IGNORECASE | re.DOTALL)
             if pattern not in self._command_patterns:
@@ -223,11 +228,10 @@ class ComponentRegistry:
                 logger.warning(
                     f"'{command_name}' 对应的命令模式与 '{self._command_patterns[pattern]}' 重复，忽略此命令"
                 )
-
         return True
 
     def _register_plus_command_component(
-        self, plus_command_info: "PlusCommandInfo", plus_command_class: type["PlusCommand"]
+        self, plus_command_info: PlusCommandInfo, plus_command_class: type[PlusCommand]
     ) -> bool:
         """注册PlusCommand组件到特定注册表"""
         plus_command_name = plus_command_info.name
@@ -241,33 +245,27 @@ class ComponentRegistry:
 
         # 创建专门的PlusCommand注册表（如果还没有）
         if not hasattr(self, "_plus_command_registry"):
-            self._plus_command_registry: dict[str, type["PlusCommand"]] = {}
-
-        plus_command_class.plugin_name = plus_command_info.plugin_name
-        # 设置插件配置
-        plus_command_class.plugin_config = self.get_plugin_config(plus_command_info.plugin_name) or {}
+            self._plus_command_registry: dict[str, type[PlusCommand]] = {}
+        _assign_plugin_attrs(
+            plus_command_class,
+            plus_command_info.plugin_name,
+            self.get_plugin_config(plus_command_info.plugin_name) or {},
+        )
         self._plus_command_registry[plus_command_name] = plus_command_class
-
         logger.debug(f"已注册PlusCommand组件: {plus_command_name}")
         return True
 
-    def _register_tool_component(self, tool_info: "ToolInfo", tool_class: type["BaseTool"]) -> bool:
+    def _register_tool_component(self, tool_info: ToolInfo, tool_class: type[BaseTool]) -> bool:
         """注册Tool组件到Tool特定注册表"""
         tool_name = tool_info.name
-
-        tool_class.plugin_name = tool_info.plugin_name
-        # 设置插件配置
-        tool_class.plugin_config = self.get_plugin_config(tool_info.plugin_name) or {}
+        _assign_plugin_attrs(tool_class, tool_info.plugin_name, self.get_plugin_config(tool_info.plugin_name) or {})
         self._tool_registry[tool_name] = tool_class
-
-        # 如果是llm可用的且启用的工具,添加到 llm可用工具列表
         if tool_info.enabled:
             self._llm_available_tools[tool_name] = tool_class
-
         return True
 
     def _register_event_handler_component(
-        self, handler_info: "EventHandlerInfo", handler_class: type["BaseEventHandler"]
+        self, handler_info: EventHandlerInfo, handler_class: type[BaseEventHandler]
     ) -> bool:
         if not (handler_name := handler_info.name):
             logger.error(f"EventHandler组件 {handler_class.__name__} 必须指定名称")
@@ -275,25 +273,19 @@ class ComponentRegistry:
         if not isinstance(handler_info, EventHandlerInfo) or not issubclass(handler_class, BaseEventHandler):
             logger.error(f"注册失败: {handler_name} 不是有效的EventHandler")
             return False
-
-        handler_class.plugin_name = handler_info.plugin_name
-        # 设置插件配置
-        handler_class.plugin_config = self.get_plugin_config(handler_info.plugin_name) or {}
+        _assign_plugin_attrs(
+            handler_class, handler_info.plugin_name, self.get_plugin_config(handler_info.plugin_name) or {}
+        )
         self._event_handler_registry[handler_name] = handler_class
-
         if not handler_info.enabled:
             logger.warning(f"EventHandler组件 {handler_name} 未启用")
             return True  # 未启用，但是也是注册成功
-
-        handler_class.plugin_name = handler_info.plugin_name
-        # 使用EventManager进行事件处理器注册
         from src.plugin_system.core.event_manager import event_manager
-
         return event_manager.register_event_handler(
             handler_class, self.get_plugin_config(handler_info.plugin_name) or {}
         )
 
-    def _register_chatter_component(self, chatter_info: "ChatterInfo", chatter_class: type["BaseChatter"]) -> bool:
+    def _register_chatter_component(self, chatter_info: ChatterInfo, chatter_class: type[BaseChatter]) -> bool:
         """注册Chatter组件到Chatter特定注册表"""
         chatter_name = chatter_info.name
 
@@ -303,18 +295,14 @@ class ComponentRegistry:
         if not isinstance(chatter_info, ChatterInfo) or not issubclass(chatter_class, BaseChatter):
             logger.error(f"注册失败: {chatter_name} 不是有效的Chatter")
             return False
-
-        chatter_class.plugin_name = chatter_info.plugin_name
-        # 设置插件配置
-        chatter_class.plugin_config = self.get_plugin_config(chatter_info.plugin_name) or {}
-
+        _assign_plugin_attrs(
+            chatter_class, chatter_info.plugin_name, self.get_plugin_config(chatter_info.plugin_name) or {}
+        )
         self._chatter_registry[chatter_name] = chatter_class
-
         if not chatter_info.enabled:
             logger.warning(f"Chatter组件 {chatter_name} 未启用")
             return True  # 未启用，但是也是注册成功
         self._enabled_chatter_registry[chatter_name] = chatter_class
-
         logger.debug(f"已注册Chatter组件: {chatter_name}")
         return True
 
@@ -341,9 +329,13 @@ class ComponentRegistry:
         if not hasattr(self, "_enabled_interest_calculator_registry"):
             self._enabled_interest_calculator_registry: dict[str, type["BaseInterestCalculator"]] = {}
 
-        interest_calculator_class.plugin_name = interest_calculator_info.plugin_name
+        setattr(interest_calculator_class, "plugin_name", interest_calculator_info.plugin_name)
         # 设置插件配置
-        interest_calculator_class.plugin_config = self.get_plugin_config(interest_calculator_info.plugin_name) or {}
+        setattr(
+            interest_calculator_class,
+            "plugin_config",
+            self.get_plugin_config(interest_calculator_info.plugin_name) or {},
+        )
         self._interest_calculator_registry[calculator_name] = interest_calculator_class
 
         if not interest_calculator_info.enabled:
@@ -356,7 +348,7 @@ class ComponentRegistry:
 
     # === 组件移除相关 ===
 
-    async def remove_component(self, component_name: str, component_type: "ComponentType", plugin_name: str) -> bool:
+    async def remove_component(self, component_name: str, component_type: ComponentType, plugin_name: str) -> bool:
         target_component_class = self.get_component_class(component_name, component_type)
         if not target_component_class:
             logger.warning(f"组件 {component_name} 未注册，无法移除")
@@ -398,8 +390,14 @@ class ComponentRegistry:
                     self._enabled_event_handlers.pop(component_name, None)
                     try:
                         handler = event_manager.get_event_handler(component_name)
-                        for event in handler.subscribed_events:
-                            await event_manager.unsubscribe_handler_from_event(event, component_name)
+                        # 事件处理器可能未找到或未声明 subscribed_events，需判空
+                        if handler and hasattr(handler, "subscribed_events"):
+                            for event in getattr(handler, "subscribed_events"):
+                                # 假设 unsubscribe_handler_from_event 是协程；若不是则移除 await
+                                result = event_manager.unsubscribe_handler_from_event(event, component_name)
+                                if hasattr(result, "__await__"):
+                                    await result  # type: ignore[func-returns-value]
+                        logger.debug(f"已移除EventHandler组件: {component_name}")
                         logger.debug(f"已移除EventHandler组件: {component_name}")
                     except Exception as e:
                         logger.warning(f"移除EventHandler事件订阅时出错: {e}")
@@ -415,7 +413,7 @@ class ComponentRegistry:
                     return False
 
             # 移除通用注册信息
-            namespaced_name = f"{component_type}.{component_name}"
+            namespaced_name = f"{component_type.value}.{component_name}"
             self._components.pop(namespaced_name, None)
             self._components_by_type[component_type].pop(component_name, None)
             self._components_classes.pop(namespaced_name, None)
@@ -477,9 +475,10 @@ class ComponentRegistry:
                 self._enabled_event_handlers[component_name] = target_component_class
                 from .event_manager import event_manager  # 延迟导入防止循环导入问题
 
-                event_manager.register_event_handler(component_name)
-
-        namespaced_name = f"{component_type}.{component_name}"
+                # 重新注册事件处理器（启用）使用类而不是名称
+                cfg = self.get_plugin_config(target_component_info.plugin_name) or {}
+                event_manager.register_event_handler(target_component_class, cfg)  # type: ignore[arg-type]
+        namespaced_name = f"{component_type.value}.{component_name}"
         self._components[namespaced_name].enabled = True
         self._components_by_type[component_type][component_name].enabled = True
         logger.info(f"组件 {component_name} 已启用")
@@ -512,10 +511,16 @@ class ComponentRegistry:
                     from .event_manager import event_manager  # 延迟导入防止循环导入问题
 
                     handler = event_manager.get_event_handler(component_name)
-                    for event in handler.subscribed_events:
-                        await event_manager.unsubscribe_handler_from_event(event, component_name)
+                    if handler and hasattr(handler, "subscribed_events"):
+                        for event in getattr(handler, "subscribed_events"):
+                            result = event_manager.unsubscribe_handler_from_event(event, component_name)
+                            if hasattr(result, "__await__"):
+                                await result  # type: ignore[func-returns-value]
 
-            self._components[component_name].enabled = False
+            # 组件主注册表使用命名空间 key
+            namespaced_name = f"{component_type.value}.{component_name}"
+            if namespaced_name in self._components:
+                self._components[namespaced_name].enabled = False
             self._components_by_type[component_type][component_name].enabled = False
             logger.info(f"组件 {component_name} 已禁用")
             return True
@@ -528,8 +533,8 @@ class ComponentRegistry:
 
     # === 组件查询方法 ===
     def get_component_info(
-        self, component_name: str, component_type: Optional["ComponentType"] = None
-    ) -> Optional["ComponentInfo"]:
+        self, component_name: str, component_type: Optional[ComponentType] = None
+    ) -> Optional[ComponentInfo]:
         # sourcery skip: class-extract-method
         """获取组件信息，支持自动命名空间解析
 
@@ -546,7 +551,7 @@ class ComponentRegistry:
 
         # 2. 如果指定了组件类型，构造命名空间化的名称查找
         if component_type:
-            namespaced_name = f"{component_type}.{component_name}"
+            namespaced_name = f"{component_type.value}.{component_name}"
             return self._components.get(namespaced_name)
 
         # 3. 如果没有指定类型，尝试在所有命名空间中查找
@@ -573,8 +578,17 @@ class ComponentRegistry:
     def get_component_class(
         self,
         component_name: str,
-        component_type: Optional["ComponentType"] = None,
-    ) -> type["BaseCommand"] | type["BaseAction"] | type["BaseEventHandler"] | type["BaseTool"] | None:
+        component_type: Optional[ComponentType] = None,
+    ) -> (
+        type[BaseCommand]
+        | type[BaseAction]
+        | type[BaseEventHandler]
+        | type[BaseTool]
+        | type[PlusCommand]
+        | type[BaseChatter]
+        | type[BaseInterestCalculator]
+        | None
+    ):
         """获取组件类，支持自动命名空间解析
 
         Args:
@@ -591,7 +605,17 @@ class ComponentRegistry:
         # 2. 如果指定了组件类型，构造命名空间化的名称查找
         if component_type:
             namespaced_name = f"{component_type.value}.{component_name}"
-            return self._components_classes.get(namespaced_name)  # type: ignore[valid-type]
+            return cast(
+                type[BaseCommand]
+                | type[BaseAction]
+                | type[BaseEventHandler]
+                | type[BaseTool]
+                | type[PlusCommand]
+                | type[BaseChatter]
+                | type[BaseInterestCalculator]
+                | None,
+                self._components_classes.get(namespaced_name),
+            )
 
         # 3. 如果没有指定类型，尝试在所有命名空间中查找
         candidates = []
@@ -616,22 +640,22 @@ class ComponentRegistry:
         # 4. 都没找到
         return None
 
-    def get_components_by_type(self, component_type: "ComponentType") -> dict[str, "ComponentInfo"]:
+    def get_components_by_type(self, component_type: ComponentType) -> dict[str, ComponentInfo]:
         """获取指定类型的所有组件"""
         return self._components_by_type.get(component_type, {}).copy()
 
-    def get_enabled_components_by_type(self, component_type: "ComponentType") -> dict[str, "ComponentInfo"]:
+    def get_enabled_components_by_type(self, component_type: ComponentType) -> dict[str, ComponentInfo]:
         """获取指定类型的所有启用组件"""
         components = self.get_components_by_type(component_type)
         return {name: info for name, info in components.items() if info.enabled}
 
     # === Action特定查询方法 ===
 
-    def get_action_registry(self) -> dict[str, type["BaseAction"]]:
+    def get_action_registry(self) -> dict[str, type[BaseAction]]:
         """获取Action注册表"""
         return self._action_registry.copy()
 
-    def get_registered_action_info(self, action_name: str) -> Optional["ActionInfo"]:
+    def get_registered_action_info(self, action_name: str) -> Optional[ActionInfo]:
         """获取Action信息"""
         info = self.get_component_info(action_name, ComponentType.ACTION)
         return info if isinstance(info, ActionInfo) else None
@@ -642,11 +666,11 @@ class ComponentRegistry:
 
     # === Command特定查询方法 ===
 
-    def get_command_registry(self) -> dict[str, type["BaseCommand"]]:
+    def get_command_registry(self) -> dict[str, type[BaseCommand]]:
         """获取Command注册表"""
         return self._command_registry.copy()
 
-    def get_registered_command_info(self, command_name: str) -> Optional["CommandInfo"]:
+    def get_registered_command_info(self, command_name: str) -> Optional[CommandInfo]:
         """获取Command信息"""
         info = self.get_component_info(command_name, ComponentType.COMMAND)
         return info if isinstance(info, CommandInfo) else None
@@ -655,7 +679,7 @@ class ComponentRegistry:
         """获取Command模式注册表"""
         return self._command_patterns.copy()
 
-    def find_command_by_text(self, text: str) -> tuple[type["BaseCommand"], dict, "CommandInfo"] | None:
+    def find_command_by_text(self, text: str) -> tuple[type[BaseCommand], dict, CommandInfo] | None:
         # sourcery skip: use-named-expression, use-next
         """根据文本查找匹配的命令
 
@@ -682,15 +706,15 @@ class ComponentRegistry:
         return None
 
     # === Tool 特定查询方法 ===
-    def get_tool_registry(self) -> dict[str, type["BaseTool"]]:
+    def get_tool_registry(self) -> dict[str, type[BaseTool]]:
         """获取Tool注册表"""
         return self._tool_registry.copy()
 
-    def get_llm_available_tools(self) -> dict[str, type["BaseTool"]]:
+    def get_llm_available_tools(self) -> dict[str, type[BaseTool]]:
         """获取LLM可用的Tool列表"""
         return self._llm_available_tools.copy()
 
-    def get_registered_tool_info(self, tool_name: str) -> Optional["ToolInfo"]:
+    def get_registered_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
         """获取Tool信息
 
         Args:
@@ -703,13 +727,13 @@ class ComponentRegistry:
         return info if isinstance(info, ToolInfo) else None
 
     # === PlusCommand 特定查询方法 ===
-    def get_plus_command_registry(self) -> dict[str, type["PlusCommand"]]:
+    def get_plus_command_registry(self) -> dict[str, type[PlusCommand]]:
         """获取PlusCommand注册表"""
         if not hasattr(self, "_plus_command_registry"):
             self._plus_command_registry: dict[str, type[PlusCommand]] = {}
         return self._plus_command_registry.copy()
 
-    def get_registered_plus_command_info(self, command_name: str) -> Optional["PlusCommandInfo"]:
+    def get_registered_plus_command_info(self, command_name: str) -> Optional[PlusCommandInfo]:
         """获取PlusCommand信息
 
         Args:
@@ -723,44 +747,44 @@ class ComponentRegistry:
 
     # === EventHandler 特定查询方法 ===
 
-    def get_event_handler_registry(self) -> dict[str, type["BaseEventHandler"]]:
+    def get_event_handler_registry(self) -> dict[str, type[BaseEventHandler]]:
         """获取事件处理器注册表"""
         return self._event_handler_registry.copy()
 
-    def get_registered_event_handler_info(self, handler_name: str) -> Optional["EventHandlerInfo"]:
+    def get_registered_event_handler_info(self, handler_name: str) -> Optional[EventHandlerInfo]:
         """获取事件处理器信息"""
         info = self.get_component_info(handler_name, ComponentType.EVENT_HANDLER)
         return info if isinstance(info, EventHandlerInfo) else None
 
-    def get_enabled_event_handlers(self) -> dict[str, type["BaseEventHandler"]]:
+    def get_enabled_event_handlers(self) -> dict[str, type[BaseEventHandler]]:
         """获取启用的事件处理器"""
         return self._enabled_event_handlers.copy()
 
     # === Chatter 特定查询方法 ===
-    def get_chatter_registry(self) -> dict[str, type["BaseChatter"]]:
+    def get_chatter_registry(self) -> dict[str, type[BaseChatter]]:
         """获取Chatter注册表"""
         if not hasattr(self, "_chatter_registry"):
             self._chatter_registry: dict[str, type[BaseChatter]] = {}
         return self._chatter_registry.copy()
 
-    def get_enabled_chatter_registry(self) -> dict[str, type["BaseChatter"]]:
+    def get_enabled_chatter_registry(self) -> dict[str, type[BaseChatter]]:
         """获取启用的Chatter注册表"""
         if not hasattr(self, "_enabled_chatter_registry"):
             self._enabled_chatter_registry: dict[str, type[BaseChatter]] = {}
         return self._enabled_chatter_registry.copy()
 
-    def get_registered_chatter_info(self, chatter_name: str) -> Optional["ChatterInfo"]:
+    def get_registered_chatter_info(self, chatter_name: str) -> Optional[ChatterInfo]:
         """获取Chatter信息"""
         info = self.get_component_info(chatter_name, ComponentType.CHATTER)
         return info if isinstance(info, ChatterInfo) else None
 
     # === 插件查询方法 ===
 
-    def get_plugin_info(self, plugin_name: str) -> Optional["PluginInfo"]:
+    def get_plugin_info(self, plugin_name: str) -> Optional[PluginInfo]:
         """获取插件信息"""
         return self._plugins.get(plugin_name)
 
-    def get_all_plugins(self) -> dict[str, "PluginInfo"]:
+    def get_all_plugins(self) -> dict[str, PluginInfo]:
         """获取所有插件"""
         return self._plugins.copy()
 

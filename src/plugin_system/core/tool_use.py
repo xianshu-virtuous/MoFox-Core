@@ -177,8 +177,8 @@ class ToolExecutor:
 
         # 执行每个工具调用
         for tool_call in tool_calls:
+            tool_name = getattr(tool_call, "func_name", "unknown_tool")
             try:
-                tool_name = tool_call.func_name
                 logger.debug(f"{self.log_prefix}执行工具: {tool_name}")
 
                 # 执行工具

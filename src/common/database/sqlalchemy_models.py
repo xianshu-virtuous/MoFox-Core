@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy import Boolean, Column, DateTime, Float, Index, Integer, String, Text, text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,6 +30,10 @@ logger = get_logger("sqlalchemy_models")
 
 # 创建基类
 Base = declarative_base()
+
+# 全局异步引擎与会话工厂占位（延迟初始化）
+_engine: AsyncEngine | None = None
+_SessionLocal: async_sessionmaker[AsyncSession] | None = None
 
 
 async def enable_sqlite_wal_mode(engine):
@@ -649,21 +653,11 @@ class MonthlyPlan(Base):
     last_used_date: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, default=datetime.datetime.now)
 
-    # 保留 is_deleted 字段以兼容现有数据，但标记为已弃用
-    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-
     __table_args__ = (
         Index("idx_monthlyplan_target_month_status", "target_month", "status"),
         Index("idx_monthlyplan_last_used_date", "last_used_date"),
         Index("idx_monthlyplan_usage_count", "usage_count"),
-        # 保留旧索引以兼容
-        Index("idx_monthlyplan_target_month_is_deleted", "target_month", "is_deleted"),
     )
-
-
-# 数据库引擎和会话管理
-_engine = None
-_SessionLocal = None
 
 
 def get_database_url():
@@ -709,65 +703,89 @@ def get_database_url():
         return f"sqlite+aiosqlite:///{db_path}"
 
 
-async def initialize_database():
-    """初始化异步数据库引擎和会话"""
-    global _engine, _SessionLocal
+_initializing: bool = False  # 防止递归初始化
 
-    if _engine is not None:
+async def initialize_database() -> tuple["AsyncEngine", async_sessionmaker[AsyncSession]]:
+    """初始化异步数据库引擎和会话
+
+    Returns:
+        tuple[AsyncEngine, async_sessionmaker[AsyncSession]]: 创建好的异步引擎与会话工厂。
+
+    说明:
+        显式的返回类型标注有助于 Pyright/Pylance 正确推断调用处的对象，
+        避免后续对返回值再次 `await` 时出现 *"tuple[...] 并非 awaitable"* 的误用。
+    """
+    global _engine, _SessionLocal, _initializing
+
+    # 已经初始化直接返回
+    if _engine is not None and _SessionLocal is not None:
         return _engine, _SessionLocal
 
-    database_url = get_database_url()
-    from src.config.config import global_config
+    # 正在初始化的并发调用等待主初始化完成，避免递归
+    if _initializing:
+        import asyncio
+        for _ in range(1000):  # 最多等待约10秒
+            await asyncio.sleep(0.01)
+            if _engine is not None and _SessionLocal is not None:
+                return _engine, _SessionLocal
+        raise RuntimeError("等待数据库初始化完成超时 (reentrancy guard)")
 
-    config = global_config.database
+    _initializing = True
+    try:
+        database_url = get_database_url()
+        from src.config.config import global_config
 
-    # 配置引擎参数
-    engine_kwargs: dict[str, Any] = {
-        "echo": False,  # 生产环境关闭SQL日志
-        "future": True,
-    }
+        config = global_config.database
 
-    if config.database_type == "mysql":
-        # MySQL连接池配置 - 异步引擎使用默认连接池
-        engine_kwargs.update(
-            {
-                "pool_size": config.connection_pool_size,
-                "max_overflow": config.connection_pool_size * 2,
-                "pool_timeout": config.connection_timeout,
-                "pool_recycle": 3600,  # 1小时回收连接
-                "pool_pre_ping": True,  # 连接前ping检查
-                "connect_args": {
-                    "autocommit": config.mysql_autocommit,
-                    "charset": config.mysql_charset,
-                    "connect_timeout": config.connection_timeout,
-                },
-            }
-        )
-    else:
-        # SQLite配置 - aiosqlite不支持连接池参数
-        engine_kwargs.update(
-            {
-                "connect_args": {
-                    "check_same_thread": False,
-                    "timeout": 60,  # 增加超时时间
-                },
-            }
-        )
+        # 配置引擎参数
+        engine_kwargs: dict[str, Any] = {
+            "echo": False,  # 生产环境关闭SQL日志
+            "future": True,
+        }
 
-    _engine = create_async_engine(database_url, **engine_kwargs)
-    _SessionLocal = async_sessionmaker(bind=_engine, class_=AsyncSession, expire_on_commit=False)
+        if config.database_type == "mysql":
+            engine_kwargs.update(
+                {
+                    "pool_size": config.connection_pool_size,
+                    "max_overflow": config.connection_pool_size * 2,
+                    "pool_timeout": config.connection_timeout,
+                    "pool_recycle": 3600,
+                    "pool_pre_ping": True,
+                    "connect_args": {
+                        "autocommit": config.mysql_autocommit,
+                        "charset": config.mysql_charset,
+                        "connect_timeout": config.connection_timeout,
+                    },
+                }
+            )
+        else:
+            engine_kwargs.update(
+                {
+                    "connect_args": {
+                        "check_same_thread": False,
+                        "timeout": 60,
+                    },
+                }
+            )
 
-    # 调用新的迁移函数，它会处理表的创建和列的添加
-    from src.common.database.db_migration import check_and_migrate_database
+        _engine = create_async_engine(database_url, **engine_kwargs)
+        _SessionLocal = async_sessionmaker(bind=_engine, class_=AsyncSession, expire_on_commit=False)
 
-    await check_and_migrate_database()
+        # 迁移
+        try:
+            from src.common.database.db_migration import check_and_migrate_database
+            await check_and_migrate_database(existing_engine=_engine)
+        except TypeError:
+            from src.common.database.db_migration import check_and_migrate_database as _legacy_migrate
+            await _legacy_migrate()
 
-    # 如果是 SQLite，启用 WAL 模式以提高并发性能
-    if config.database_type == "sqlite":
-        await enable_sqlite_wal_mode(_engine)
+        if config.database_type == "sqlite":
+            await enable_sqlite_wal_mode(_engine)
 
-    logger.info(f"SQLAlchemy异步数据库初始化成功: {config.database_type}")
-    return _engine, _SessionLocal
+        logger.info(f"SQLAlchemy异步数据库初始化成功: {config.database_type}")
+        return _engine, _SessionLocal
+    finally:
+        _initializing = False
 
 
 @asynccontextmanager

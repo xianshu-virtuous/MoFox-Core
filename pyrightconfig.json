@@ -2,8 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/microsoft/pyright/main/packages/vscode-pyright/schemas/pyrightconfig.schema.json",
   "include": [
     "src",
-    "bot.py",
-    "__main__.py"
+    "bot.py"
   ],
   "exclude": [
     "**/__pycache__",
@@ -11,7 +10,9 @@
     "logs",
     "tests",
     "target",
-    "*.egg-info"
+    "*.egg-info",
+    "src/plugins/built_in/*",
+    "__main__.py"
   ],
   "typeCheckingMode": "standard",
   "reportMissingImports": false,

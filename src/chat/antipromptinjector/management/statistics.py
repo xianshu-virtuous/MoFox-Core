@@ -5,7 +5,7 @@
 """
 
 import datetime
-from typing import Any, Optional, TypedDict, Literal, Union, Callable, TypeVar, cast
+from typing import Any, Optional, TypeVar, cast
 
 from sqlalchemy import select, delete
 
@@ -47,29 +47,26 @@ class AntiInjectionStatistics:
         """当前会话开始时间"""
 
     @staticmethod
-    async def get_or_create_stats() -> Optional[AntiInjectionStats]:  # type: ignore[name-defined]
+    async def get_or_create_stats() -> AntiInjectionStats:
         """获取或创建统计记录
 
         Returns:
             AntiInjectionStats | None: 成功返回模型实例，否则 None
         """
-        try:
-            async with get_db_session() as session:
+        async with get_db_session() as session:
                 # 获取最新的统计记录，如果没有则创建
-                stats = (
+            stats = (
                     (await session.execute(select(AntiInjectionStats).order_by(AntiInjectionStats.id.desc())))
                     .scalars()
                     .first()
                 )
-                if not stats:
-                    stats = AntiInjectionStats()
-                    session.add(stats)
-                    await session.commit()
-                    await session.refresh(stats)
-                return stats
-        except Exception as e:
-            logger.error(f"获取统计记录失败: {e}")
-            return None
+            if not stats:
+                stats = AntiInjectionStats()
+                session.add(stats)
+                await session.commit()
+                await session.refresh(stats)
+            return stats
+
 
     @staticmethod
     async def update_stats(**kwargs: Any) -> None:
@@ -97,7 +94,7 @@ class AntiInjectionStatistics:
                     if key == "processing_time_delta":
                         # 处理时间累加 - 确保不为 None
                         delta = float(value)
-                        stats.processing_time_total = _add_optional(stats.processing_time_total, delta)  # type: ignore[attr-defined]
+                        stats.processing_time_total = _add_optional(stats.processing_time_total, delta)  
                         continue
                     elif key == "last_processing_time":
                         # 直接设置最后处理时间
@@ -146,7 +143,7 @@ class AntiInjectionStatistics:
 
 
             # 计算派生统计信息 - 处理 None 值
-            total_messages = stats.total_messages or 0  # type: ignore[attr-defined]
+            total_messages = stats.total_messages or 0  
             detected_injections = stats.detected_injections or 0  # type: ignore[attr-defined]
             processing_time_total = stats.processing_time_total or 0.0  # type: ignore[attr-defined]
 

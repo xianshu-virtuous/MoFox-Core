@@ -22,8 +22,6 @@ class PermissionManager(IPermissionManager):
     """权限管理器实现类"""
 
     def __init__(self):
-        self.engine = None
-        self.SessionLocal = None
         self._master_users: set[tuple[str, str]] = set()
         self._load_master_users()
 
@@ -52,7 +50,7 @@ class PermissionManager(IPermissionManager):
         self._load_master_users()
         logger.info("Master用户配置已重新加载")
 
-    def is_master(self, user: UserInfo) -> bool:
+    async def is_master(self, user: UserInfo) -> bool:
         """
         检查用户是否为Master用户
 
@@ -81,7 +79,7 @@ class PermissionManager(IPermissionManager):
         """
         try:
             # Master用户拥有所有权限
-            if self.is_master(user):
+            if await self.is_master(user):
                 logger.debug(f"Master用户 {user.platform}:{user.user_id} 拥有权限节点 {permission_node}")
                 return True
 
@@ -288,10 +286,10 @@ class PermissionManager(IPermissionManager):
         """
         try:
             # Master用户拥有所有权限
-            if self.is_master(user):
+            if await self.is_master(user):
                 async with self.SessionLocal() as session:
                     result = await session.execute(select(PermissionNodes.node_name))
-                    all_nodes = result.scalars().all()
+                    all_nodes = list(result.scalars().all())
                     return all_nodes
 
             permissions = []
