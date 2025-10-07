@@ -492,16 +492,16 @@ class ChatManager:
         else:
             components = [platform, str(user_info.user_id), "private"]  # type: ignore
 
-        # 使用MD5生成唯一ID
+        # 使用SHA-256生成唯一ID
         key = "_".join(components)
-        return hashlib.md5(key.encode()).hexdigest()
+        return hashlib.sha256(key.encode()).hexdigest()
 
     @staticmethod
     def get_stream_id(platform: str, id: str, is_group: bool = True) -> str:
         """获取聊天流ID"""
         components = [platform, id] if is_group else [platform, id, "private"]
         key = "_".join(components)
-        return hashlib.md5(key.encode()).hexdigest()
+        return hashlib.sha256(key.encode()).hexdigest()
 
     async def get_or_create_stream(
         self, platform: str, user_info: UserInfo, group_info: GroupInfo | None = None
