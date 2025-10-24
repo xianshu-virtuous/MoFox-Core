@@ -1,4 +1,6 @@
 import asyncio
+import re
+from typing import Type
 
 from src.chat.utils.prompt_params import PromptParameters
 from src.common.logger import get_logger
@@ -19,7 +21,7 @@ class PromptComponentManager:
     3. 提供一个接口，以便在构建核心Prompt时，能够获取并执行所有相关的组件。
     """
 
-    def get_components_for(self, injection_point: str) -> list[type[BasePrompt]]:
+    def _get_rules_for(self, target_prompt_name: str) -> list[tuple[InjectionRule, Type[BasePrompt]]]:
         """
         获取指定目标Prompt的所有注入规则及其关联的组件类。
 
@@ -34,8 +36,7 @@ class PromptComponentManager:
         enabled_prompts = component_registry.get_enabled_components_by_type(ComponentType.PROMPT)
         matching_rules = []
 
-        matching_components: list[type[BasePrompt]] = []
-
+        # 遍历所有启用的 Prompt 组件，查找与目标 Prompt 相关的注入规则
         for prompt_name, prompt_info in enabled_prompts.items():
             if not isinstance(prompt_info, PromptInfo):
                 continue
