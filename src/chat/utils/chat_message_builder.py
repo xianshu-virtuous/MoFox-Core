@@ -47,8 +47,9 @@ def replace_user_references_sync(
             # 检查是否是机器人自己
             if replace_bot_name and user_id == global_config.bot.qq_account:
                 return f"{global_config.bot.nickname}(你)"
-            person_id = PersonInfoManager.get_person_id(platform, user_id)
-            return person_info_manager.get_value(person_id, "person_name") or user_id  # type: ignore
+            # 同步函数中无法使用异步的 get_value，直接返回 user_id
+            # 建议调用方使用 replace_user_references_async 以获取完整的用户名
+            return user_id
 
         name_resolver = default_resolver
 

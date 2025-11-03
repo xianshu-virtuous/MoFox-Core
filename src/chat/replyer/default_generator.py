@@ -18,7 +18,7 @@ from src.chat.message_receive.uni_message_sender import HeartFCSender
 from src.chat.utils.chat_message_builder import (
     build_readable_messages,
     get_raw_msg_before_timestamp_with_chat,
-    replace_user_references_sync,
+    replace_user_references_async,
 )
 from src.chat.utils.memory_mappings import get_memory_type_chinese_label
 
@@ -1030,9 +1030,9 @@ class DefaultReplyer:
                             sender_name = "未知用户"
 
                         # 处理消息内容中的用户引用，确保bot回复在消息内容中也正确显示
-                        from src.chat.utils.chat_message_builder import replace_user_references_sync
+                        from src.chat.utils.chat_message_builder import replace_user_references_async
                         if msg_content:
-                            msg_content = replace_user_references_sync(
+                            msg_content = await replace_user_references_async(
                                 msg_content,
                                 platform,
                                 replace_bot_name=True
@@ -1131,8 +1131,8 @@ class DefaultReplyer:
                     sender_name = "未知用户"
 
                 # 处理消息内容中的用户引用，确保bot回复在消息内容中也正确显示
-                from src.chat.utils.chat_message_builder import replace_user_references_sync
-                msg_content = replace_user_references_sync(
+                from src.chat.utils.chat_message_builder import replace_user_references_async
+                msg_content = await replace_user_references_async(
                     msg_content,
                     platform,
                     replace_bot_name=True
@@ -1269,7 +1269,7 @@ class DefaultReplyer:
         person_id = await person_info_manager.get_person_id_by_person_name(sender)
         platform = chat_stream.platform
 
-        target = replace_user_references_sync(target, chat_stream.platform, replace_bot_name=True)
+        target = await replace_user_references_async(target, chat_stream.platform, replace_bot_name=True)
 
     # （简化）不再对自消息做额外任务段落清理，只通过前置选择逻辑避免自目标
 
@@ -1940,9 +1940,6 @@ class DefaultReplyer:
             return ""
 
     async def build_relation_info(self, sender: str, target: str):
-        if not global_config.affinity_flow.enable_relationship_tracking:
-            return ""
-
         # 获取用户ID
         person_info_manager = get_person_info_manager()
         person_id = await person_info_manager.get_person_id_by_person_name(sender)
