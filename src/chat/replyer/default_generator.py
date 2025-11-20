@@ -566,12 +566,18 @@ class DefaultReplyer:
 
         return f"{expression_habits_title}\n{expression_habits_block}"
 
-    async def build_memory_block(self, chat_history: str, target: str) -> str:
+    async def build_memory_block(
+        self,
+        chat_history: str,
+        target: str,
+        recent_messages: list[dict[str, Any]] | None = None,
+    ) -> str:
         """构建记忆块（使用三层记忆系统）
 
         Args:
             chat_history: 聊天历史记录
             target: 目标消息内容
+            recent_messages: 原始聊天消息列表（用于构建查询块）
 
         Returns:
             str: 记忆信息字符串
@@ -589,9 +595,12 @@ class DefaultReplyer:
                 logger.debug("[三层记忆] 管理器未初始化")
                 return ""
 
+            # 目标查询改为使用最近多条消息的组合块
+            query_text = self._build_memory_query_text(target, recent_messages)
+
             # 使用统一管理器的智能检索（Judge模型决策）
             search_result = await unified_manager.search_memories(
-                query_text=target,
+                query_text=query_text,
                 use_judge=True,
                 recent_chat_history=chat_history,  # 传递最近聊天历史
             )
@@ -628,6 +637,62 @@ class DefaultReplyer:
         except Exception as e:
             logger.error(f"[三层记忆] 检索失败: {e}", exc_info=True)
             return ""
+
+    def _build_memory_query_text(
+        self,
+        fallback_text: str,
+        recent_messages: list[dict[str, Any]] | None,
+        block_size: int = 5,
+    ) -> str:
+        """
+        将最近若干条消息拼接为一个查询块，用于生成语义向量。
+
+        Args:
+            fallback_text: 如果无法拼接消息块时使用的后备文本
+            recent_messages: 最近的消息列表
+            block_size: 组合的消息数量
+
+        Returns:
+            str: 用于检索的查询文本
+        """
+        if not recent_messages:
+            return fallback_text
+
+        lines: list[str] = []
+        for message in recent_messages[-block_size:]:
+            sender = (
+                message.get("sender_name")
+                or message.get("person_name")
+                or message.get("user_nickname")
+                or message.get("user_cardname")
+                or message.get("nickname")
+                or message.get("sender")
+            )
+
+            if not sender and isinstance(message.get("user_info"), dict):
+                user_info = message["user_info"]
+                sender = user_info.get("user_nickname") or user_info.get("user_cardname")
+
+            sender = sender or message.get("user_id") or "未知"
+
+            content = (
+                message.get("processed_plain_text")
+                or message.get("display_message")
+                or message.get("content")
+                or message.get("message")
+                or message.get("text")
+                or ""
+            )
+
+            content = str(content).strip()
+            if content:
+                lines.append(f"{sender}: {content}")
+
+        fallback_clean = fallback_text.strip()
+        if not lines:
+            return fallback_clean or fallback_text
+
+        return "\n".join(lines[-block_size:])
 
 
 
@@ -1251,7 +1316,10 @@ class DefaultReplyer:
                 self._time_and_run_task(self.build_relation_info(sender, target), "relation_info")
             ),
             "memory_block": asyncio.create_task(
-                self._time_and_run_task(self.build_memory_block(chat_talking_prompt_short, target), "memory_block")
+                self._time_and_run_task(
+                    self.build_memory_block(chat_talking_prompt_short, target, message_list_before_short),
+                    "memory_block",
+                )
             ),
             "tool_info": asyncio.create_task(
                 self._time_and_run_task(

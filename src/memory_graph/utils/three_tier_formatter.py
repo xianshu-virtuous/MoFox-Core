@@ -312,7 +312,8 @@ class ThreeTierMemoryFormatter:
 
             # 查找客体和属性
             objects = []
-            attributes = {}
+            attributes: dict[str, str] = {}
+            attribute_names: dict[str, str] = {}
 
             for edge in memory.edges:
                 edge_type = edge.edge_type.value if hasattr(edge.edge_type, 'value') else str(edge.edge_type)
@@ -320,17 +321,28 @@ class ThreeTierMemoryFormatter:
                 if edge_type == "核心关系" and edge.source_id == topic_node.id:
                     obj_node = memory.get_node_by_id(edge.target_id)
                     if obj_node:
-                        if edge.relation and edge.relation != "未知":
-                            objects.append(f"{edge.relation}{obj_node.content}")
+                        relation_label = (edge.relation or "").strip()
+                        obj_text = obj_node.content
+                        if relation_label and relation_label not in {"未知", "核心关系"}:
+                            objects.append(f"{relation_label}：{obj_text}")
                         else:
-                            objects.append(obj_node.content)
+                            objects.append(obj_text)
 
                 elif edge_type == "属性关系":
                     attr_node = memory.get_node_by_id(edge.target_id)
-                    if attr_node:
-                        attr_name = edge.relation if edge.relation else "属性"
-                        # 使用字典避免重复属性，后面的会覆盖前面的
-                        attributes[attr_name] = attr_node.content
+                    if not attr_node:
+                        continue
+
+                    if edge.source_id == topic_node.id:
+                        # 记录属性节点的名称，稍后匹配对应的值节点
+                        attribute_names[attr_node.id] = attr_node.content
+                        continue
+
+                    attr_name = attribute_names.get(edge.source_id)
+                    if not attr_name:
+                        attr_name = edge.relation.strip() if edge.relation else "属性"
+
+                    attributes[attr_name] = attr_node.content
 
             # 检查节点中的属性（处理 "key=value" 格式）
             for node in memory.nodes:
@@ -338,9 +350,9 @@ class ThreeTierMemoryFormatter:
                     # 处理 "key=value" 格式的属性
                     if "=" in node.content:
                         key, value = node.content.split("=", 1)
-                        attributes[key.strip()] = value.strip()
+                        attributes.setdefault(key.strip(), value.strip())
                     else:
-                        attributes["属性"] = node.content
+                        attributes.setdefault("属性", node.content)
 
             # 构建最终格式
             result = f"[{type_label}] {subject}-{topic}"
