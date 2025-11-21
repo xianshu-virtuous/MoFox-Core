@@ -102,6 +102,18 @@ def set_component_enabled_local(stream_id: str, name: str, component_type: Compo
     Returns:
         bool: 操作成功则为 True。
     """
+    # Chatter 唯一性保护
+    if component_type == ComponentType.CHATTER and not enabled:
+        # 检查当前 stream_id 上下文中的启用状态
+        enabled_chatters = component_registry.get_enabled_components_by_type(
+            ComponentType.CHATTER, stream_id=stream_id
+        )
+        if len(enabled_chatters) <= 1 and name in enabled_chatters:
+            logger.warning(
+                f"操作被阻止：在 stream '{stream_id}' 中，不能禁用最后一个启用的 Chatter 组件 ('{name}')。"
+            )
+            return False
+            
     component_registry.set_local_component_state(stream_id, name, component_type, enabled)
     return True
 
