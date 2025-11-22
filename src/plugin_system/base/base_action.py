@@ -110,7 +110,7 @@ class BaseAction(ABC):
             **kwargs: 其他参数
         """
         if plugin_config is None:
-            plugin_config: ClassVar = {}
+            plugin_config = {}
         self.action_data = action_data
         self.reasoning = reasoning
         self.cycle_timers = cycle_timers

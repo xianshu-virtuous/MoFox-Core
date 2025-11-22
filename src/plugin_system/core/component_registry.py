@@ -492,7 +492,7 @@ class ComponentRegistry:
                     if hasattr(self, "_enabled_prompt_registry"):
                         self._enabled_prompt_registry.pop(component_name, None)
                     logger.debug(f"已移除Prompt组件: {component_name}")
-                
+
                 case ComponentType.ROUTER:
                     # Router组件的移除比较复杂，目前只记录日志
                     logger.warning(f"Router组件 '{component_name}' 的HTTP端点无法在运行时动态移除，将在下次重启后生效。")
@@ -605,6 +605,9 @@ class ComponentRegistry:
                             result = event_manager.unsubscribe_handler_from_event(event, component_name)
                             if hasattr(result, "__await__"):
                                 await result  # type: ignore[func-returns-value]
+                case ComponentType.PROMPT:
+                    if hasattr(self, "_enabled_prompt_registry"):
+                        self._enabled_prompt_registry.pop(component_name, None)
 
             # 组件主注册表使用命名空间 key
             namespaced_name = f"{component_type.value}.{component_name}"
@@ -915,6 +918,27 @@ class ComponentRegistry:
         info = self.get_component_info(chatter_name, ComponentType.CHATTER)
         return info if isinstance(info, ChatterInfo) else None
 
+    # === Prompt 特定查询方法 ===
+    def get_prompt_registry(self) -> dict[str, type[BasePrompt]]:
+        """获取Prompt注册表"""
+        if not hasattr(self, "_prompt_registry"):
+            self._prompt_registry: dict[str, type[BasePrompt]] = {}
+        return self._prompt_registry.copy()
+
+    def get_enabled_prompt_registry(self, stream_id: str | None = None) -> dict[str, type[BasePrompt]]:
+        """获取启用的Prompt注册表, 可选地根据 stream_id 考虑局部状态"""
+        all_prompts = self.get_prompt_registry()
+        available_prompts = {}
+        for name, prompt_class in all_prompts.items():
+            if self.is_component_available(name, ComponentType.PROMPT, stream_id):
+                available_prompts[name] = prompt_class
+        return available_prompts
+
+    def get_registered_prompt_info(self, prompt_name: str) -> PromptInfo | None:
+        """获取Prompt信息"""
+        info = self.get_component_info(prompt_name, ComponentType.PROMPT)
+        return info if isinstance(info, PromptInfo) else None
+
     # === 插件查询方法 ===
 
     def get_plugin_info(self, plugin_name: str) -> PluginInfo | None:
@@ -1020,31 +1044,47 @@ class ComponentRegistry:
         self, stream_id: str, component_name: str, component_type: ComponentType, enabled: bool
     ) -> bool:
         """为指定的 stream_id 设置组件的局部（临时）状态"""
+        # 如果组件类型不需要局部状态管理，则记录警告并返回
+        if component_type in self._no_local_state_types:
+            logger.warning(
+                f"组件类型 {component_type.value} 不支持局部状态管理。 "
+                f"尝试为 '{component_name}' 设置局部状态的操作将被忽略。"
+            )
+            return False
+
         if stream_id not in self._local_component_states:
             self._local_component_states[stream_id] = {}
-        
+
         state_key = (component_name, component_type)
         self._local_component_states[stream_id][state_key] = enabled
-        logger.debug(f"已为 stream '{stream_id}' 设置局部状态: {component_name} ({component_type}) -> {'启用' if enabled else '禁用'}")
+        logger.debug(
+            f"已为 stream '{stream_id}' 设置局部状态: {component_name} ({component_type}) -> {'启用' if enabled else '禁用'}"
+        )
         return True
 
-    def is_component_available(self, component_name: str, component_type: ComponentType, stream_id: str | None = None) -> bool:
+    def is_component_available(
+        self, component_name: str, component_type: ComponentType, stream_id: str | None = None
+    ) -> bool:
         """检查组件在给定上下文中是否可用（同时考虑全局和局部状态）"""
         component_info = self.get_component_info(component_name, component_type)
-        
+
         # 1. 检查组件是否存在
         if not component_info:
             return False
-            
-        # 2. 如果提供了 stream_id，检查局部状态
+
+        # 2. 如果组件类型不需要局部状态，则直接返回其全局状态
+        if component_type in self._no_local_state_types:
+            return component_info.enabled
+
+        # 3. 如果提供了 stream_id，检查局部状态
         if stream_id and stream_id in self._local_component_states:
             state_key = (component_name, component_type)
             local_state = self._local_component_states[stream_id].get(state_key)
-            
+
             if local_state is not None:
                 return local_state  # 局部状态存在，覆盖全局状态
-        
-        # 3. 如果没有局部状态覆盖，则返回全局状态
+
+        # 4. 如果没有局部状态覆盖，则返回全局状态
         return component_info.enabled
 
     # === MCP 工具相关方法 ===
