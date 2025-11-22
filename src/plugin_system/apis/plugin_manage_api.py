@@ -102,6 +102,12 @@ def set_component_enabled_local(stream_id: str, name: str, component_type: Compo
     Returns:
         bool: 操作成功则为 True。
     """
+    # 首先，检查组件是否存在
+    component_info = component_registry.get_component_info(name, component_type)
+    if not component_info:
+        logger.error(f"尝试设置局部状态失败：未找到组件 {name} ({component_type.value})。")
+        return False
+
     # Chatter 唯一性保护
     if component_type == ComponentType.CHATTER and not enabled:
         # 检查当前 stream_id 上下文中的启用状态
