@@ -106,8 +106,8 @@ class SystemCommand(PlusCommand):
 • `/system plugin reload <插件名>` - 重新加载指定插件
 • `/system plugin reload_all` - 重新加载所有插件
 🎯 局部控制 (需要 `system.plugin.manage.local` 权限):
-• `/system plugin enable_local <类型> <名称> [group <群号> | private <QQ号>]` - 在指定会话局部启用组件
-• `/system plugin disable_local <类型> <名称> [group <群号> | private <QQ号>]` - 在指定会话局部禁用组件
+• `/system plugin enable_local <名称> [group <群号> | private <QQ号>]` - 在指定会话局部启用组件
+• `/system plugin disable_local <名称> [group <群号> | private <QQ号>]` - 在指定会话局部禁用组件
 """
         elif target == "permission":
             help_text = """📋 权限管理命令帮助
@@ -162,9 +162,9 @@ class SystemCommand(PlusCommand):
             await self._reload_plugin(remaining_args[0])
         elif action in ["reload_all", "重载全部"]:
             await self._reload_all_plugins()
-        elif action in ["enable_local", "局部启用"] and len(remaining_args) >= 2:
+        elif action in ["enable_local", "局部启用"] and len(remaining_args) >= 1:
             await self._set_local_component_state(remaining_args, enabled=True)
-        elif action in ["disable_local", "局部禁用"] and len(remaining_args) >= 2:
+        elif action in ["disable_local", "局部禁用"] and len(remaining_args) >= 1:
             await self._set_local_component_state(remaining_args, enabled=False)
         else:
             await self.send_text("❌ 插件管理命令不合法\n使用 /system plugin help 查看帮助")
@@ -498,24 +498,53 @@ class SystemCommand(PlusCommand):
     @require_permission("plugin.manage.local", deny_message="❌ 你没有局部管理插件组件的权限")
     async def _set_local_component_state(self, args: list[str], enabled: bool):
         """在局部范围内启用或禁用一个组件"""
-        # 命令格式: <component_type> <component_name> [group <group_id> | private <user_id>]
-        if len(args) < 2:
+        # 命令格式: <component_name> [group <group_id> | private <user_id>]
+        if not args:
             action = "enable_local" if enabled else "disable_local"
-            await self.send_text(f"❌ 用法: /system plugin {action} <类型> <名称> [group <群号> | private <QQ号>]")
+            await self.send_text(f"❌ 用法: /system plugin {action} <名称> [group <群号> | private <QQ号>]")
             return
 
-        comp_type_str = args[0]
-        comp_name = args[1]
+        comp_name = args[0]
+        context_args = args[1:]
         stream_id = self.message.chat_info.stream_id  # 默认作用于当前会话
 
-        if len(args) >= 4:
-            context_type = args[2].lower()
-            context_id = args[3]
+        # 1. 搜索组件
+        found_components = plugin_manage_api.search_components_by_name(comp_name, exact_match=True)
+
+        if not found_components:
+            await self.send_text(f"❌ 未找到名为 '{comp_name}' 的组件。")
+            return
+        
+        if len(found_components) > 1:
+            suggestions = "\n".join([f"- `{c['name']}` (类型: {c['component_type']})" for c in found_components])
+            await self.send_text(f"❌ 发现多个名为 '{comp_name}' 的组件，操作已取消。\n找到的组件:\n{suggestions}")
+            return
+
+        component_info = found_components[0]
+        comp_type_str = component_info["component_type"]
+        component_type = ComponentType(comp_type_str)
+
+        # 2. 增加禁用保护
+        if not enabled:  # 如果是禁用操作
+            # 定义不可禁用的核心组件类型
+            protected_types = [
+                ComponentType.INTEREST_CALCULATOR,
+                ComponentType.PROMPT,
+                ComponentType.ROUTER,
+            ]
+            if component_type in protected_types:
+                await self.send_text(f"❌ 无法局部禁用核心组件 '{comp_name}' ({comp_type_str})。")
+                return
+
+        # 3. 解析上下文
+        if len(context_args) >= 2:
+            context_type = context_args[0].lower()
+            context_id = context_args[1]
             
             target_stream = None
             if context_type == "group":
                 target_stream = chat_api.get_stream_by_group_id(
-                    group_id=context_id, 
+                    group_id=context_id,
                     platform=self.message.chat_info.platform
                 )
             elif context_type == "private":
@@ -533,12 +562,7 @@ class SystemCommand(PlusCommand):
             
             stream_id = target_stream.stream_id
 
-        try:
-            component_type = ComponentType(comp_type_str.lower())
-        except ValueError:
-            await self.send_text(f"❌ 无效的组件类型: '{comp_type_str}'。有效类型: {', '.join([t.value for t in ComponentType])}")
-            return
-
+        # 4. 执行操作
         success = plugin_manage_api.set_component_enabled_local(
             stream_id=stream_id,
             name=comp_name,
