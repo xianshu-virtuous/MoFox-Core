@@ -8,10 +8,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from src.common.data_models.database_data_model import DatabaseGroupInfo,DatabaseUserInfo
 from src.common.data_models.database_data_model import DatabaseMessages
-from src.common.data_models.message_manager_data_model import StreamContext
-from src.plugin_system.base.component_types import ChatMode, ChatType
 from src.common.database.api.crud import CRUDBase
-from src.common.database.api.specialized import get_or_create_chat_stream
 from src.common.database.compatibility import get_db_session
 from src.common.database.core.models import ChatStreams  # 新增导入
 from src.common.logger import get_logger
@@ -43,6 +40,8 @@ class ChatStream:
         self.sleep_pressure = data.get("sleep_pressure", 0.0) if data else 0.0
         self.saved = False
 
+        from src.common.data_models.message_manager_data_model import StreamContext
+        from src.plugin_system.base.component_types import ChatMode, ChatType
         self.context: StreamContext = StreamContext(
             stream_id=stream_id,
             chat_type=ChatType.GROUP if group_info else ChatType.PRIVATE,
@@ -407,6 +406,7 @@ class ChatManager:
                     stream.group_info = group_info
             else:
                 current_time = time.time()
+                from src.common.database.api.specialized import get_or_create_chat_stream
                 model_instance, _ = await get_or_create_chat_stream(
                     stream_id=stream_id,
                     platform=platform,

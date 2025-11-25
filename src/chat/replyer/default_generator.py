@@ -9,10 +9,9 @@ import re
 import time
 import traceback
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 
 from src.chat.express.expression_selector import expression_selector
-from src.chat.message_receive.chat_stream import ChatStream
 from src.chat.message_receive.message import MessageSending, Seg, UserInfo
 from src.chat.message_receive.uni_message_sender import HeartFCSender
 from src.chat.utils.chat_message_builder import (
@@ -37,6 +36,9 @@ from src.person_info.person_info import get_person_info_manager
 from src.plugin_system.apis import llm_api
 from src.plugin_system.apis.permission_api import permission_api
 from src.plugin_system.base.component_types import ActionInfo, EventType
+
+if TYPE_CHECKING:
+    from src.chat.message_receive.chat_stream import ChatStream
 
 logger = get_logger("replyer")
 
@@ -236,7 +238,7 @@ If you need to use the search tool, please directly call the function "lpmm_sear
 class DefaultReplyer:
     def __init__(
         self,
-        chat_stream: ChatStream,
+        chat_stream: "ChatStream",
         request_type: str = "replyer",
     ):
         self.express_model = LLMRequest(model_set=model_config.model_task_config.replyer, request_type=request_type)

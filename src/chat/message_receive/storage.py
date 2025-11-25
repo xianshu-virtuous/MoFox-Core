@@ -3,7 +3,7 @@ import re
 import time
 import traceback
 from collections import deque
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import orjson
 from sqlalchemy import desc, select, update
@@ -13,9 +13,11 @@ from src.common.database.core import get_db_session
 from src.common.database.core.models import Images, Messages
 from src.common.logger import get_logger
 
-from .chat_stream import ChatStream
 from .message import MessageSending
 
+if TYPE_CHECKING:
+    from src.chat.message_receive.chat_stream import ChatStream
+    
 logger = get_logger("message_storage")
 
 
@@ -479,7 +481,7 @@ class MessageStorage:
             return []
 
     @staticmethod
-    async def store_message(message: DatabaseMessages | MessageSending, chat_stream: ChatStream, use_batch: bool = True) -> None:
+    async def store_message(message: DatabaseMessages | MessageSending, chat_stream: "ChatStream", use_batch: bool = True) -> None:
         """
         存储消息到数据库
 

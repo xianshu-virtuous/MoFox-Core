@@ -13,7 +13,6 @@ from rich.traceback import install
 
 from src.chat.emoji_system.emoji_manager import get_emoji_manager
 from chat.message_receive.message_handler import get_message_handler, shutdown_message_handler
-from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.utils.statistic import OnlineTimeRecordTask, StatisticOutputTask
 from src.common.core_sink_manager import (
     CoreSinkManager,
@@ -469,6 +468,7 @@ MoFox_Bot(第三方修改版)
         logger.info("情绪管理器初始化成功")
 
         # 启动聊天管理器的自动保存任务
+        from src.chat.message_receive.chat_stream import get_chat_manager
         task = asyncio.create_task(get_chat_manager()._auto_save_task())
         _background_tasks.add(task)
         task.add_done_callback(_background_tasks.discard)

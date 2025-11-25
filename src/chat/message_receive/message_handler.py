@@ -38,7 +38,6 @@ from typing import TYPE_CHECKING, Any
 from mofox_bus import MessageEnvelope, MessageRuntime
 
 from src.chat.message_manager import message_manager
-from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.message_receive.storage import MessageStorage
 from src.chat.utils.prompt import global_prompt_manager
 from src.chat.utils.utils import is_mentioned_bot_in_message
@@ -261,7 +260,8 @@ class MessageHandler:
 
             # 获取或创建聊天流
             platform = message_info.get("platform", "unknown")
-            
+
+            from src.chat.message_receive.chat_stream import get_chat_manager
             chat = await get_chat_manager().get_or_create_stream(
                 platform=platform,
                 user_info=user_info,  # type: ignore
@@ -281,6 +281,7 @@ class MessageHandler:
             message.chat_info.last_active_time = chat.last_active_time
 
             # 注册消息到聊天管理器
+            from src.chat.message_receive.chat_stream import get_chat_manager
             get_chat_manager().register_message(message)
 
             # 检测是否提及机器人

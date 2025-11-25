@@ -10,8 +10,6 @@ import numpy as np
 import rjieba
 from mofox_bus import UserInfo
 
-from src.chat.message_receive.chat_stream import get_chat_manager
-
 # MessageRecv 已被移除，现在使用 DatabaseMessages
 from src.common.logger import get_logger
 from src.common.message_repository import count_messages, find_messages
@@ -780,6 +778,7 @@ async def get_chat_type_and_target_info(chat_id: str) -> tuple[bool, dict | None
     chat_target_info = None
 
     try:
+        from src.chat.message_receive.chat_stream import get_chat_manager
         if chat_stream := await get_chat_manager().get_stream(chat_id):
             if chat_stream.group_info:
                 is_group_chat = True

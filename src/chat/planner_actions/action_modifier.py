@@ -4,7 +4,7 @@ import random
 import time
 from typing import TYPE_CHECKING, Any, cast
 
-from src.chat.message_receive.chat_stream import ChatStream, get_chat_manager
+from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.planner_actions.action_manager import ChatterActionManager
 from src.chat.utils.chat_message_builder import build_readable_messages, get_raw_msg_before_timestamp_with_chat
 from src.common.logger import get_logger
@@ -15,6 +15,7 @@ from src.plugin_system.core.global_announcement_manager import global_announceme
 
 if TYPE_CHECKING:
     from src.common.data_models.message_manager_data_model import StreamContext
+    from src.chat.message_receive.chat_stream import ChatStream
 
 logger = get_logger("action_manager")
 
@@ -31,7 +32,7 @@ class ActionModifier:
         """初始化动作处理器"""
         self.chat_id = chat_id
         # chat_stream 和 log_prefix 将在异步方法中初始化
-        self.chat_stream: ChatStream | None = None
+        self.chat_stream: "ChatStream | None" = None
         self.log_prefix = f"[{chat_id}]"
 
         self.action_manager = action_manager

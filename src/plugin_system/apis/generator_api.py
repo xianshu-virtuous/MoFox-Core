@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 
 from rich.traceback import install
 
-from src.chat.message_receive.chat_stream import ChatStream
 from src.chat.utils.utils import process_llm_response
 from src.common.data_models.database_data_model import DatabaseMessages
 from src.common.logger import get_logger
@@ -21,6 +20,7 @@ from src.plugin_system.base.component_types import ActionInfo
 
 if TYPE_CHECKING:
     from chat.replyer.default_generator import DefaultReplyer
+    from src.chat.message_receive.chat_stream import ChatStream
 
 install(extra_lines=3)
 
@@ -34,7 +34,7 @@ logger = get_logger("generator_api")
 
 
 async def get_replyer(
-    chat_stream: ChatStream | None = None,
+    chat_stream: "ChatStream | None" = None,
     chat_id: str | None = None,
     request_type: str = "replyer",
 ) -> "DefaultReplyer | None":
@@ -78,7 +78,7 @@ async def get_replyer(
 
 
 async def generate_reply(
-    chat_stream: ChatStream | None = None,
+    chat_stream: "ChatStream | None" = None,
     chat_id: str | None = None,
     action_data: dict[str, Any] | None = None,
     reply_to: str = "",
@@ -189,7 +189,7 @@ async def generate_reply(
 
 
 async def rewrite_reply(
-    chat_stream: ChatStream | None = None,
+    chat_stream: "ChatStream | None" = None,
     reply_data: dict[str, Any] | None = None,
     chat_id: str | None = None,
     enable_splitter: bool = True,
@@ -287,7 +287,7 @@ def process_human_text(content: str, enable_splitter: bool, enable_chinese_typo:
 
 
 async def generate_response_custom(
-    chat_stream: ChatStream | None = None,
+    chat_stream: "ChatStream | None" = None,
     chat_id: str | None = None,
     request_type: str = "generator_api",
     prompt: str = "",
