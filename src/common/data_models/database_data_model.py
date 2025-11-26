@@ -16,6 +16,24 @@ class DatabaseUserInfo(BaseDataModel):
     user_nickname: str = field(default_factory=str)  # 用户昵称
     user_cardname: str | None = None  # 用户备注名或群名片，可为空
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "DatabaseUserInfo":
+        """从字典创建实例"""
+        return cls(
+            platform=data.get("platform", ""),
+            user_id=data.get("user_id", ""),
+            user_nickname=data.get("user_nickname", ""),
+            user_cardname=data.get("user_cardname"),
+        )
+
+    def to_dict(self) -> dict:
+        """将实例转换为字典"""
+        return {
+            "platform": self.platform,
+            "user_id": self.user_id,
+            "user_nickname": self.user_nickname,
+            "user_cardname": self.user_cardname,
+        }
 
 @dataclass
 class DatabaseGroupInfo(BaseDataModel):
@@ -24,9 +42,25 @@ class DatabaseGroupInfo(BaseDataModel):
     """
     group_id: str = field(default_factory=str)  # 群组唯一标识 ID
     group_name: str = field(default_factory=str)  # 群组名称
-    group_platform: str | None = None  # 群组所在平台，可为空
+    platform: str | None = None  # 群组所在平台，可为空
 
-
+    @classmethod
+    def from_dict(cls, data: dict) -> "DatabaseGroupInfo":
+        """从字典创建实例"""
+        return cls(
+            group_id=data.get("group_id", ""),
+            group_name=data.get("group_name", ""),
+            platform=data.get("platform"),
+        )
+    
+    def to_dict(self) -> dict:
+        """将实例转换为字典"""
+        return {
+            "group_id": self.group_id,
+            "group_name": self.group_name,
+            "group_platform": self.platform,
+        }
+    
 @dataclass
 class DatabaseChatInfo(BaseDataModel):
     """
@@ -134,7 +168,7 @@ class DatabaseMessages(BaseDataModel):
             self.group_info = DatabaseGroupInfo(
                 group_id=chat_info_group_id,
                 group_name=chat_info_group_name,
-                group_platform=chat_info_group_platform,
+                platform=chat_info_group_platform,
             )
 
         # 构建聊天信息对象
@@ -200,7 +234,7 @@ class DatabaseMessages(BaseDataModel):
             "user_platform": self.user_info.platform,
             "chat_info_group_id": self.group_info.group_id if self.group_info else None,
             "chat_info_group_name": self.group_info.group_name if self.group_info else None,
-            "chat_info_group_platform": self.group_info.group_platform if self.group_info else None,
+            "chat_info_group_platform": self.group_info.platform if self.group_info else None,
             "chat_info_stream_id": self.chat_info.stream_id,
             "chat_info_platform": self.chat_info.platform,
             "chat_info_create_time": self.chat_info.create_time,

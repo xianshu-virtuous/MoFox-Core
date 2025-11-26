@@ -8,26 +8,24 @@ import random
 import re
 import time
 import traceback
+import uuid
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 
 from src.chat.express.expression_selector import expression_selector
-from src.chat.message_receive.chat_stream import ChatStream
-from src.chat.message_receive.message import MessageSending, Seg, UserInfo
 from src.chat.message_receive.uni_message_sender import HeartFCSender
 from src.chat.utils.chat_message_builder import (
     build_readable_messages,
     get_raw_msg_before_timestamp_with_chat,
     replace_user_references_async,
 )
-from src.chat.utils.memory_mappings import get_memory_type_chinese_label
 
 # 导入新的统一Prompt系统
 from src.chat.utils.prompt import Prompt, global_prompt_manager
 from src.chat.utils.prompt_params import PromptParameters
 from src.chat.utils.timer_calculator import Timer
 from src.chat.utils.utils import get_chat_type_and_target_info
-from src.common.data_models.database_data_model import DatabaseMessages
+from src.common.data_models.database_data_model import DatabaseMessages, DatabaseUserInfo
 from src.common.logger import get_logger
 from src.config.config import global_config, model_config
 from src.individuality.individuality import get_individuality
@@ -37,6 +35,9 @@ from src.person_info.person_info import get_person_info_manager
 from src.plugin_system.apis import llm_api
 from src.plugin_system.apis.permission_api import permission_api
 from src.plugin_system.base.component_types import ActionInfo, EventType
+
+if TYPE_CHECKING:
+    from src.chat.message_receive.chat_stream import ChatStream
 
 logger = get_logger("replyer")
 
@@ -236,7 +237,7 @@ If you need to use the search tool, please directly call the function "lpmm_sear
 class DefaultReplyer:
     def __init__(
         self,
-        chat_stream: ChatStream,
+        chat_stream: "ChatStream",
         request_type: str = "replyer",
     ):
         self.express_model = LLMRequest(model_set=model_config.model_task_config.replyer, request_type=request_type)
@@ -396,7 +397,7 @@ class DefaultReplyer:
 
             try:
                 # 设置正在回复的状态
-                self.chat_stream.context_manager.context.is_replying = True
+                self.chat_stream.context.is_replying = True
                 content, reasoning_content, model_name, tool_call = await self.llm_generate_content(prompt)
                 logger.debug(f"replyer生成内容: {content}")
                 llm_response = {
@@ -413,7 +414,7 @@ class DefaultReplyer:
                 return False, None, prompt  # LLM 调用失败则无法生成回复
             finally:
                 # 重置正在回复的状态
-                self.chat_stream.context_manager.context.is_replying = False
+                self.chat_stream.context.is_replying = False
 
                 # 触发 AFTER_LLM 事件
                 if not from_plugin:
@@ -635,7 +636,7 @@ class DefaultReplyer:
             return ""
 
         except Exception as e:
-            logger.error(f"[三层记忆] 检索失败: {e}", exc_info=True)
+            logger.error(f"[三层记忆] 检索失败: {e}")
             return ""
 
     def _build_memory_query_text(
@@ -818,7 +819,7 @@ class DefaultReplyer:
                     pass
 
         except Exception as e:
-            logger.error(f"关键词检测与反应时发生异常: {e!s}", exc_info=True)
+            logger.error(f"关键词检测与反应时发生异常: {e!s}")
 
         return reaction_prompt
 
@@ -867,7 +868,7 @@ class DefaultReplyer:
                 return ""
 
         except Exception as e:
-            logger.error(f"构建notice块失败，chat_id={chat_id}: {e}", exc_info=True)
+            logger.error(f"构建notice块失败，chat_id={chat_id}: {e}")
             return ""
 
     async def _time_and_run_task(self, coroutine, name: str) -> tuple[str, Any, float]:
@@ -910,13 +911,13 @@ class DefaultReplyer:
             chat_manager = get_chat_manager()
             chat_stream = await chat_manager.get_stream(chat_id)
             if chat_stream:
-                stream_context = chat_stream.context_manager
+                stream_context = chat_stream.context
 
                 # 确保历史消息已从数据库加载
                 await stream_context.ensure_history_initialized()
 
                 # 直接使用内存中的已读和未读消息，无需再查询数据库
-                read_messages = stream_context.context.history_messages  # 已读消息（已从数据库加载）
+                read_messages = stream_context.history_messages  # 已读消息（已从数据库加载）
                 unread_messages = stream_context.get_unread_messages()  # 未读消息
 
                 # 构建已读历史消息 prompt
@@ -1140,7 +1141,7 @@ class DefaultReplyer:
                     chat_stream_obj = await chat_manager.get_stream(chat_id)
 
                     if chat_stream_obj:
-                        unread_messages = chat_stream_obj.context_manager.get_unread_messages()
+                        unread_messages = chat_stream_obj.context.get_unread_messages()
                         if unread_messages:
                             # 使用最后一条未读消息作为参考
                             last_msg = unread_messages[-1]
@@ -1262,12 +1263,12 @@ class DefaultReplyer:
 
         if chat_stream_obj:
             # 确保历史消息已初始化
-            await chat_stream_obj.context_manager.ensure_history_initialized()
+            await chat_stream_obj.context.ensure_history_initialized()
 
             # 获取所有消息（历史+未读）
             all_messages = (
-                chat_stream_obj.context_manager.context.history_messages +
-                chat_stream_obj.context_manager.get_unread_messages()
+                chat_stream_obj.context.history_messages +
+                chat_stream_obj.context.get_unread_messages()
             )
 
             # 转换为字典格式
@@ -1641,12 +1642,12 @@ class DefaultReplyer:
 
         if chat_stream_obj:
             # 确保历史消息已初始化
-            await chat_stream_obj.context_manager.ensure_history_initialized()
+            await chat_stream_obj.context.ensure_history_initialized()
 
             # 获取所有消息（历史+未读）
             all_messages = (
-                chat_stream_obj.context_manager.context.history_messages +
-                chat_stream_obj.context_manager.get_unread_messages()
+                chat_stream_obj.context.history_messages +
+                chat_stream_obj.context.get_unread_messages()
             )
 
             # 转换为字典格式，限制数量
@@ -1760,48 +1761,6 @@ class DefaultReplyer:
         prompt_text = await prompt.build()
 
         return prompt_text
-
-    async def _build_single_sending_message(
-        self,
-        message_id: str,
-        message_segment: Seg,
-        reply_to: bool,
-        is_emoji: bool,
-        thinking_start_time: float,
-        display_message: str,
-        anchor_message: DatabaseMessages | None = None,
-    ) -> MessageSending:
-        """构建单个发送消息"""
-
-        bot_user_info = UserInfo(
-            user_id=str(global_config.bot.qq_account),
-            user_nickname=global_config.bot.nickname,
-            platform=self.chat_stream.platform,
-        )
-
-        # 从 DatabaseMessages 获取 sender_info 并转换为 UserInfo
-        sender_info = None
-        if anchor_message and anchor_message.user_info:
-            db_user_info = anchor_message.user_info
-            sender_info = UserInfo(
-                platform=db_user_info.platform,
-                user_id=db_user_info.user_id,
-                user_nickname=db_user_info.user_nickname,
-                user_cardname=db_user_info.user_cardname,
-            )
-
-        return MessageSending(
-            message_id=message_id,  # 使用片段的唯一ID
-            chat_stream=self.chat_stream,
-            bot_user_info=bot_user_info,
-            sender_info=sender_info,
-            message_segment=message_segment,
-            reply=anchor_message,  # 回复原始锚点
-            is_head=reply_to,
-            is_emoji=is_emoji,
-            thinking_start_time=thinking_start_time,  # 传递原始思考开始时间
-            display_message=display_message,
-        )
 
     async def llm_generate_content(self, prompt: str):
         with Timer("LLM生成", {}):  # 内部计时器，可选保留
@@ -2073,12 +2032,12 @@ class DefaultReplyer:
 
             if chat_stream_obj:
                 # 确保历史消息已初始化
-                await chat_stream_obj.context_manager.ensure_history_initialized()
+                await chat_stream_obj.context.ensure_history_initialized()
 
                 # 获取所有消息（历史+未读）
                 all_messages = (
-                    chat_stream_obj.context_manager.context.history_messages +
-                    chat_stream_obj.context_manager.get_unread_messages()
+                    chat_stream_obj.context.history_messages +
+                    chat_stream_obj.context.get_unread_messages()
                 )
 
                 # 转换为字典格式，限制数量

@@ -30,7 +30,6 @@ dependencies = [
     "langfuse==3.7.0",
     "lunar-python>=1.4.4",
     "lxml>=6.0.0",
-    "maim-message>=0.3.8",
     "matplotlib>=3.10.3",
     "networkx>=3.4.2",
     "orjson>=3.10",
@@ -79,6 +78,7 @@ dependencies = [
     "inkfox>=0.1.1",
     "rjieba>=0.1.13",
     "fastmcp>=2.13.0",
+    "mofox-wire",
     "jinja2>=3.1.0"
 ]
 

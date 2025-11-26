@@ -3,7 +3,6 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from src.chat.message_receive.chat_stream import get_chat_manager
 from src.common.logger import get_logger
 from src.common.security import get_api_key
 from src.config.config import global_config
@@ -123,6 +122,7 @@ async def get_message_stats_by_chat(
             return stats
 
         # 获取聊天管理器以查询会话信息
+        from src.chat.message_receive.chat_stream import get_chat_manager
         chat_manager = get_chat_manager()
         formatted_stats = {}
         # 遍历统计结果进行格式化

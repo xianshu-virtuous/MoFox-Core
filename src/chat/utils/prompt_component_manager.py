@@ -37,8 +37,80 @@ class PromptComponentManager:
         #   }
         # }
         self._dynamic_rules: dict[str, dict[str, tuple[InjectionRule, Callable[..., Awaitable[str]], str]]] = {}
-        # 使用 asyncio.Lock 来确保对 _dynamic_rules 的所有写操作都是线程安全的。
-        self._lock = asyncio.Lock()
+        self._lock = asyncio.Lock()  # 使用异步锁确保对 _dynamic_rules 的并发访问安全。
+        self._initialized = False  # 标记静态规则是否已加载，防止重复加载。
+
+    # --- 核心生命周期与初始化 ---
+
+    def load_static_rules(self):
+        """
+        在系统启动时加载所有静态注入规则。
+
+        该方法会扫描所有已在 `component_registry` 中注册并启用的 Prompt 组件，
+        将其类变量 `injection_rules` 转换为管理器的动态规则。
+        这确保了所有插件定义的默认注入行为在系统启动时就能生效。
+        此操作是幂等的，一旦初始化完成就不会重复执行。
+        """
+        if self._initialized:
+            return
+        logger.info("正在加载静态 Prompt 注入规则...")
+
+        # 从组件注册表中获取所有已启用的 Prompt 组件
+        enabled_prompts = component_registry.get_enabled_components_by_type(ComponentType.PROMPT)
+
+        for prompt_name, prompt_info in enabled_prompts.items():
+            if not isinstance(prompt_info, PromptInfo):
+                continue
+
+            component_class = component_registry.get_component_class(prompt_name, ComponentType.PROMPT)
+            if not (component_class and issubclass(component_class, BasePrompt)):
+                logger.warning(f"无法为 '{prompt_name}' 加载静态规则，因为它不是一个有效的 Prompt 组件。")
+                continue
+
+            def create_provider(
+                cls: type[BasePrompt],
+            ) -> Callable[[PromptParameters, str], Awaitable[str]]:
+                """
+                为静态组件创建一个内容提供者闭包 (Content Provider Closure)。
+
+                这个闭包捕获了组件的类 `cls`，并返回一个标准的 `content_provider` 异步函数。
+                当 `apply_injections` 需要内容时，它会调用这个函数。
+                函数内部会实例化组件，并执行其 `execute` 方法来获取注入内容。
+
+                Args:
+                    cls (type[BasePrompt]): 需要为其创建提供者的 Prompt 组件类。
+
+                Returns:
+                    Callable[[PromptParameters, str], Awaitable[str]]: 一个符合管理器标准的异步内容提供者。
+                """
+
+                async def content_provider(params: PromptParameters, target_prompt_name: str) -> str:
+                    """实际执行内容生成的异步函数。"""
+                    try:
+                        # 从注册表获取最新的组件信息，包括插件配置
+                        p_info = component_registry.get_component_info(cls.prompt_name, ComponentType.PROMPT)
+                        plugin_config = {}
+                        if isinstance(p_info, PromptInfo):
+                            plugin_config = component_registry.get_plugin_config(p_info.plugin_name)
+
+                        # 实例化组件并执行，传入 target_prompt_name
+                        instance = cls(params=params, plugin_config=plugin_config, target_prompt_name=target_prompt_name)
+                        result = await instance.execute()
+                        return str(result) if result is not None else ""
+                    except Exception as e:
+                        logger.error(f"执行静态规则提供者 '{cls.prompt_name}' 时出错: {e}")
+                        return ""  # 出错时返回空字符串，避免影响主流程
+
+                return content_provider
+
+            # 为该组件的每条静态注入规则创建并注册一个动态规则
+            for rule in prompt_info.injection_rules:
+                provider = create_provider(component_class)
+                target_rules = self._dynamic_rules.setdefault(rule.target_prompt, {})
+                target_rules[prompt_name] = (rule, provider, "static_default")
+
+        self._initialized = True
+        logger.info(f"静态 Prompt 注入规则加载完成，共处理 {len(enabled_prompts)} 个组件。")
 
     # --- 运行时规则管理 API ---
 
@@ -323,8 +395,8 @@ class PromptComponentManager:
                     # 调用内容提供者生成要注入的文本
                     content = await provider(params, target_prompt_name)
                 except Exception as e:
-                    logger.error(f"执行规则 '{rule}' (来源: {source}) 的内容提供者时失败: {e}", exc_info=True)
-                    continue  # 执行失败则跳过此规则
+                    logger.error(f"执行规则 '{rule}' (来源: {source}) 的内容提供者时失败: {e}")
+                    continue
 
             # 应用注入规则
             try:
@@ -348,7 +420,7 @@ class PromptComponentManager:
             except re.error as e:
                 logger.error(f"应用规则时发生正则错误: {e} (pattern: '{rule.target_content}')")
             except Exception as e:
-                logger.error(f"应用注入规则 '{rule}' (来源: {source}) 失败: {e}", exc_info=True)
+                logger.error(f"应用注入规则 '{rule}' (来源: {source}) 失败: {e}")
 
         # 4. 占位符恢复: 将临时标记替换回原始的占位符
         final_template = modified_template

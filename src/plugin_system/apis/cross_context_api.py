@@ -3,9 +3,9 @@
 """
 
 import time
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from src.chat.message_receive.chat_stream import ChatStream, get_chat_manager
+from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.utils.chat_message_builder import (
     build_readable_messages_with_id,
     get_raw_msg_before_timestamp_with_chat,
@@ -14,6 +14,9 @@ from src.common.logger import get_logger
 from src.common.message_repository import get_user_messages_from_streams
 from src.config.config import global_config
 from src.config.official_configs import ContextGroup
+
+if TYPE_CHECKING:
+    from src.chat.message_receive.chat_stream import ChatStream
 
 logger = get_logger("cross_context_api")
 
@@ -51,7 +54,7 @@ async def get_context_group(chat_id: str) -> ContextGroup | None:
     return None
 
 
-async def build_cross_context_normal(chat_stream: ChatStream, context_group: ContextGroup) -> str:
+async def build_cross_context_normal(chat_stream: "ChatStream", context_group: ContextGroup) -> str:
     """
     构建跨群聊/私聊上下文 (Normal模式)。
 
@@ -124,7 +127,7 @@ async def build_cross_context_normal(chat_stream: ChatStream, context_group: Con
 
 
 async def build_cross_context_s4u(
-    chat_stream: ChatStream,
+    chat_stream: "ChatStream",
     target_user_info: dict[str, Any] | None,
 ) -> str:
     """

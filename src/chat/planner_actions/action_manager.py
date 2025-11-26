@@ -1,9 +1,9 @@
 import asyncio
 import time
 import traceback
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from src.chat.message_receive.chat_stream import ChatStream, get_chat_manager
+from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.utils.timer_calculator import Timer
 from src.common.data_models.database_data_model import DatabaseMessages
 from src.common.logger import get_logger
@@ -13,6 +13,9 @@ from src.plugin_system.apis import database_api, generator_api, message_api, sen
 from src.plugin_system.base.base_action import BaseAction
 from src.plugin_system.base.component_types import ActionInfo, ComponentType
 from src.plugin_system.core.component_registry import component_registry
+
+if TYPE_CHECKING:
+    from src.chat.message_receive.chat_stream import ChatStream
 
 logger = get_logger("action_manager")
 
@@ -52,7 +55,7 @@ class ChatterActionManager:
         reasoning: str,
         cycle_timers: dict,
         thinking_id: str,
-        chat_stream: ChatStream,
+        chat_stream: "ChatStream",
         log_prefix: str,
         shutting_down: bool = False,
         action_message: DatabaseMessages | None = None,
@@ -188,7 +191,7 @@ class ChatterActionManager:
                 }
 
             # 设置正在回复的状态
-            chat_stream.context_manager.context.is_replying = True
+            chat_stream.context.is_replying = True
 
             if action_name == "no_action":
                 return {"action_type": "no_action", "success": True, "reply_text": "", "command": ""}
@@ -347,7 +350,7 @@ class ChatterActionManager:
         finally:
             # 确保重置正在回复的状态
             if chat_stream:
-                chat_stream.context_manager.context.is_replying = False
+                chat_stream.context.is_replying = False
 
     async def _record_action_to_message(self, chat_stream, action_name, target_message, action_data):
         """
@@ -392,11 +395,11 @@ class ChatterActionManager:
             chat_manager = get_chat_manager()
             chat_stream = await chat_manager.get_stream(stream_id)
             if chat_stream:
-                context = chat_stream.context_manager
-                if context.context.interruption_count > 0:
-                    old_count = context.context.interruption_count
+                context = chat_stream.context
+                if context.interruption_count > 0:
+                    old_count = context.interruption_count
                     # old_afc_adjustment = context.context.get_afc_threshold_adjustment()
-                    await context.context.reset_interruption_count()
+                    await context.reset_interruption_count()
                     logger.debug(
                         f"动作执行成功，重置聊天流 {stream_id} 的打断计数: {old_count} -> 0"
                     )
@@ -481,7 +484,7 @@ class ChatterActionManager:
 
     async def _send_and_store_reply(
         self,
-        chat_stream: ChatStream,
+        chat_stream: "ChatStream",
         response_set,
         loop_start_time,
         action_message,

@@ -1,4 +1,117 @@
-qq_face: dict = {
+from enum import Enum
+
+
+class MetaEventType:
+    lifecycle = "lifecycle"  # 生命周期
+
+    class Lifecycle:
+        connect = "connect"  # 生命周期 - WebSocket 连接成功
+
+    heartbeat = "heartbeat"  # 心跳
+
+
+class MessageType:  # 接受消息大类
+    private = "private"  # 私聊消息
+
+    class Private:
+        friend = "friend"  # 私聊消息 - 好友
+        group = "group"  # 私聊消息 - 群临时
+        group_self = "group_self"  # 私聊消息 - 群中自身发送
+        other = "other"  # 私聊消息 - 其他
+
+    group = "group"  # 群聊消息
+
+    class Group:
+        normal = "normal"  # 群聊消息 - 普通
+        anonymous = "anonymous"  # 群聊消息 - 匿名消息
+        notice = "notice"  # 群聊消息 - 系统提示
+
+
+class NoticeType:  # 通知事件
+    friend_recall = "friend_recall"  # 私聊消息撤回
+    group_recall = "group_recall"  # 群聊消息撤回
+    notify = "notify"
+    group_ban = "group_ban"  # 群禁言
+    group_msg_emoji_like = "group_msg_emoji_like"  # 群聊表情回复
+    group_upload = "group_upload"  # 群文件上传
+
+    class Notify:
+        poke = "poke"  # 戳一戳
+        input_status = "input_status"  # 正在输入
+
+    class GroupBan:
+        ban = "ban"  # 禁言
+        lift_ban = "lift_ban"  # 解除禁言
+
+
+class RealMessageType:  # 实际消息分类
+    text = "text"  # 纯文本
+    face = "face"  # qq表情
+    image = "image"  # 图片
+    record = "record"  # 语音
+    video = "video"  # 视频
+    at = "at"  # @某人
+    rps = "rps"  # 猜拳魔法表情
+    dice = "dice"  # 骰子
+    shake = "shake"  # 私聊窗口抖动（只收）
+    poke = "poke"  # 群聊戳一戳
+    share = "share"  # 链接分享（json形式）
+    reply = "reply"  # 回复消息
+    forward = "forward"  # 转发消息
+    node = "node"  # 转发消息节点
+    json = "json"  # json消息
+    file = "file"  # 文件
+
+
+class MessageSentType:
+    private = "private"
+
+    class Private:
+        friend = "friend"
+        group = "group"
+
+    group = "group"
+
+    class Group:
+        normal = "normal"
+
+
+class CommandType(Enum):
+    """命令类型"""
+
+    GROUP_BAN = "set_group_ban"  # 禁言用户
+    GROUP_WHOLE_BAN = "set_group_whole_ban"  # 群全体禁言
+    GROUP_KICK = "set_group_kick"  # 踢出群聊
+    SEND_POKE = "send_poke"  # 戳一戳
+    DELETE_MSG = "delete_msg"  # 撤回消息
+    AI_VOICE_SEND = "ai_voice_send"  # AI语音发送
+    SET_EMOJI_LIKE = "set_msg_emoji_like"  # 设置表情回应
+    SEND_AT_MESSAGE = "send_at_message"  # 发送@消息
+    SEND_LIKE = "send_like"  # 发送点赞
+
+    def __str__(self) -> str:
+        return self.value
+
+
+# 支持的消息格式
+ACCEPT_FORMAT = [
+    "text",
+    "image",
+    "emoji",
+    "reply",
+    "voice",
+    "command",
+    "voiceurl",
+    "music",
+    "videourl",
+    "file",
+]
+
+# 插件名称
+PLUGIN_NAME = "NEW_napcat_adapter"
+
+# QQ表情映射表
+QQ_FACE = {
     "0": "[表情：惊讶]",
     "1": "[表情：撇嘴]",
     "2": "[表情：色]",
@@ -31,7 +144,7 @@ qq_face: dict = {
     "30": "[表情：奋斗]",
     "31": "[表情：咒骂]",
     "32": "[表情：疑问]",
-    "33": "[表情： 嘘]",
+    "33": "[表情：嘘]",
     "34": "[表情：晕]",
     "35": "[表情：折磨]",
     "36": "[表情：衰]",
@@ -117,7 +230,7 @@ qq_face: dict = {
     "268": "[表情：问号脸]",
     "269": "[表情：暗中观察]",
     "270": "[表情：emm]",
-    "271": "[表情：吃 瓜]",
+    "271": "[表情：吃瓜]",
     "272": "[表情：呵呵哒]",
     "273": "[表情：我酸了]",
     "277": "[表情：滑稽狗头]",
@@ -146,7 +259,7 @@ qq_face: dict = {
     "314": "[表情：仔细分析]",
     "317": "[表情：菜汪]",
     "318": "[表情：崇拜]",
-    "319": "[表情： 比心]",
+    "319": "[表情：比心]",
     "320": "[表情：庆祝]",
     "323": "[表情：嫌弃]",
     "324": "[表情：吃糖]",
@@ -175,78 +288,23 @@ qq_face: dict = {
     "355": "[表情：耶]",
     "356": "[表情：666]",
     "357": "[表情：裂开]",
-    "392": "[表情：龙年 快乐]",
+    "392": "[表情：龙年快乐]",
     "393": "[表情：新年中龙]",
     "394": "[表情：新年大龙]",
     "395": "[表情：略略略]",
     "396": "[表情：龙年快乐]",
     "424": "[表情：按钮]",
-    "😊": "[表情：嘿嘿]",
-    "😌": "[表情：羞涩]",
-    "😚": "[ 表情：亲亲]",
-    "😓": "[表情：汗]",
-    "😰": "[表情：紧张]",
-    "😝": "[表情：吐舌]",
-    "😁": "[表情：呲牙]",
-    "😜": "[表情：淘气]",
-    "☺": "[表情：可爱]",
-    "😍": "[表情：花痴]",
-    "😔": "[表情：失落]",
-    "😄": "[表情：高兴]",
-    "😏": "[表情：哼哼]",
-    "😒": "[表情：不屑]",
-    "😳": "[表情：瞪眼]",
-    "😘": "[表情：飞吻]",
-    "😭": "[表情：大哭]",
-    "😱": "[表情：害怕]",
-    "😂": "[表情：激动]",
-    "💪": "[表情：肌肉]",
-    "👊": "[表情：拳头]",
-    "👍": "[表情 ：厉害]",
-    "👏": "[表情：鼓掌]",
-    "👎": "[表情：鄙视]",
-    "🙏": "[表情：合十]",
-    "👌": "[表情：好的]",
-    "👆": "[表情：向上]",
-    "👀": "[表情：眼睛]",
-    "🍜": "[表情：拉面]",
-    "🍧": "[表情：刨冰]",
-    "🍞": "[表情：面包]",
-    "🍺": "[表情：啤酒]",
-    "🍻": "[表情：干杯]",
-    "☕": "[表情：咖啡]",
-    "🍎": "[表情：苹果]",
-    "🍓": "[表情：草莓]",
-    "🍉": "[表情：西瓜]",
-    "🚬": "[表情：吸烟]",
-    "🌹": "[表情：玫瑰]",
-    "🎉": "[表情：庆祝]",
-    "💝": "[表情：礼物]",
-    "💣": "[表情：炸弹]",
-    "✨": "[表情：闪光]",
-    "💨": "[表情：吹气]",
-    "💦": "[表情：水]",
-    "🔥": "[表情：火]",
-    "💤": "[表情：睡觉]",
-    "💩": "[表情：便便]",
-    "💉": "[表情：打针]",
-    "📫": "[表情：邮箱]",
-    "🐎": "[表情：骑马]",
-    "👧": "[表情：女孩]",
-    "👦": "[表情：男孩]",
-    "🐵": "[表情：猴]",
-    "🐷": "[表情：猪]",
-    "🐮": "[表情：牛]",
-    "🐔": "[表情：公鸡]",
-    "🐸": "[表情：青蛙]",
-    "👻": "[表情：幽灵]",
-    "🐛": "[表情：虫]",
-    "🐶": "[表情：狗]",
-    "🐳": "[表情：鲸鱼]",
-    "👢": "[表情：靴子]",
-    "☀": "[表情：晴天]",
-    "❔": "[表情：问号]",
-    "🔫": "[表情：手枪]",
-    "💓": "[表情：爱 心]",
-    "🏪": "[表情：便利店]",
 }
+
+
+__all__ = [
+    "MetaEventType",
+    "MessageType",
+    "NoticeType",
+    "RealMessageType",
+    "MessageSentType",
+    "CommandType",
+    "ACCEPT_FORMAT",
+    "PLUGIN_NAME",
+    "QQ_FACE",
+]
