@@ -42,7 +42,7 @@ class ImageService:
         try:
             enable_ai_image = bool(self.get_config("send.enable_ai_image", False))
             api_key = str(self.get_config("models.siliconflow_apikey", ""))
-            image_dir = str(self.get_config("send.image_directory", "./data/plugins/maizon_refactored/images"))
+            image_dir = str(self.get_config("send.image_directory", "./data/plugins/maizone_refactored/images"))
             image_num_raw = self.get_config("send.ai_image_number", 1)
             image_num = int(image_num_raw if image_num_raw is not None else 1)
 
