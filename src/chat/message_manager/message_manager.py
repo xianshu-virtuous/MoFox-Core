@@ -93,29 +93,18 @@ class MessageManager:
         logger.info("消息管理器已停止")
 
     async def add_message(self, stream_id: str, message: DatabaseMessages):
-        """添加消息到指定聊天流"""
+        """添加消息到指定聊天流
+        
+        注意：Notice 消息已在 MessageHandler._handle_notice_message 中单独处理，
+        不再经过此方法。此方法仅处理普通消息。
+        """
         try:
-            # 检查是否为notice消息
-            if self._is_notice_message(message):
-                # Notice消息处理 - 添加到全局管理器
-                logger.debug(f"检测到notice消息: notice_type={getattr(message, 'notice_type', None)}")
-                await self._handle_notice_message(stream_id, message)
-
-                # 根据配置决定是否继续处理（触发聊天流程）
-                if not global_config.notice.enable_notice_trigger_chat:
-                    logger.debug(f"Notice消息将被忽略，不触发聊天流程: {stream_id}")
-                    return  # 停止处理，不进入未读消息队列
-                else:
-                    logger.debug(f"Notice消息将触发聊天流程: {stream_id}")
-                    # 继续执行，将消息添加到未读队列
-
-            # 普通消息处理
             chat_manager = get_chat_manager()
             chat_stream = await chat_manager.get_stream(stream_id)
             if not chat_stream:
                 logger.warning(f"MessageManager.add_message: 聊天流 {stream_id} 不存在")
                 return
-            # 启动steam loop任务（如果尚未启动）
+            # 启动 stream loop 任务（如果尚未启动）
             await stream_loop_manager.start_stream_loop(stream_id)
             await self._check_and_handle_interruption(chat_stream, message)
             await chat_stream.context.add_message(message)

@@ -106,6 +106,7 @@ class EventType(Enum):
     ON_START = "on_start"  # 启动事件，用于调用按时任务
     ON_STOP = "on_stop"
     ON_MESSAGE = "on_message"
+    ON_NOTICE_RECEIVED = "on_notice_received"  # Notice 消息事件（戳一戳、禁言等）
     ON_PLAN = "on_plan"
     POST_LLM = "post_llm"
     AFTER_LLM = "after_llm"
