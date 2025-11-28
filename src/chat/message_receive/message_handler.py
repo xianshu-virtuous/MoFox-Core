@@ -315,7 +315,7 @@ class MessageHandler:
             # 触发 notice 事件（可供插件监听）
             await event_manager.trigger_event(
                 EventType.ON_NOTICE_RECEIVED,
-                permission_group="USER",
+                permission_group="SYSTEM",
                 message=message,
                 notice_type=notice_type,
                 chat_stream=chat,
