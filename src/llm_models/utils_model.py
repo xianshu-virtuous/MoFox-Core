@@ -1152,6 +1152,25 @@ class LLMRequest:
 
         return embeddings, model_info.name  # type: ignore[return-value]
 
+    async def execute_with_messages(
+        self,
+        message_list: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> APIResponse:
+        """
+        使用自定义消息列表执行请求（支持多模态/多图）。
+        """
+        start_time = time.time()
+        response, model_info = await self._strategy.execute_with_failover(
+            RequestType.RESPONSE,
+            message_list=message_list,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        await self._record_usage(model_info, response.usage, time.time() - start_time, "/chat/completions")
+        return response
+
     async def _record_usage(self, model_info: ModelInfo, usage: UsageRecord | None, time_cost: float, endpoint: str):
         """
         记录模型使用情况。

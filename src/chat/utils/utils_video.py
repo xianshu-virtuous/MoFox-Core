@@ -37,7 +37,7 @@ _locks_guard = asyncio.Lock()
 
 logger = get_logger("utils_video")
 
-from inkfox import video
+from inkfox import video  # type: ignore
 
 
 class VideoAnalyzer:
@@ -123,7 +123,6 @@ class VideoAnalyzer:
     # ---- 批量分析 ----
     async def _analyze_batch(self, frames: list[tuple[str, float]], question: str | None) -> str:
         from src.llm_models.payload_content.message import MessageBuilder, RoleType
-        from src.llm_models.utils_model import RequestType
 
         prompt = self.batch_analysis_prompt.format(
             personality_core=self.personality_core, personality_side=self.personality_side
@@ -139,12 +138,7 @@ class VideoAnalyzer:
         for b64, _ in frames:
             mb.add_image_content("jpeg", b64)
         message = mb.build()
-        model_info, api_provider, client = self.video_llm._select_model()
-        resp = await self.video_llm._execute_request(
-            api_provider=api_provider,
-            client=client,
-            request_type=RequestType.RESPONSE,
-            model_info=model_info,
+        resp = await self.video_llm.execute_with_messages(
             message_list=[message],
             temperature=None,
             max_tokens=None,

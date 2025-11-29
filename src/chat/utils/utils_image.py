@@ -344,14 +344,15 @@ class ImageManager:
             # --- 新的帧选择逻辑：均匀抽取4帧 ---
             num_frames = len(all_frames)
             if num_frames <= 4:
-                # 如果总帧数小于等于4，则全部选中
+                # 如果总宽度小于等于4，则全部选中
                 selected_frames = all_frames
+                indices = list(range(num_frames))
             else:
                 # 使用linspace计算4个均匀分布的索引
                 indices = np.linspace(0, num_frames - 1, 4, dtype=int)
                 selected_frames = [all_frames[i] for i in indices]
 
-            logger.debug(f"GIF Frame Analysis: Total frames={num_frames}, Selected indices={indices if num_frames > 4 else list(range(num_frames))}")
+            logger.debug(f"GIF Frame Analysis: Total frames={num_frames}, Selected indices={indices}")
             # --- 帧选择逻辑结束 ---
 
             # 如果选择后连一帧都没有（比如GIF只有一帧且后续处理失败？）或者原始GIF就没帧，也返回None
