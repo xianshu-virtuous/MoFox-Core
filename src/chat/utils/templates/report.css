@@ -33,6 +33,7 @@ body {
     border-radius: 28px;
     box-shadow: 0 4px 16px var(--md-sys-color-shadow);
     animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
 }
 
 @keyframes slideIn {
@@ -48,18 +49,43 @@ body {
 /* Dashboard Layout */
 .dashboard-layout {
     display: flex;
-    flex-direction: column;
     gap: 32px;
+    align-items: start;
+    position: relative;
 }
 
 .main-content {
-    width: 100%;
+    flex: 1;
     min-width: 0;
 }
 
 .sidebar-content {
-    width: 100%;
-    min-width: 0;
+    width: 380px;
+    min-width: 380px;
+    flex-shrink: 0;
+    padding: 24px;
+    background: linear-gradient(135deg, #FAFAFA 0%, #FFFFFF 100%);
+    border-radius: 20px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--md-sys-color-outline);
+}
+
+/* 自定义侧边栏滚动条 */
+.sidebar-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+    background: var(--md-sys-color-outline);
+    border-radius: 3px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+    background: var(--md-sys-color-primary);
 }
 
 /* Typography - Material Design 3 */
@@ -378,6 +404,24 @@ tbody tr:hover {
 }
 
 /* Responsive Design */
+@media (max-width: 1200px) {
+    .dashboard-layout {
+        flex-direction: column;
+    }
+    
+    .main-content {
+        margin-right: 0;
+    }
+    
+    .sidebar-content {
+        position: static;
+        width: 100%;
+        min-width: 0;
+        max-height: none;
+        right: auto;
+    }
+}
+
 @media (max-width: 768px) {
     .container {
         padding: 20px;

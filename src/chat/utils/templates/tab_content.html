@@ -1,4 +1,25 @@
 <div id="{{ div_id }}" class="tab-content">
+    <div class="info-item" style="background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); border-left-color: #1976D2;">
+        <strong>📖 名词解释</strong>
+        <div style="margin-top: 12px; line-height: 1.8; font-size: 0.9em;">
+            <div style="margin-bottom: 8px;">
+                <strong style="color: #1976D2;">🎯 Token:</strong> AI处理文本的基本单位，约等于0.75个英文单词或0.5个中文字
+            </div>
+            <div style="margin-bottom: 8px;">
+                <strong style="color: #1976D2;">💸 TPS:</strong> Token Per Second，每秒处理的Token数量，衡量AI响应速度
+            </div>
+            <div style="margin-bottom: 8px;">
+                <strong style="color: #1976D2;">📊 每K Token成本:</strong> 每1000个Token的成本，用于比较不同模型的性价比
+            </div>
+            <div style="margin-bottom: 8px;">
+                <strong style="color: #1976D2;">⚡ Token效率:</strong> 输出Token与输入Token的比率，反映模型输出丰富度
+            </div>
+            <div>
+                <strong style="color: #1976D2;">🔄 消息/请求比:</strong> 平均每次AI请求处理的用户消息数量
+            </div>
+        </div>
+    </div>
+
     <div class="dashboard-layout">
         <div class="main-content">
             <p class="info-item">
@@ -15,7 +36,9 @@
 
             <h2>🏢 按供应商分类统计</h2>
             <table>
-                <tr><th>供应商名称</th><th>调用次数</th><th>Token总量</th><th>TPS</th><th>每K Token成本</th><th>累计花费</th></tr>
+                <thead>
+                    <tr><th>供应商名称</th><th>调用次数</th><th>Token总量</th><th>TPS</th><th>每K Token成本</th><th>累计花费</th><th>平均耗时(秒)</th></tr>
+                </thead>
                 <tbody>{{ provider_rows }}</tbody>
             </table>
 
@@ -58,9 +81,9 @@
                 <tbody>{{ efficiency_rows }}</tbody>
             </table>
         </div>
-    </div>
-    
-    <div class="sidebar-content">
-        {{ static_charts }}
+        
+        <div class="sidebar-content">
+            {{ static_charts }}
+        </div>
     </div>
 </div>

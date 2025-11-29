@@ -178,8 +178,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
     Object.keys(staticChartData).forEach(period_id => {
         const providerCostData = staticChartData[period_id].provider_cost_data;
+        const moduleCostData = staticChartData[period_id].module_cost_data;
         const modelCostData = staticChartData[period_id].model_cost_data;
-        const colors = ['#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6', '#1abc9c', '#34495e', '#e67e22'];
+        // 扩展的Material Design调色板 - 包含多种蓝色系和其他配色
+        const colors = [
+            '#1976D2', '#42A5F5', '#2196F3', '#64B5F6', '#90CAF9', '#BBDEFB',  // 蓝色系
+            '#1565C0', '#0D47A1', '#82B1FF', '#448AFF',  // 深蓝色系
+            '#00BCD4', '#26C6DA', '#4DD0E1', '#80DEEA',  // 青色系
+            '#009688', '#26A69A', '#4DB6AC', '#80CBC4',  // 青绿色系
+            '#4CAF50', '#66BB6A', '#81C784', '#A5D6A7',  // 绿色系
+            '#FF9800', '#FFA726', '#FFB74D', '#FFCC80',  // 橙色系
+            '#FF5722', '#FF7043', '#FF8A65', '#FFAB91',  // 深橙色系
+            '#9C27B0', '#AB47BC', '#BA68C8', '#CE93D8',  // 紫色系
+            '#E91E63', '#EC407A', '#F06292', '#F48FB1',  // 粉色系
+            '#607D8B', '#78909C', '#90A4AE', '#B0BEC5'   // 蓝灰色系
+        ];
 
         // Provider Cost Pie Chart
         const providerCtx = document.getElementById(`providerCostPieChart_${period_id}`);
@@ -200,28 +213,95 @@ document.addEventListener('DOMContentLoaded', function () {
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
-                    aspectRatio: 1.5,
+                    aspectRatio: 1.3,
                     plugins: {
                         title: { 
                             display: true, 
-                            text: '按供应商花费分布', 
-                            font: { size: 14, weight: '500' },
+                            text: '🏢 按供应商花费分布', 
+                            font: { size: 13, weight: '500' },
                             color: '#1C1B1F',
-                            padding: { top: 8, bottom: 16 }
+                            padding: { top: 4, bottom: 12 }
                         },
                         legend: { 
-                            position: 'right',
+                            position: 'bottom',
                             labels: {
                                 usePointStyle: true,
-                                padding: 15,
-                                font: { size: 12 }
+                                padding: 10,
+                                font: { size: 11 }
                             }
                         },
                         tooltip: {
                             backgroundColor: 'rgba(0, 0, 0, 0.8)',
                             padding: 12,
-                            titleFont: { size: 14 },
-                            bodyFont: { size: 13 },
+                            titleFont: { size: 13 },
+                            bodyFont: { size: 12 },
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    label += context.parsed.toFixed(4) + ' ¥';
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((context.parsed / total) * 100).toFixed(2);
+                                    label += ` (${percentage}%)`;
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        animateRotate: true,
+                        animateScale: true,
+                        duration: 1000,
+                        easing: 'easeInOutQuart'
+                    }
+                }
+            });
+        }
+
+        // Module Cost Pie Chart
+        const moduleCtx = document.getElementById(`moduleCostPieChart_${period_id}`);
+        if (moduleCtx && moduleCostData && moduleCostData.data && moduleCostData.data.length > 0) {
+            new Chart(moduleCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: moduleCostData.labels,
+                    datasets: [{
+                        label: '按模块花费',
+                        data: moduleCostData.data,
+                        backgroundColor: colors,
+                        borderColor: '#FFFFFF',
+                        borderWidth: 2,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 1.3,
+                    plugins: {
+                        title: { 
+                            display: true, 
+                            text: '🔧 按模块使用分布', 
+                            font: { size: 13, weight: '500' },
+                            color: '#1C1B1F',
+                            padding: { top: 4, bottom: 12 }
+                        },
+                        legend: { 
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 10,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 12,
+                            titleFont: { size: 13 },
+                            bodyFont: { size: 12 },
                             cornerRadius: 8,
                             callbacks: {
                                 label: function(context) {
@@ -261,28 +341,28 @@ document.addEventListener('DOMContentLoaded', function () {
                         backgroundColor: colors,
                         borderColor: colors,
                         borderWidth: 2,
-                        borderRadius: 8,
+                        borderRadius: 6,
                         hoverBackgroundColor: colors.map(c => c + 'dd')
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
-                    aspectRatio: 1.5,
+                    aspectRatio: 1.2,
                     plugins: {
                         title: { 
                             display: true, 
-                            text: '按模型花费排行', 
-                            font: { size: 14, weight: '500' },
+                            text: '🤖 按模型花费排行', 
+                            font: { size: 13, weight: '500' },
                             color: '#1C1B1F',
-                            padding: { top: 8, bottom: 16 }
+                            padding: { top: 4, bottom: 12 }
                         },
                         legend: { display: false },
                         tooltip: {
                             backgroundColor: 'rgba(0, 0, 0, 0.8)',
                             padding: 12,
-                            titleFont: { size: 14 },
-                            bodyFont: { size: 13 },
+                            titleFont: { size: 13 },
+                            bodyFont: { size: 12 },
                             cornerRadius: 8,
                             callbacks: {
                                 label: function(context) {
@@ -293,16 +373,22 @@ document.addEventListener('DOMContentLoaded', function () {
                     },
                     scales: {
                         x: {
-                            grid: { display: false }
+                            grid: { display: false },
+                            ticks: {
+                                font: { size: 10 }
+                            }
                         },
                         y: { 
                             beginAtZero: true, 
                             title: { 
                                 display: true, 
                                 text: '💰 花费 (¥)',
-                                font: { size: 13, weight: 'bold' }
+                                font: { size: 11, weight: 'bold' }
                             },
-                            grid: { color: 'rgba(0, 0, 0, 0.05)' }
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                            ticks: {
+                                font: { size: 10 }
+                            }
                         }
                     },
                     animation: {

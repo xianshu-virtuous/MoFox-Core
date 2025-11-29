@@ -1,9 +1,16 @@
-<h2>📊 数据总览</h2>
-<div style="display: flex; flex-direction: column; gap: 24px;">
-    <div class="chart-container" style="height: 300px;">
+<div style="margin: -24px -24px 0 -24px; padding: 20px 24px; background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%); border-radius: 20px 20px 0 0; margin-bottom: 20px;">
+    <h2 style="margin: 0; color: white; font-size: 1.3em; font-weight: 500; display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 1.2em;">📊</span> 数据可视化
+    </h2>
+</div>
+<div style="display: flex; flex-direction: column; gap: 20px;">
+    <div class="chart-container" style="height: 280px; margin: 0; padding: 16px; background: white;">
         <canvas id="providerCostPieChart_{{ period_id }}"></canvas>
     </div>
-    <div class="chart-container" style="height: 300px;">
+    <div class="chart-container" style="height: 280px; margin: 0; padding: 16px; background: white;">
+        <canvas id="moduleCostPieChart_{{ period_id }}"></canvas>
+    </div>
+    <div class="chart-container" style="height: 300px; margin: 0; padding: 16px; background: white;">
         <canvas id="modelCostBarChart_{{ period_id }}"></canvas>
     </div>
 </div>

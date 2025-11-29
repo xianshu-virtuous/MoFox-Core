@@ -59,6 +59,7 @@ STD_TIME_COST_BY_PROVIDER = "std_time_costs_by_provider"
 # 新增饼图和条形图数据
 PIE_CHART_COST_BY_PROVIDER = "pie_chart_cost_by_provider"
 PIE_CHART_REQ_BY_PROVIDER = "pie_chart_req_by_provider"
+PIE_CHART_COST_BY_MODULE = "pie_chart_cost_by_module"
 BAR_CHART_COST_BY_MODEL = "bar_chart_cost_by_model"
 BAR_CHART_REQ_BY_MODEL = "bar_chart_req_by_model"
 

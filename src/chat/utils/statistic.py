@@ -299,6 +299,7 @@ class StatisticOutputTask(AsyncTask):
                 # Chart data
                 PIE_CHART_COST_BY_PROVIDER: {},
                 PIE_CHART_REQ_BY_PROVIDER: {},
+                PIE_CHART_COST_BY_MODULE: {},
                 BAR_CHART_COST_BY_MODEL: {},
                 BAR_CHART_REQ_BY_MODEL: {},
             }
@@ -455,6 +456,15 @@ class StatisticOutputTask(AsyncTask):
                 period_stats[PIE_CHART_COST_BY_PROVIDER] = {
                     "labels": [item[0] for item in sorted_providers],
                     "data": [round(item[1], 4) for item in sorted_providers],
+                }
+
+            # 按模块花费饼图
+            module_costs = period_stats[COST_BY_MODULE]
+            if module_costs:
+                sorted_modules = sorted(module_costs.items(), key=lambda item: item[1], reverse=True)
+                period_stats[PIE_CHART_COST_BY_MODULE] = {
+                    "labels": [item[0] for item in sorted_modules],
+                    "data": [round(item[1], 4) for item in sorted_modules],
                 }
 
             # 按模型花费条形图

@@ -92,6 +92,7 @@ class HTMLReportGenerator:
                 f"<td>{stat_data[TPS_BY_PROVIDER].get(provider_name, 0):.2f}</td>"
                 f"<td>{stat_data[COST_PER_KTOK_BY_PROVIDER].get(provider_name, 0):.4f} ¥</td>"
                 f"<td>{stat_data[COST_BY_PROVIDER].get(provider_name, 0):.4f} ¥</td>"
+                f"<td>{stat_data.get(AVG_TIME_COST_BY_PROVIDER, {}).get(provider_name, 0):.3f} 秒</td>"
                 f"</tr>"
                 for provider_name, count in sorted(stat_data[REQ_CNT_BY_PROVIDER].items())
             ]
@@ -316,10 +317,12 @@ class HTMLReportGenerator:
             period_id = period[0]
             static_chart_data[period_id] = {
                 "provider_cost_data": stat[period_id].get(PIE_CHART_COST_BY_PROVIDER, {}),
+                "module_cost_data": stat[period_id].get(PIE_CHART_COST_BY_MODULE, {}),
                 "model_cost_data": stat[period_id].get(BAR_CHART_COST_BY_MODEL, {}),
             }
         static_chart_data["all_time"] = {
             "provider_cost_data": stat["all_time"].get(PIE_CHART_COST_BY_PROVIDER, {}),
+            "module_cost_data": stat["all_time"].get(PIE_CHART_COST_BY_MODULE, {}),
             "model_cost_data": stat["all_time"].get(BAR_CHART_COST_BY_MODEL, {}),
         }
 
