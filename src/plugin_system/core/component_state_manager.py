@@ -85,6 +85,9 @@ class ComponentStateManager:
         Returns:
             启用成功返回 True，失败返回 False
         """
+        if component_type is ComponentType.ADAPTER:
+            logger.error(f"组件 {component_name} 类型是适配器，无法启用或者禁用")
+            return False
         target_class = self._registry.get_component_class(component_name, component_type)
         target_info = self._registry.get_component_info(component_name, component_type)
         if not target_class or not target_info:
@@ -136,6 +139,9 @@ class ComponentStateManager:
         Returns:
             禁用成功返回 True，失败返回 False
         """
+        if component_type is ComponentType.ADAPTER:
+            logger.error(f"组件 {component_name} 类型是适配器，无法启用或者禁用")
+            return False
         target_info = self._registry.get_component_info(component_name, component_type)
         if not target_info:
             logger.warning(f"组件 {component_name} 未注册，无法禁用")
