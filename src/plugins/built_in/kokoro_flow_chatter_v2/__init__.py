@@ -20,7 +20,6 @@ from .models import (
 from .session import KokoroSession, SessionManager, get_session_manager
 from .chatter import KokoroFlowChatterV2
 from .replyer import generate_response
-from .action_executor import ActionExecutor
 from .proactive_thinker import (
     ProactiveThinker,
     get_proactive_thinker,
@@ -50,7 +49,6 @@ __all__ = [
     # Core Components
     "KokoroFlowChatterV2",
     "generate_response",
-    "ActionExecutor",
     # Proactive Thinker
     "ProactiveThinker",
     "get_proactive_thinker",

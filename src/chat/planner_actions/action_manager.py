@@ -4,12 +4,10 @@ import traceback
 from typing import Any, TYPE_CHECKING
 
 from src.chat.message_receive.chat_stream import get_chat_manager
-from src.chat.utils.timer_calculator import Timer
 from src.common.data_models.database_data_model import DatabaseMessages
 from src.common.logger import get_logger
-from src.config.config import global_config
 from src.person_info.person_info import get_person_info_manager
-from src.plugin_system.apis import database_api, generator_api, message_api, send_api
+from src.plugin_system.apis import database_api
 from src.plugin_system.base.base_action import BaseAction
 from src.plugin_system.base.component_types import ActionInfo, ComponentType
 from src.plugin_system.core.component_registry import component_registry
@@ -160,6 +158,8 @@ class ChatterActionManager:
     ) -> Any:
         """
         执行单个动作的通用函数
+        
+        所有动作（包括 reply/respond）都通过 BaseAction.execute() 执行
 
         Args:
             action_name: 动作名称
@@ -169,14 +169,13 @@ class ChatterActionManager:
             action_data: 动作数据
             thinking_id: 思考ID
             log_prefix: 日志前缀
+            clear_unread_messages: 是否清除未读消息
 
         Returns:
             执行结果
         """
-
         chat_stream = None
         try:
-            logger.debug(f"🎯 [ActionManager] execute_action接收到 target_message: {target_message}")
             # 通过chat_id获取chat_stream
             chat_manager = get_chat_manager()
             chat_stream = await chat_manager.get_stream(chat_id)
@@ -193,149 +192,33 @@ class ChatterActionManager:
             # 设置正在回复的状态
             chat_stream.context.is_replying = True
 
+            # no_action 特殊处理
             if action_name == "no_action":
                 return {"action_type": "no_action", "success": True, "reply_text": "", "command": ""}
 
-            if action_name == "no_reply":
-                # 直接处理no_reply逻辑，不再通过动作系统
-                reason = reasoning or "选择不回复"
-                logger.info(f"{log_prefix} 选择不回复，原因: {reason}")
+            # 统一通过 _handle_action 执行所有动作
+            success, reply_text, command = await self._handle_action(
+                chat_stream,
+                action_name,
+                reasoning,
+                action_data or {},
+                {},  # cycle_timers
+                thinking_id,
+                target_message,
+            )
 
-                # 存储no_reply信息到数据库（支持批量存储）
-                if self._batch_storage_enabled:
-                    self.add_action_to_batch(
-                        action_name="no_reply",
-                        action_data={"reason": reason},
-                        thinking_id=thinking_id or "",
-                        action_done=True,
-                        action_build_into_prompt=False,
-                        action_prompt_display=reason,
-                    )
-                else:
-                    asyncio.create_task(database_api.store_action_info(
-                        chat_stream=chat_stream,
-                        action_build_into_prompt=False,
-                        action_prompt_display=reason,
-                        action_done=True,
-                        thinking_id=thinking_id or "",
-                        action_data={"reason": reason},
-                        action_name="no_reply",
-                    ))
+            # 记录执行的动作到目标消息
+            if success:
+                asyncio.create_task(self._record_action_to_message(chat_stream, action_name, target_message, action_data))
+                # 重置打断计数
+                await self._reset_interruption_count_after_action(chat_stream.stream_id)
 
-                return {"action_type": "no_reply", "success": True, "reply_text": "", "command": ""}
-
-            elif action_name != "reply" and action_name != "respond" and action_name != "no_action":
-                # 执行普通动作
-                success, reply_text, command = await self._handle_action(
-                    chat_stream,
-                    action_name,
-                    reasoning,
-                    action_data or {},
-                    {},  # cycle_timers
-                    thinking_id,
-                    target_message,
-                )
-
-                # 记录执行的动作到目标消息
-                if success:
-                    asyncio.create_task(self._record_action_to_message(chat_stream, action_name, target_message, action_data))
-                    # 重置打断计数
-                    await self._reset_interruption_count_after_action(chat_stream.stream_id)
-
-                return {
-                    "action_type": action_name,
-                    "success": success,
-                    "reply_text": reply_text,
-                    "command": command,
-                }
-            else:
-                # 检查目标消息是否为表情包消息以及配置是否允许回复表情包
-                if target_message and getattr(target_message, "is_emoji", False):
-                    # 如果是表情包消息且配置不允许回复表情包，则跳过回复
-                    if not getattr(global_config.chat, "allow_reply_to_emoji", True):
-                        logger.info(f"{log_prefix} 目标消息为表情包且配置不允许回复表情包，跳过回复")
-                        return {"action_type": action_name, "success": True, "reply_text": "", "skip_reason": "emoji_not_allowed"}
-
-                # 生成回复 (reply 或 respond)
-                # reply: 针对单条消息的回复，使用 s4u 模板
-                # respond: 对未读消息的统一回应，使用 normal 模板
-                try:
-                    # 根据动作类型确定提示词模式
-                    prompt_mode = "s4u" if action_name == "reply" else "normal"
-
-                    # 将prompt_mode传递给generate_reply
-                    action_data_with_mode = (action_data or {}).copy()
-                    action_data_with_mode["prompt_mode"] = prompt_mode
-
-                    # 只传递当前正在执行的动作，而不是所有可用动作
-                    # 这样可以让LLM明确知道"已决定执行X动作"，而不是"有这些动作可用"
-                    current_action_info = self._using_actions.get(action_name)
-                    current_actions: dict[str, Any] = {action_name: current_action_info} if current_action_info else {}
-
-                    # 附加目标消息信息（如果存在）
-                    if target_message:
-                        # 提取目标消息的关键信息
-                        target_msg_info = {
-                            "message_id": getattr(target_message, "message_id", ""),
-                            "sender": getattr(target_message.user_info, "user_nickname", "") if hasattr(target_message, "user_info") else "",
-                            "content": getattr(target_message, "processed_plain_text", ""),
-                            "time": getattr(target_message, "time", 0),
-                        }
-                        current_actions["_target_message"] = target_msg_info
-
-                    success, response_set, _ = await generator_api.generate_reply(
-                        chat_stream=chat_stream,
-                        reply_message=target_message,
-                        action_data=action_data_with_mode,
-                        available_actions=current_actions,  # type: ignore
-                        enable_tool=global_config.tool.enable_tool,
-                        request_type="chat.replyer",
-                        from_plugin=False,
-                    )
-                    if not success or not response_set:
-                        # 安全地获取 processed_plain_text
-                        if target_message:
-                            msg_text = target_message.processed_plain_text or "未知消息"
-                        else:
-                            msg_text = "未知消息"
-
-                        logger.info(f"对 {msg_text} 的回复生成失败")
-                        return {"action_type": action_name, "success": False, "reply_text": "", "loop_info": None}
-                except asyncio.CancelledError:
-                    logger.debug(f"{log_prefix} 并行执行：回复生成任务已被取消")
-                    return {"action_type": action_name, "success": False, "reply_text": "", "loop_info": None}
-
-                # 从action_data中提取should_quote_reply参数
-                should_quote_reply = None
-                if action_data and isinstance(action_data, dict):
-                    should_quote_reply = action_data.get("should_quote_reply", None)
-
-                # respond动作默认不引用回复，保持对话流畅
-                if action_name == "respond" and should_quote_reply is None:
-                    should_quote_reply = False
-
-                async def _after_reply():
-                    # 发送并存储回复
-                    reply_text, cycle_timers_reply = await self._send_and_store_reply(
-                        chat_stream,
-                        response_set,
-                        asyncio.get_event_loop().time(),
-                        target_message,
-                        {},  # cycle_timers
-                        thinking_id,
-                        [],  # actions
-                        should_quote_reply,  # 传递should_quote_reply参数
-                    )
-
-                    # 记录回复动作到目标消息
-                    await self._record_action_to_message(chat_stream, action_name, target_message, action_data)
-
-                    # 回复成功，重置打断计数
-                    await self._reset_interruption_count_after_action(chat_stream.stream_id)
-
-                    return reply_text
-                asyncio.create_task(_after_reply())
-                return {"action_type": action_name, "success": True}
+            return {
+                "action_type": action_name,
+                "success": success,
+                "reply_text": reply_text,
+                "command": command,
+            }
 
         except Exception as e:
             logger.error(f"{log_prefix} 执行动作时出错: {e}")

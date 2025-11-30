@@ -15,11 +15,11 @@ import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional
 
+from src.chat.planner_actions.action_manager import ChatterActionManager
 from src.common.logger import get_logger
 from src.config.config import global_config
 from src.plugin_system.apis.unified_scheduler import TriggerType, unified_scheduler
 
-from .action_executor import ActionExecutor
 from .models import EventType, SessionStatus
 from .replyer import generate_response
 from .session import KokoroSession, get_session_manager
@@ -257,8 +257,8 @@ class ProactiveThinker:
             chat_stream = await self._get_chat_stream(session.stream_id)
             
             # 加载动作
-            action_executor = ActionExecutor(session.stream_id)
-            await action_executor.load_actions()
+            action_manager = ChatterActionManager()
+            await action_manager.load_actions(session.stream_id)
             
             # 调用 Replyer 生成超时决策
             response = await generate_response(
@@ -266,11 +266,20 @@ class ProactiveThinker:
                 user_name=session.user_id,  # 这里可以改进，获取真实用户名
                 situation_type="timeout",
                 chat_stream=chat_stream,
-                available_actions=action_executor.get_available_actions(),
+                available_actions=action_manager.get_using_actions(),
             )
             
             # 执行动作
-            exec_result = await action_executor.execute(response, chat_stream)
+            for action in response.actions:
+                await action_manager.execute_action(
+                    action_name=action.type,
+                    chat_id=session.stream_id,
+                    target_message=None,
+                    reasoning=response.thought,
+                    action_data=action.params,
+                    thinking_id=None,
+                    log_prefix="[KFC V2 ProactiveThinker]",
+                )
             
             # 记录到 mental_log
             session.add_bot_planning(
@@ -389,8 +398,8 @@ class ProactiveThinker:
             chat_stream = await self._get_chat_stream(session.stream_id)
             
             # 加载动作
-            action_executor = ActionExecutor(session.stream_id)
-            await action_executor.load_actions()
+            action_manager = ChatterActionManager()
+            await action_manager.load_actions(session.stream_id)
             
             # 计算沉默时长
             silence_seconds = time.time() - session.last_activity_at
@@ -405,7 +414,7 @@ class ProactiveThinker:
                 user_name=session.user_id,
                 situation_type="proactive",
                 chat_stream=chat_stream,
-                available_actions=action_executor.get_available_actions(),
+                available_actions=action_manager.get_using_actions(),
                 extra_context={
                     "trigger_reason": trigger_reason,
                     "silence_duration": silence_duration,
@@ -425,7 +434,16 @@ class ProactiveThinker:
                 return
             
             # 执行动作
-            exec_result = await action_executor.execute(response, chat_stream)
+            for action in response.actions:
+                await action_manager.execute_action(
+                    action_name=action.type,
+                    chat_id=session.stream_id,
+                    target_message=None,
+                    reasoning=response.thought,
+                    action_data=action.params,
+                    thinking_id=None,
+                    log_prefix="[KFC V2 ProactiveThinker]",
+                )
             
             # 记录到 mental_log
             session.add_bot_planning(

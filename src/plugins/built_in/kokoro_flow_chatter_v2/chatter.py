@@ -10,21 +10,20 @@ Kokoro Flow Chatter V2 - Chatter 主类
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Any, ClassVar, Optional
+from typing import TYPE_CHECKING, Any, ClassVar
 
+from src.chat.planner_actions.action_manager import ChatterActionManager
 from src.common.data_models.message_manager_data_model import StreamContext
 from src.common.logger import get_logger
 from src.plugin_system.base.base_chatter import BaseChatter
 from src.plugin_system.base.component_types import ChatType
 
-from .action_executor import ActionExecutor
-from .models import EventType, SessionStatus
+from .models import SessionStatus
 from .replyer import generate_response
 from .session import get_session_manager
 
 if TYPE_CHECKING:
-    from src.chat.planner_actions.action_manager import ChatterActionManager
-    from src.common.data_models.database_data_model import DatabaseMessages
+    pass
 
 logger = get_logger("kfc_v2_chatter")
 
@@ -62,7 +61,6 @@ class KokoroFlowChatterV2(BaseChatter):
         
         # 核心组件
         self.session_manager = get_session_manager()
-        self.action_executor = ActionExecutor(stream_id)
         
         # 并发控制
         self._lock = asyncio.Lock()
@@ -129,9 +127,12 @@ class KokoroFlowChatterV2(BaseChatter):
                         timestamp=msg.time,
                     )
                 
-                # 6. 加载可用动作
-                await self.action_executor.load_actions()
-                available_actions = self.action_executor.get_available_actions()
+                # 6. 加载可用动作（通过 ActionModifier 过滤）
+                from src.chat.planner_actions.action_modifier import ActionModifier
+                
+                action_modifier = ActionModifier(self.action_manager, self.stream_id)
+                await action_modifier.modify_actions(chatter_name="KokoroFlowChatterV2")
+                available_actions = self.action_manager.get_using_actions()
                 
                 # 7. 获取聊天流
                 chat_stream = await self._get_chat_stream()
@@ -146,7 +147,21 @@ class KokoroFlowChatterV2(BaseChatter):
                 )
                 
                 # 9. 执行动作
-                exec_result = await self.action_executor.execute(response, chat_stream)
+                exec_results = []
+                has_reply = False
+                for action in response.actions:
+                    result = await self.action_manager.execute_action(
+                        action_name=action.type,
+                        chat_id=self.stream_id,
+                        target_message=target_message,
+                        reasoning=response.thought,
+                        action_data=action.params,
+                        thinking_id=None,
+                        log_prefix="[KFC V2]",
+                    )
+                    exec_results.append(result)
+                    if result.get("success") and action.type in ("reply", "respond"):
+                        has_reply = True
                 
                 # 10. 记录 Bot 规划到 mental_log
                 session.add_bot_planning(
@@ -174,7 +189,7 @@ class KokoroFlowChatterV2(BaseChatter):
                 
                 # 14. 更新统计
                 self._stats["messages_processed"] += len(unread_messages)
-                if exec_result.get("has_reply"):
+                if has_reply:
                     self._stats["successful_responses"] += 1
                 
                 logger.info(
@@ -187,7 +202,7 @@ class KokoroFlowChatterV2(BaseChatter):
                 return self._build_result(
                     success=True,
                     message="processed",
-                    has_reply=exec_result.get("has_reply", False),
+                    has_reply=has_reply,
                     thought=response.thought,
                     situation_type=situation_type,
                 )
@@ -252,10 +267,7 @@ class KokoroFlowChatterV2(BaseChatter):
     
     def get_stats(self) -> dict[str, Any]:
         """获取统计信息"""
-        return {
-            **self._stats,
-            "action_executor_stats": self.action_executor.get_stats(),
-        }
+        return self._stats.copy()
     
     @property
     def is_processing(self) -> bool:
