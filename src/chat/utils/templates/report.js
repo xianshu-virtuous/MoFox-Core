@@ -313,9 +313,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 value: providerCostData.data[idx]
             }));
             
-            const itemCount = pieData.length;
-            const useBottomLegend = itemCount > 8;
-            
             chart.setOption({
                 tooltip: {
                     trigger: 'item',
@@ -330,20 +327,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 legend: {
                     type: 'scroll',
-                    orient: useBottomLegend ? 'horizontal' : 'vertical',
-                    right: useBottomLegend ? 'center' : 10,
-                    top: useBottomLegend ? 'auto' : 'middle',
-                    bottom: useBottomLegend ? 10 : 'auto',
-                    left: useBottomLegend ? 'center' : 'auto',
-                    width: useBottomLegend ? '90%' : '30%',
-                    height: useBottomLegend ? 'auto' : '80%',
+                    orient: 'horizontal',
+                    left: 'center',
+                    top: 0,
+                    width: '90%',
                     icon: 'circle',
                     itemWidth: 8,
                     itemHeight: 8,
-                    itemGap: useBottomLegend ? 12 : 8,
+                    itemGap: 12,
                     textStyle: { 
                         fontSize: 10,
-                        width: useBottomLegend ? 70 : 80,
+                        width: 80,
                         overflow: 'truncate',
                         ellipsis: '...'
                     },
@@ -356,8 +350,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 series: [{
                     type: 'pie',
-                    radius: ['35%', '60%'],
-                    center: useBottomLegend ? ['50%', '40%'] : ['35%', '50%'],
+                    radius: ['45%', '70%'],
+                    center: ['50%', '55%'],
                     avoidLabelOverlap: true,
                     itemStyle: {
                         borderColor: '#fff',
@@ -391,9 +385,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 value: moduleCostData.data[idx]
             }));
             
-            const itemCount = pieData.length;
-            const useBottomLegend = itemCount > 8;
-            
             chart.setOption({
                 tooltip: {
                     trigger: 'item',
@@ -408,20 +399,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 legend: {
                     type: 'scroll',
-                    orient: useBottomLegend ? 'horizontal' : 'vertical',
-                    right: useBottomLegend ? 'center' : 10,
-                    top: useBottomLegend ? 'auto' : 'middle',
-                    bottom: useBottomLegend ? 10 : 'auto',
-                    left: useBottomLegend ? 'center' : 'auto',
-                    width: useBottomLegend ? '90%' : '30%',
-                    height: useBottomLegend ? 'auto' : '80%',
+                    orient: 'horizontal',
+                    left: 'center',
+                    top: 0,
+                    width: '90%',
                     icon: 'circle',
                     itemWidth: 8,
                     itemHeight: 8,
-                    itemGap: useBottomLegend ? 12 : 8,
+                    itemGap: 12,
                     textStyle: { 
                         fontSize: 10,
-                        width: useBottomLegend ? 70 : 80,
+                        width: 80,
                         overflow: 'truncate',
                         ellipsis: '...'
                     },
@@ -434,8 +422,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 series: [{
                     type: 'pie',
-                    radius: ['35%', '60%'],
-                    center: useBottomLegend ? ['50%', '40%'] : ['35%', '50%'],
+                    radius: ['45%', '70%'],
+                    center: ['50%', '55%'],
                     avoidLabelOverlap: true,
                     itemStyle: {
                         borderColor: '#fff',
@@ -545,7 +533,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             borderRadius: [0, 6, 6, 0]
                         }
                     })),
-                    barMaxWidth: 20,
+                    barMaxWidth: 40,
                     emphasis: {
                         itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.3)' }
                     }
@@ -576,6 +564,10 @@ document.addEventListener('DOMContentLoaded', function () {
             const chart = echarts.init(tokenCompContainer);
             chartInstances[`tokenComparisonChart_${period_id}`] = chart;
             
+            // 处理数据，避免 log 轴报错 (0值转为1)
+            const inputData = tokenCompData.input_tokens.map(v => v < 1 ? 1 : v);
+            const outputData = tokenCompData.output_tokens.map(v => v < 1 ? 1 : v);
+            
             chart.setOption({
                 tooltip: {
                     trigger: 'axis',
@@ -588,34 +580,36 @@ document.addEventListener('DOMContentLoaded', function () {
                     formatter: function(params) {
                         let result = params[0].name + '<br/>';
                         params.forEach(p => {
+                            // 恢复原始值显示
+                            const rawValue = p.value === 1 ? 0 : p.value;
                             const total = tokenCompData.input_tokens.reduce((a, b) => a + b, 0) + 
                                          tokenCompData.output_tokens.reduce((a, b) => a + b, 0);
-                            const pct = total > 0 ? ((p.value / total) * 100).toFixed(1) : '0.0';
-                            result += `${p.marker} ${p.seriesName}: ${p.value.toLocaleString()} tokens (${pct}%)<br/>`;
+                            const pct = total > 0 ? ((rawValue / total) * 100).toFixed(1) : '0.0';
+                            result += `${p.marker} ${p.seriesName}: ${rawValue.toLocaleString()} tokens (${pct}%)<br/>`;
                         });
                         return result;
                     }
                 },
                 legend: {
                     data: ['输入Token', '输出Token'],
-                    top: 10,
+                    top: 0,
                     icon: 'circle',
                     itemWidth: 10,
                     itemHeight: 10
                 },
                 grid: {
                     left: '3%',
-                    right: '4%',
-                    bottom: needsZoom ? '15%' : '3%',
-                    top: 50,
+                    right: needsZoom ? '8%' : '4%',
+                    bottom: '8%',
+                    top: 30,
                     containLabel: true
                 },
                 dataZoom: needsZoom ? [
                     {
                         type: 'slider',
-                        xAxisIndex: 0,
-                        height: 20,
-                        bottom: 5,
+                        yAxisIndex: 0,
+                        right: 5,
+                        width: 20,
                         start: 0,
                         end: Math.min(100, Math.round(10 / itemCount * 100)),
                         handleSize: '100%',
@@ -624,42 +618,54 @@ document.addEventListener('DOMContentLoaded', function () {
                     },
                     {
                         type: 'inside',
-                        xAxisIndex: 0,
+                        yAxisIndex: 0,
                         zoomOnMouseWheel: 'shift',
-                        moveOnMouseMove: true
+                        moveOnMouseMove: true,
+                        moveOnMouseWheel: true
                     }
                 ] : [],
                 xAxis: {
+                    type: 'log',
+                    min: 1,
+                    logBase: 10,
+                    name: 'Token数量 (对数)',
+                    nameTextStyle: { fontSize: 11, fontWeight: 'bold' },
+                    axisLabel: { 
+                        fontSize: 10,
+                        hideOverlap: true,
+                        formatter: function(value) {
+                            if (value === 1) return '0';
+                            if (value >= 1000000) return (value / 1000000).toFixed(0) + 'M';
+                            if (value >= 1000) return (value / 1000).toFixed(0) + 'k';
+                            return value;
+                        }
+                    },
+                    splitLine: { lineStyle: { color: 'rgba(0, 0, 0, 0.05)' } }
+                },
+                yAxis: {
                     type: 'category',
                     data: tokenCompData.labels.map(l => l.length > 20 ? l.substring(0, 20) + '...' : l),
                     axisLabel: { 
                         fontSize: 9, 
-                        rotate: itemCount > 6 ? 30 : 0,
                         interval: 0
                     },
-                    axisTick: { show: false }
-                },
-                yAxis: {
-                    type: 'value',
-                    name: 'Token数量',
-                    nameTextStyle: { fontSize: 11, fontWeight: 'bold' },
-                    axisLabel: { fontSize: 10 },
-                    splitLine: { lineStyle: { color: 'rgba(0, 0, 0, 0.05)' } }
+                    axisTick: { show: false },
+                    axisLine: { show: false }
                 },
                 series: [
                     {
                         name: '输入Token',
                         type: 'bar',
-                        data: tokenCompData.input_tokens,
-                        itemStyle: { color: '#FF9800', borderRadius: [6, 6, 0, 0] },
-                        barMaxWidth: 25
+                        data: inputData,
+                        itemStyle: { color: '#FF9800', borderRadius: [0, 6, 6, 0] },
+                        barMaxWidth: 30
                     },
                     {
                         name: '输出Token',
                         type: 'bar',
-                        data: tokenCompData.output_tokens,
-                        itemStyle: { color: '#4CAF50', borderRadius: [6, 6, 0, 0] },
-                        barMaxWidth: 25
+                        data: outputData,
+                        itemStyle: { color: '#4CAF50', borderRadius: [0, 6, 6, 0] },
+                        barMaxWidth: 30
                     }
                 ],
                 animation: true,
@@ -684,8 +690,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 value: providerReqData.data[idx]
             }));
             
-            const itemCount = pieData.length;
-            const useBottomLegend = itemCount > 8;
             const reqColors = ['#9C27B0', '#E91E63', '#F44336', '#FF9800', '#FFC107', '#FFEB3B', '#CDDC39', '#8BC34A', '#4CAF50', '#009688'];
             
             chart.setOption({
@@ -702,20 +706,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 legend: {
                     type: 'scroll',
-                    orient: useBottomLegend ? 'horizontal' : 'vertical',
-                    right: useBottomLegend ? 'center' : 10,
-                    top: useBottomLegend ? 'auto' : 'middle',
-                    bottom: useBottomLegend ? 10 : 'auto',
-                    left: useBottomLegend ? 'center' : 'auto',
-                    width: useBottomLegend ? '90%' : '30%',
-                    height: useBottomLegend ? 'auto' : '80%',
+                    orient: 'horizontal',
+                    left: 'center',
+                    top: 0,
+                    width: '90%',
                     icon: 'circle',
                     itemWidth: 8,
                     itemHeight: 8,
-                    itemGap: useBottomLegend ? 12 : 8,
+                    itemGap: 12,
                     textStyle: { 
                         fontSize: 10,
-                        width: useBottomLegend ? 70 : 80,
+                        width: 80,
                         overflow: 'truncate',
                         ellipsis: '...'
                     },
@@ -728,8 +729,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 series: [{
                     type: 'pie',
-                    radius: ['35%', '60%'],
-                    center: useBottomLegend ? ['50%', '40%'] : ['35%', '50%'],
+                    radius: ['45%', '70%'],
+                    center: ['50%', '55%'],
                     avoidLabelOverlap: true,
                     itemStyle: {
                         borderColor: '#fff',
@@ -834,7 +835,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             borderRadius: [0, 6, 6, 0]
                         }
                     })),
-                    barMaxWidth: 18,
+                    barMaxWidth: 30,
                     emphasis: {
                         itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.3)' }
                     }
