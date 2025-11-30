@@ -54,7 +54,9 @@ async def generate_response(
             extra_context=extra_context,
         )
         
-        logger.debug(f"[KFC Replyer] 构建的提示词:\n{prompt}")
+        from src.config.config import global_config
+        if global_config and global_config.debug.show_prompt:
+            logger.info(f"[KFC Replyer] 生成的提示词:\n{prompt}")
         
         # 2. 获取模型配置并调用 LLM
         models = llm_api.get_available_models()

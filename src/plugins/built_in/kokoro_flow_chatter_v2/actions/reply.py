@@ -22,10 +22,12 @@ class KFCReplyAction(BaseAction):
     - 不调用 LLM，直接发送 content 参数中的内容
     - content 由 Replyer 提前生成
     - 仅限 KokoroFlowChatterV2 使用
+    
+    注意：使用 kfc_reply 作为动作名称以避免与 AFC 的 reply 动作冲突
     """
 
     # 动作基本信息
-    action_name = "reply"
+    action_name = "kfc_reply"
     action_description = "发送回复消息。content 参数包含要发送的内容。"
 
     # 激活设置

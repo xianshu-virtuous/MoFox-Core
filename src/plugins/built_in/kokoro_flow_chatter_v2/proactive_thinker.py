@@ -163,6 +163,16 @@ class ProactiveThinker:
             if not session.waiting_config.is_active():
                 return
             
+            # 防止与 Chatter 并发处理：如果 Session 刚刚被更新（5秒内），跳过
+            # 这样可以避免 Chatter 正在处理时，ProactiveThinker 也开始处理
+            time_since_last_activity = time.time() - session.last_activity_at
+            if time_since_last_activity < 5:
+                logger.debug(
+                    f"[ProactiveThinker] Session {session.user_id} 刚有活动 "
+                    f"({time_since_last_activity:.1f}s ago)，跳过处理"
+                )
+                return
+            
             # 检查是否超时
             if session.waiting_config.is_timeout():
                 await self._handle_timeout(session)
@@ -249,6 +259,19 @@ class ProactiveThinker:
     async def _handle_timeout(self, session: KokoroSession) -> None:
         """处理等待超时"""
         self._stats["timeout_decisions"] += 1
+        
+        # 再次检查 Session 状态，防止在等待过程中被 Chatter 处理
+        if session.status != SessionStatus.WAITING:
+            logger.debug(f"[ProactiveThinker] Session {session.user_id} 已不在等待状态，跳过超时处理")
+            return
+        
+        # 再次检查最近活动时间
+        time_since_last_activity = time.time() - session.last_activity_at
+        if time_since_last_activity < 5:
+            logger.debug(
+                f"[ProactiveThinker] Session {session.user_id} 刚有活动，跳过超时处理"
+            )
+            return
         
         logger.info(f"[ProactiveThinker] 等待超时: user={session.user_id}")
         
@@ -390,6 +413,14 @@ class ProactiveThinker:
     ) -> None:
         """处理主动思考"""
         self._stats["proactive_triggered"] += 1
+        
+        # 再次检查最近活动时间，防止与 Chatter 并发
+        time_since_last_activity = time.time() - session.last_activity_at
+        if time_since_last_activity < 5:
+            logger.debug(
+                f"[ProactiveThinker] Session {session.user_id} 刚有活动，跳过主动思考"
+            )
+            return
         
         logger.info(f"[ProactiveThinker] 主动思考触发: user={session.user_id}, reason={trigger_reason}")
         

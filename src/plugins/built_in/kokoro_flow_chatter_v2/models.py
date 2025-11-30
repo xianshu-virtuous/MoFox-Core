@@ -230,7 +230,7 @@ class ActionModel:
     
     def get_description(self) -> str:
         """获取动作的文字描述"""
-        if self.type == "reply":
+        if self.type == "kfc_reply":
             content = self.params.get("content", "")
             return f'发送消息："{content[:50]}{"..." if len(content) > 50 else ""}"'
         elif self.type == "poke_user":
@@ -305,12 +305,12 @@ class LLMResponse:
     
     def has_reply(self) -> bool:
         """是否包含回复动作"""
-        return any(a.type in ("reply", "respond") for a in self.actions)
+        return any(a.type in ("kfc_reply", "respond") for a in self.actions)
     
     def get_reply_content(self) -> str:
         """获取回复内容"""
         for action in self.actions:
-            if action.type in ("reply", "respond"):
+            if action.type in ("kfc_reply", "respond"):
                 return action.params.get("content", "")
         return ""
     

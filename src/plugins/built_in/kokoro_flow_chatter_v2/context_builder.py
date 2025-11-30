@@ -50,6 +50,7 @@ class KFCContextBuilder:
         sender_name: str,
         target_message: str,
         context: Optional["StreamContext"] = None,
+        user_id: Optional[str] = None,
     ) -> dict[str, str]:
         """
         并行构建所有上下文模块
@@ -58,6 +59,7 @@ class KFCContextBuilder:
             sender_name: 发送者名称
             target_message: 目标消息内容
             context: 聊天流上下文（可选）
+            user_id: 用户ID（可选，用于精确查找关系信息）
             
         Returns:
             dict: 包含所有上下文块的字典
@@ -65,7 +67,7 @@ class KFCContextBuilder:
         chat_history = await self._get_chat_history_text(context)
         
         tasks = {
-            "relation_info": self._build_relation_info(sender_name, target_message),
+            "relation_info": self._build_relation_info(sender_name, target_message, user_id),
             "memory_block": self._build_memory_block(chat_history, target_message),
             "expression_habits": self._build_expression_habits(chat_history, target_message),
             "schedule": self._build_schedule_block(),
@@ -127,7 +129,7 @@ class KFCContextBuilder:
             logger.error(f"获取聊天历史失败: {e}")
             return ""
     
-    async def _build_relation_info(self, sender_name: str, target_message: str) -> str:
+    async def _build_relation_info(self, sender_name: str, target_message: str, user_id: Optional[str] = None) -> str:
         """构建关系信息块"""
         config = _get_config()
         
@@ -135,11 +137,20 @@ class KFCContextBuilder:
             return "你将要回复的是你自己发送的消息。"
         
         person_info_manager = get_person_info_manager()
-        person_id = await person_info_manager.get_person_id_by_person_name(sender_name)
+        
+        # 优先使用 user_id + platform 获取 person_id
+        person_id = None
+        if user_id and self.platform:
+            person_id = person_info_manager.get_person_id(self.platform, user_id)
+            logger.debug(f"通过 platform={self.platform}, user_id={user_id} 获取 person_id={person_id}")
+        
+        # 如果没有找到，尝试通过 person_name 查找
+        if not person_id:
+            person_id = await person_info_manager.get_person_id_by_person_name(sender_name)
         
         if not person_id:
-            logger.debug(f"未找到用户 {sender_name} 的ID")
-            return f"你完全不认识{sender_name}，这是你们的第一次互动。"
+            logger.debug(f"未找到用户 {sender_name} 的 person_id")
+            return f"你与{sender_name}还没有建立深厚的关系，这是早期的互动阶段。"
         
         try:
             from src.person_info.relationship_fetcher import relationship_fetcher_manager
@@ -324,12 +335,13 @@ async def build_kfc_context(
     sender_name: str,
     target_message: str,
     context: Optional["StreamContext"] = None,
+    user_id: Optional[str] = None,
 ) -> dict[str, str]:
     """
     便捷函数：构建KFC所需的所有上下文
     """
     builder = KFCContextBuilder(chat_stream)
-    return await builder.build_all_context(sender_name, target_message, context)
+    return await builder.build_all_context(sender_name, target_message, context, user_id)
 
 
 __all__ = [

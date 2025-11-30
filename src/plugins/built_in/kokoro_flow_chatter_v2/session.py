@@ -197,7 +197,7 @@ class KokoroSession:
         for entry in reversed(self.mental_log):
             if entry.event_type == EventType.BOT_PLANNING:
                 for action in entry.actions:
-                    if action.get("type") in ("reply", "respond"):
+                    if action.get("type") in ("kfc_reply", "respond"):
                         return action.get("content", "")
         return None
     

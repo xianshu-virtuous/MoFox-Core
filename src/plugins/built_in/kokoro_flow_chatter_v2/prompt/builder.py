@@ -63,11 +63,14 @@ class PromptBuilder:
         """
         extra_context = extra_context or {}
         
+        # 获取 user_id（从 session 中）
+        user_id = session.user_id if session else None
+        
         # 1. 构建人设块
         persona_block = self._build_persona_block()
         
         # 2. 构建关系块
-        relation_block = await self._build_relation_block(user_name, chat_stream)
+        relation_block = await self._build_relation_block(user_name, chat_stream, user_id)
         
         # 3. 构建活动流
         activity_stream = await self._build_activity_stream(session, user_name)
@@ -123,6 +126,7 @@ class PromptBuilder:
         self,
         user_name: str,
         chat_stream: Optional["ChatStream"],
+        user_id: Optional[str] = None,
     ) -> str:
         """构建关系块"""
         if not chat_stream:
@@ -139,6 +143,7 @@ class PromptBuilder:
                 sender_name=user_name,
                 target_message="",
                 context=None,
+                user_id=user_id,
             )
             
             relation_info = context_data.get("relation_info", "")
@@ -253,7 +258,7 @@ class PromptBuilder:
         for action in actions:
             action_type = action.get("type", "unknown")
             
-            if action_type == "reply":
+            if action_type == "kfc_reply":
                 content = action.get("content", "")
                 if len(content) > 50:
                     content = content[:50] + "..."
@@ -341,22 +346,111 @@ class PromptBuilder:
         )
     
     def _build_actions_block(self, available_actions: Optional[dict]) -> str:
-        """构建可用动作块"""
+        """
+        构建可用动作块
+        
+        参考 AFC planner 的格式，为每个动作展示：
+        - 动作名和描述
+        - 使用场景
+        - JSON 示例（含参数）
+        """
         if not available_actions:
             return self._get_default_actions_block()
         
-        lines = []
-        for name, info in available_actions.items():
-            desc = getattr(info, "description", "") or f"执行 {name}"
-            lines.append(f"- `{name}`: {desc}")
+        action_blocks = []
+        for action_name, action_info in available_actions.items():
+            block = self._format_single_action(action_name, action_info)
+            if block:
+                action_blocks.append(block)
         
-        return "\n".join(lines) if lines else self._get_default_actions_block()
+        return "\n".join(action_blocks) if action_blocks else self._get_default_actions_block()
+    
+    def _format_single_action(self, action_name: str, action_info) -> str:
+        """
+        格式化单个动作为详细说明块
+        
+        Args:
+            action_name: 动作名称
+            action_info: ActionInfo 对象
+            
+        Returns:
+            格式化后的动作说明
+        """
+        # 获取动作描述
+        description = getattr(action_info, "description", "") or f"执行 {action_name}"
+        
+        # 获取使用场景
+        action_require = getattr(action_info, "action_require", []) or []
+        require_text = "\n".join(f"  - {req}" for req in action_require) if action_require else "  - 根据情况使用"
+        
+        # 获取参数定义
+        action_parameters = getattr(action_info, "action_parameters", {}) or {}
+        
+        # 构建 action_data JSON 示例
+        if action_parameters:
+            param_lines = []
+            for param_name, param_desc in action_parameters.items():
+                param_lines.append(f'        "{param_name}": "<{param_desc}>"')
+            action_data_json = "{\n" + ",\n".join(param_lines) + "\n      }"
+        else:
+            action_data_json = "{}"
+        
+        # 构建完整的动作块
+        return f"""### {action_name}
+**描述**: {description}
+
+**使用场景**:
+{require_text}
+
+**示例**:
+```json
+{{
+  "type": "{action_name}",
+  {f'"content": "<你要说的内容>"' if action_name == "kfc_reply" else self._build_params_example(action_parameters)}
+}}
+```
+"""
+    
+    def _build_params_example(self, action_parameters: dict) -> str:
+        """构建参数示例字符串"""
+        if not action_parameters:
+            return '"_comment": "此动作无需额外参数"'
+        
+        parts = []
+        for param_name, param_desc in action_parameters.items():
+            parts.append(f'"{param_name}": "<{param_desc}>"')
+        
+        return ",\n  ".join(parts)
     
     def _get_default_actions_block(self) -> str:
         """获取默认的动作列表"""
-        return """- `reply`: 发送文字消息（参数：content）
-- `poke_user`: 戳一戳对方
-- `do_nothing`: 什么都不做"""
+        return """### kfc_reply
+**描述**: 发送回复消息
+
+**使用场景**:
+  - 需要回复对方消息时使用
+
+**示例**:
+```json
+{
+  "type": "kfc_reply",
+  "content": "你要说的话"
+}
+```
+
+
+### do_nothing
+**描述**: 什么都不做
+
+**使用场景**:
+  - 当前不需要回应时使用
+
+**示例**:
+```json
+{
+  "type": "do_nothing"
+}
+```"""
     
     async def _get_output_format(self) -> str:
         """获取输出格式模板"""
@@ -370,7 +464,7 @@ class PromptBuilder:
             return """请用 JSON 格式回复：
 {
     "thought": "你的想法",
-    "actions": [{"type": "reply", "content": "你的回复"}],
+    "actions": [{"type": "kfc_reply", "content": "你的回复"}],
     "expected_reaction": "期待的反应",
     "max_wait_seconds": 300
 }"""

@@ -160,7 +160,7 @@ class KokoroFlowChatterV2(BaseChatter):
                         log_prefix="[KFC V2]",
                     )
                     exec_results.append(result)
-                    if result.get("success") and action.type in ("reply", "respond"):
+                    if result.get("success") and action.type in ("kfc_reply", "respond"):
                         has_reply = True
                 
                 # 10. 记录 Bot 规划到 mental_log
