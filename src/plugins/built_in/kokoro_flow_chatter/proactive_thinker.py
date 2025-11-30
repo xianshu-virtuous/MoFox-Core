@@ -21,7 +21,8 @@ from src.config.config import global_config
 from src.plugin_system.apis.unified_scheduler import TriggerType, unified_scheduler
 
 from .models import EventType, SessionStatus
-from .replyer import generate_response
+from .planner import generate_plan
+from .replyer import _clean_reply_text, generate_reply_text
 from .session import KokoroSession, get_session_manager
 
 if TYPE_CHECKING:
@@ -210,13 +211,16 @@ class ProactiveThinker:
         """处理连续思考"""
         self._stats["continuous_thinking_triggered"] += 1
         
-        # 生成等待中的想法
-        thought = self._generate_waiting_thought(session, progress)
+        # 获取用户名
+        user_name = await self._get_user_name(session.user_id, session.stream_id)
+        
+        # 调用 LLM 生成等待中的想法
+        thought = await self._generate_waiting_thought(session, user_name, progress)
         
         # 记录到 mental_log
         session.add_waiting_update(
             waiting_thought=thought,
-            mood="",  # 可以根据进度设置心情
+            mood="",  # 心情已融入 thought 中
         )
         
         # 更新思考计数
@@ -231,10 +235,104 @@ class ProactiveThinker:
             f"progress={progress:.1%}, thought={thought[:30]}..."
         )
     
-    def _generate_waiting_thought(self, session: KokoroSession, progress: float) -> str:
-        """生成等待中的想法"""
-        elapsed_minutes = session.waiting_config.get_elapsed_minutes()
-        
+    async def _generate_waiting_thought(
+        self,
+        session: KokoroSession,
+        user_name: str,
+        progress: float,
+    ) -> str:
+        """调用 LLM 生成等待中的想法"""
+        try:
+            from src.chat.utils.prompt import global_prompt_manager
+            from src.plugin_system.apis import llm_api
+            
+            from .prompt.builder import get_prompt_builder
+            from .prompt.prompts import PROMPT_NAMES
+            
+            # 使用 PromptBuilder 构建人设块
+            prompt_builder = get_prompt_builder()
+            persona_block = prompt_builder._build_persona_block()
+            
+            # 获取关系信息
+            relation_block = f"你与 {user_name} 还不太熟悉。"
+            try:
+                from src.person_info.relationship_manager import relationship_manager
+                
+                person_info_manager = await self._get_person_info_manager()
+                if person_info_manager:
+                    platform = global_config.bot.platform if global_config else "qq"
+                    person_id = person_info_manager.get_person_id(platform, session.user_id)
+                    relationship = await relationship_manager.get_relationship(person_id)
+                    if relationship:
+                        relation_block = f"你与 {user_name} 的亲密度是 {relationship.intimacy}。{relationship.description or ''}"
+            except Exception as e:
+                logger.debug(f"获取关系信息失败: {e}")
+            
+            # 获取上次发送的消息
+            last_bot_message = "（未知）"
+            for entry in reversed(session.mental_log):
+                if entry.event_type == EventType.BOT_PLANNING and entry.actions:
+                    for action in entry.actions:
+                        if action.get("type") == "kfc_reply":
+                            content = action.get("content", "")
+                            if content:
+                                last_bot_message = content[:100] + ("..." if len(content) > 100 else "")
+                                break
+                    if last_bot_message != "（未知）":
+                        break
+            
+            # 构建提示词
+            elapsed_minutes = session.waiting_config.get_elapsed_minutes()
+            max_wait_minutes = session.waiting_config.max_wait_seconds / 60
+            expected_reaction = session.waiting_config.expected_reaction or "对方能回复点什么"
+            
+            prompt = await global_prompt_manager.format_prompt(
+                PROMPT_NAMES["waiting_thought"],
+                persona_block=persona_block,
+                user_name=user_name,
+                relation_block=relation_block,
+                last_bot_message=last_bot_message,
+                expected_reaction=expected_reaction,
+                elapsed_minutes=elapsed_minutes,
+                max_wait_minutes=max_wait_minutes,
+                progress_percent=int(progress * 100),
+            )
+            
+            # 调用情绪模型
+            models = llm_api.get_available_models()
+            emotion_config = models.get("emotion") or models.get("replyer")
+            
+            if not emotion_config:
+                logger.warning("[ProactiveThinker] 未找到 emotion/replyer 模型配置，使用默认想法")
+                return self._get_fallback_thought(elapsed_minutes, progress)
+            
+            success, raw_response, _, model_name = await llm_api.generate_with_model(
+                prompt=prompt,
+                model_config=emotion_config,
+                request_type="kokoro_flow_chatter.waiting_thought",
+            )
+            
+            if not success or not raw_response:
+                logger.warning(f"[ProactiveThinker] LLM 调用失败: {raw_response}")
+                return self._get_fallback_thought(elapsed_minutes, progress)
+            
+            # 使用统一的文本清理函数
+            thought = _clean_reply_text(raw_response)
+            
+            logger.debug(f"[ProactiveThinker] LLM 生成等待想法 (model={model_name}): {thought[:50]}...")
+            return thought
+            
+        except Exception as e:
+            logger.error(f"[ProactiveThinker] 生成等待想法失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return self._get_fallback_thought(
+                session.waiting_config.get_elapsed_minutes(),
+                progress
+            )
+    
+    def _get_fallback_thought(self, elapsed_minutes: float, progress: float) -> str:
+        """获取备用的等待想法（当 LLM 调用失败时使用）"""
         if progress < 0.4:
             thoughts = [
                 f"已经等了 {elapsed_minutes:.0f} 分钟了，对方可能在忙吧...",
@@ -253,8 +351,15 @@ class ProactiveThinker:
                 "要不要主动说点什么呢...",
                 "快到时间了，对方还是没回",
             ]
-        
         return random.choice(thoughts)
+    
+    async def _get_person_info_manager(self):
+        """获取 person_info_manager"""
+        try:
+            from src.person_info.person_info import get_person_info_manager
+            return get_person_info_manager()
+        except Exception:
+            return None
     
     async def _handle_timeout(self, session: KokoroSession) -> None:
         """处理等待超时"""
@@ -276,6 +381,9 @@ class ProactiveThinker:
         logger.info(f"[ProactiveThinker] 等待超时: user={session.user_id}")
         
         try:
+            # 获取用户名
+            user_name = await self._get_user_name(session.user_id, session.stream_id)
+            
             # 获取聊天流
             chat_stream = await self._get_chat_stream(session.stream_id)
             
@@ -288,41 +396,59 @@ class ProactiveThinker:
             action_modifier = ActionModifier(action_manager, session.stream_id)
             await action_modifier.modify_actions(chatter_name="KokoroFlowChatter")
             
-            # 调用 Replyer 生成超时决策
-            response = await generate_response(
+            # 调用 Planner 生成超时决策
+            plan_response = await generate_plan(
                 session=session,
-                user_name=session.user_id,  # 这里可以改进，获取真实用户名
+                user_name=user_name,
                 situation_type="timeout",
                 chat_stream=chat_stream,
                 available_actions=action_manager.get_using_actions(),
             )
             
+            # 对于需要回复的动作，调用 Replyer 生成实际文本
+            processed_actions = []
+            for action in plan_response.actions:
+                if action.type == "kfc_reply":
+                    success, reply_text = await generate_reply_text(
+                        session=session,
+                        user_name=user_name,
+                        thought=plan_response.thought,
+                        situation_type="timeout",
+                        chat_stream=chat_stream,
+                    )
+                    if success and reply_text:
+                        action.params["content"] = reply_text
+                    else:
+                        logger.warning("[ProactiveThinker] 回复生成失败，跳过该动作")
+                        continue
+                processed_actions.append(action)
+            
             # 执行动作
-            for action in response.actions:
+            for action in processed_actions:
                 await action_manager.execute_action(
                     action_name=action.type,
                     chat_id=session.stream_id,
                     target_message=None,
-                    reasoning=response.thought,
+                    reasoning=plan_response.thought,
                     action_data=action.params,
                     thinking_id=None,
-                    log_prefix="[KFC V2 ProactiveThinker]",
+                    log_prefix="[KFC ProactiveThinker]",
                 )
             
             # 记录到 mental_log
             session.add_bot_planning(
-                thought=response.thought,
-                actions=[a.to_dict() for a in response.actions],
-                expected_reaction=response.expected_reaction,
-                max_wait_seconds=response.max_wait_seconds,
+                thought=plan_response.thought,
+                actions=[a.to_dict() for a in processed_actions],
+                expected_reaction=plan_response.expected_reaction,
+                max_wait_seconds=plan_response.max_wait_seconds,
             )
             
             # 更新状态
-            if response.max_wait_seconds > 0:
+            if plan_response.max_wait_seconds > 0:
                 # 继续等待
                 session.start_waiting(
-                    expected_reaction=response.expected_reaction,
-                    max_wait_seconds=response.max_wait_seconds,
+                    expected_reaction=plan_response.expected_reaction,
+                    max_wait_seconds=plan_response.max_wait_seconds,
                 )
             else:
                 # 不再等待
@@ -333,8 +459,8 @@ class ProactiveThinker:
             
             logger.info(
                 f"[ProactiveThinker] 超时决策完成: user={session.user_id}, "
-                f"actions={[a.type for a in response.actions]}, "
-                f"continue_wait={response.max_wait_seconds > 0}"
+                f"actions={[a.type for a in processed_actions]}, "
+                f"continue_wait={plan_response.max_wait_seconds > 0}"
             )
             
         except Exception as e:
@@ -430,6 +556,9 @@ class ProactiveThinker:
         logger.info(f"[ProactiveThinker] 主动思考触发: user={session.user_id}, reason={trigger_reason}")
         
         try:
+            # 获取用户名
+            user_name = await self._get_user_name(session.user_id, session.stream_id)
+            
             # 获取聊天流
             chat_stream = await self._get_chat_stream(session.stream_id)
             
@@ -449,23 +578,25 @@ class ProactiveThinker:
             else:
                 silence_duration = f"{silence_seconds / 3600:.1f} 小时"
             
-            # 调用 Replyer
-            response = await generate_response(
+            extra_context = {
+                "trigger_reason": trigger_reason,
+                "silence_duration": silence_duration,
+            }
+            
+            # 调用 Planner
+            plan_response = await generate_plan(
                 session=session,
-                user_name=session.user_id,
+                user_name=user_name,
                 situation_type="proactive",
                 chat_stream=chat_stream,
                 available_actions=action_manager.get_using_actions(),
-                extra_context={
-                    "trigger_reason": trigger_reason,
-                    "silence_duration": silence_duration,
-                },
+                extra_context=extra_context,
             )
             
             # 检查是否决定不打扰
             is_do_nothing = (
-                len(response.actions) == 0 or
-                (len(response.actions) == 1 and response.actions[0].type == "do_nothing")
+                len(plan_response.actions) == 0 or
+                (len(plan_response.actions) == 1 and plan_response.actions[0].type == "do_nothing")
             )
             
             if is_do_nothing:
@@ -474,32 +605,51 @@ class ProactiveThinker:
                 await self.session_manager.save_session(session.user_id)
                 return
             
+            # 对于需要回复的动作，调用 Replyer 生成实际文本
+            processed_actions = []
+            for action in plan_response.actions:
+                if action.type == "kfc_reply":
+                    success, reply_text = await generate_reply_text(
+                        session=session,
+                        user_name=user_name,
+                        thought=plan_response.thought,
+                        situation_type="proactive",
+                        chat_stream=chat_stream,
+                        extra_context=extra_context,
+                    )
+                    if success and reply_text:
+                        action.params["content"] = reply_text
+                    else:
+                        logger.warning("[ProactiveThinker] 回复生成失败，跳过该动作")
+                        continue
+                processed_actions.append(action)
+            
             # 执行动作
-            for action in response.actions:
+            for action in processed_actions:
                 await action_manager.execute_action(
                     action_name=action.type,
                     chat_id=session.stream_id,
                     target_message=None,
-                    reasoning=response.thought,
+                    reasoning=plan_response.thought,
                     action_data=action.params,
                     thinking_id=None,
-                    log_prefix="[KFC V2 ProactiveThinker]",
+                    log_prefix="[KFC ProactiveThinker]",
                 )
             
             # 记录到 mental_log
             session.add_bot_planning(
-                thought=response.thought,
-                actions=[a.to_dict() for a in response.actions],
-                expected_reaction=response.expected_reaction,
-                max_wait_seconds=response.max_wait_seconds,
+                thought=plan_response.thought,
+                actions=[a.to_dict() for a in processed_actions],
+                expected_reaction=plan_response.expected_reaction,
+                max_wait_seconds=plan_response.max_wait_seconds,
             )
             
             # 更新状态
             session.last_proactive_at = time.time()
-            if response.max_wait_seconds > 0:
+            if plan_response.max_wait_seconds > 0:
                 session.start_waiting(
-                    expected_reaction=response.expected_reaction,
-                    max_wait_seconds=response.max_wait_seconds,
+                    expected_reaction=plan_response.expected_reaction,
+                    max_wait_seconds=plan_response.max_wait_seconds,
                 )
             
             # 保存
@@ -507,7 +657,7 @@ class ProactiveThinker:
             
             logger.info(
                 f"[ProactiveThinker] 主动发起完成: user={session.user_id}, "
-                f"actions={[a.type for a in response.actions]}"
+                f"actions={[a.type for a in processed_actions]}"
             )
             
         except Exception as e:
@@ -524,6 +674,25 @@ class ProactiveThinker:
         except Exception as e:
             logger.warning(f"[ProactiveThinker] 获取 chat_stream 失败: {e}")
         return None
+    
+    async def _get_user_name(self, user_id: str, stream_id: str) -> str:
+        """获取用户名称（优先从 person_info 获取）"""
+        try:
+            from src.person_info.person_info import get_person_info_manager
+            
+            person_info_manager = get_person_info_manager()
+            platform = global_config.bot.platform if global_config else "qq"
+            
+            person_id = person_info_manager.get_person_id(platform, user_id)
+            person_name = await person_info_manager.get_value(person_id, "person_name")
+            
+            if person_name:
+                return person_name
+        except Exception as e:
+            logger.debug(f"[ProactiveThinker] 获取用户名失败: {e}")
+        
+        # 回退到 user_id
+        return user_id
     
     def get_stats(self) -> dict:
         """获取统计信息"""
