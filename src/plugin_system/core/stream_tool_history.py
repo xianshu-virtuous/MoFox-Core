@@ -15,7 +15,7 @@ from src.common.logger import get_logger
 logger = get_logger("stream_tool_history")
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolCallRecord:
     """工具调用记录"""
     tool_name: str

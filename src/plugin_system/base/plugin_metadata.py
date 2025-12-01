@@ -4,7 +4,7 @@ from typing import Any
 from src.plugin_system.base.component_types import PythonDependency
 
 
-@dataclass
+@dataclass(slots=True)
 class PluginMetadata:
     """
     插件元数据，用于存储插件的开发者信息和用户帮助信息。

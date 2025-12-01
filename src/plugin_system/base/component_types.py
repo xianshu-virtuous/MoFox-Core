@@ -16,7 +16,7 @@ class InjectionType(Enum):
         return self.value
 
 
-@dataclass
+@dataclass(slots=True)
 class InjectionRule:
     """Prompt注入规则"""
 
@@ -118,7 +118,7 @@ class EventType(Enum):
         return self.value
 
 
-@dataclass
+@dataclass(slots=True)
 class PythonDependency:
     """Python包依赖信息"""
 
@@ -139,7 +139,7 @@ class PythonDependency:
         return self.install_name
 
 
-@dataclass
+@dataclass(slots=True)
 class PermissionNodeField:
     """权限节点声明字段"""
 
@@ -147,7 +147,7 @@ class PermissionNodeField:
     description: str  # 权限描述
 
 
-@dataclass
+@dataclass(slots=True)
 class AdapterInfo:
     """适配器组件信息"""
 

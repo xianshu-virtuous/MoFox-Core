@@ -17,7 +17,7 @@ from src.plugin_system.core.stream_tool_history import ToolCallRecord, get_strea
 logger = get_logger("tool_use")
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolExecutionConfig:
     """工具执行配置"""
     max_concurrent_tools: int = 5  # 最大并发工具数量
@@ -25,7 +25,7 @@ class ToolExecutionConfig:
     enable_dependency_check: bool = True  # 是否启用依赖检查
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolExecutionResult:
     """工具执行结果"""
     tool_call: ToolCall

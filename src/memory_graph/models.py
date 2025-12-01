@@ -2,6 +2,7 @@
 记忆图系统核心数据模型
 
 定义节点、边、记忆等核心数据结构（包含三层记忆系统）
+使用 __slots__ 优化内存占用和属性访问性能
 """
 
 from __future__ import annotations
@@ -112,7 +113,7 @@ class MemoryStatus(Enum):
     ARCHIVED = "archived"  # 已归档（低价值，很少访问）
 
 
-@dataclass
+@dataclass(slots=True)
 class MemoryNode:
     """记忆节点"""
 
@@ -168,7 +169,7 @@ class MemoryNode:
         return f"Node({self.node_type.value}: {self.content})"
 
 
-@dataclass
+@dataclass(slots=True)
 class MemoryEdge:
     """记忆边（节点之间的关系）"""
 
@@ -219,7 +220,7 @@ class MemoryEdge:
         return f"Edge({self.source_id} --{self.relation}--> {self.target_id})"
 
 
-@dataclass
+@dataclass(slots=True)
 class Memory:
     """完整记忆（由节点和边组成的子图）"""
 
@@ -342,7 +343,7 @@ class Memory:
         return f"Memory({self.memory_type.value}: {self.to_text()})"
 
 
-@dataclass
+@dataclass(slots=True)
 class StagedMemory:
     """临时记忆（未整理状态）"""
 
@@ -379,7 +380,7 @@ class StagedMemory:
 # ============================================================================
 
 
-@dataclass
+@dataclass(slots=True)
 class MemoryBlock:
     """
     感知记忆块
@@ -439,7 +440,7 @@ class MemoryBlock:
         return f"MemoryBlock({self.id[:8]}, messages={len(self.messages)}, recalls={self.recall_count})"
 
 
-@dataclass
+@dataclass(slots=True)
 class PerceptualMemory:
     """
     感知记忆（记忆堆的完整状态）
@@ -478,7 +479,7 @@ class PerceptualMemory:
         )
 
 
-@dataclass
+@dataclass(slots=True)
 class ShortTermMemory:
     """
     短期记忆
@@ -558,7 +559,7 @@ class ShortTermMemory:
         return f"ShortTermMemory({self.id[:8]}, content={self.content[:30]}..., importance={self.importance:.2f})"
 
 
-@dataclass
+@dataclass(slots=True)
 class GraphOperation:
     """
     图操作指令
@@ -604,7 +605,7 @@ class GraphOperation:
         return f"GraphOperation({self.operation_type.value}, target={self.target_id}, confidence={self.confidence:.2f})"
 
 
-@dataclass
+@dataclass(slots=True)
 class JudgeDecision:
     """
     裁判模型决策结果
@@ -648,7 +649,7 @@ class JudgeDecision:
         return f"JudgeDecision({status}, confidence={self.confidence:.2f}, extra_queries={len(self.additional_queries)})"
 
 
-@dataclass
+@dataclass(slots=True)
 class ShortTermDecision:
     """
     短期记忆决策结果

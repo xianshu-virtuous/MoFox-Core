@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-@dataclass
+@dataclass(slots=True)
 class Path:
     """表示一条路径"""
 
@@ -58,7 +58,7 @@ class Path:
         return node_id in self.nodes
 
 
-@dataclass
+@dataclass(slots=True)
 class PathExpansionConfig:
     """路径扩展配置"""
 

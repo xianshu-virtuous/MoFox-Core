@@ -309,7 +309,7 @@ class PromptBuilder:
                     limit=30,  # 限制数量，私聊不需要太多
                 )
                 history_messages = [
-                    DatabaseMessages(**msg_dict) for msg_dict in fallback_messages_dicts
+                    DatabaseMessages.from_dict(msg_dict) for msg_dict in fallback_messages_dicts
                 ]
             
             if not history_messages:

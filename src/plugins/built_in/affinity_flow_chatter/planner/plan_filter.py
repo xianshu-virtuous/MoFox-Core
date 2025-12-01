@@ -481,7 +481,7 @@ class ChatterPlanFilter:
                 )
                 # 将字典转换为DatabaseMessages对象
                 read_messages = [
-                    DatabaseMessages(**msg_dict) for msg_dict in fallback_messages_dicts
+                    DatabaseMessages.from_dict(msg_dict) for msg_dict in fallback_messages_dicts
                 ]
 
             unread_messages = stream_context.get_unread_messages()  # 获取未读消息
@@ -646,8 +646,8 @@ class ChatterPlanFilter:
                         target_message_obj["message_id"] = target_message_obj["id"]
 
                     try:
-                        # 使用 ** 解包字典传入构造函数
-                        action_message_obj = DatabaseMessages(**target_message_obj)
+                        # 使用 from_dict 工厂方法创建对象（自动过滤无效参数）
+                        action_message_obj = DatabaseMessages.from_dict(target_message_obj)
                         logger.debug(
                             f"[{action}] 成功转换目标消息为 DatabaseMessages 对象: {action_message_obj.message_id}"
                         )
@@ -670,7 +670,7 @@ class ChatterPlanFilter:
                     if latest_message_dict:
                         from src.common.data_models.database_data_model import DatabaseMessages
                         try:
-                            action_message_obj = DatabaseMessages(**latest_message_dict)
+                            action_message_obj = DatabaseMessages.from_dict(latest_message_dict)
                             logger.info(f"[{action}] 成功使用最新消息: {action_message_obj.message_id}")
                         except Exception as e:
                             logger.error(f"[{action}] 无法转换最新消息: {e}")
@@ -689,7 +689,7 @@ class ChatterPlanFilter:
                 if target_message_dict:
                     from src.common.data_models.database_data_model import DatabaseMessages
                     try:
-                        action_message_obj = DatabaseMessages(**target_message_dict)
+                        action_message_obj = DatabaseMessages.from_dict(target_message_dict)
                     except Exception as e:
                         logger.error(
                             f"[{action}] 无法将默认的最新消息转换为 DatabaseMessages 对象: {e}",

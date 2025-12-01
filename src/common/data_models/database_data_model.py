@@ -5,11 +5,12 @@ from typing import Any
 from . import BaseDataModel
 
 
-@dataclass
+@dataclass(slots=True)
 class DatabaseUserInfo(BaseDataModel):
     """
     用户信息数据模型，用于存储用户的基本信息。
     该类通过 dataclass 实现，继承自 BaseDataModel。
+    使用 __slots__ 优化内存占用和属性访问性能。
     """
     platform: str = field(default_factory=str)  # 用户所属平台（如微信、QQ 等）
     user_id: str = field(default_factory=str)  # 用户唯一标识 ID
@@ -35,10 +36,12 @@ class DatabaseUserInfo(BaseDataModel):
             "user_cardname": self.user_cardname,
         }
 
-@dataclass
+
+@dataclass(slots=True)
 class DatabaseGroupInfo(BaseDataModel):
     """
     群组信息数据模型，用于存储群组的基本信息。
+    使用 __slots__ 优化内存占用和属性访问性能。
     """
     group_id: str = field(default_factory=str)  # 群组唯一标识 ID
     group_name: str = field(default_factory=str)  # 群组名称
@@ -52,7 +55,7 @@ class DatabaseGroupInfo(BaseDataModel):
             group_name=data.get("group_name", ""),
             platform=data.get("platform"),
         )
-    
+
     def to_dict(self) -> dict:
         """将实例转换为字典"""
         return {
@@ -60,12 +63,14 @@ class DatabaseGroupInfo(BaseDataModel):
             "group_name": self.group_name,
             "group_platform": self.platform,
         }
-    
-@dataclass
+
+
+@dataclass(slots=True)
 class DatabaseChatInfo(BaseDataModel):
     """
     聊天会话信息数据模型，用于描述一个聊天对话的上下文信息。
     包括会话 ID、平台、创建时间、最后活跃时间以及关联的用户和群组信息。
+    使用 __slots__ 优化内存占用和属性访问性能。
     """
     stream_id: str = field(default_factory=str)  # 会话流 ID，唯一标识一个聊天对话
     platform: str = field(default_factory=str)  # 所属平台（如微信、QQ 等）
@@ -80,7 +85,50 @@ class DatabaseMessages(BaseDataModel):
     """
     消息数据模型，用于存储每一条消息的完整信息，包括内容、元数据、用户、聊天上下文等。
     使用 init=False 实现自定义初始化逻辑，通过 __init__ 手动设置字段。
+    使用 __slots__ 优化内存占用和属性访问性能。
     """
+
+    __slots__ = (
+        # 基础消息字段
+        "message_id",
+        "time",
+        "chat_id",
+        "reply_to",
+        "interest_value",
+        "key_words",
+        "key_words_lite",
+        "is_mentioned",
+        "is_at",
+        "reply_probability_boost",
+        "processed_plain_text",
+        "display_message",
+        "priority_mode",
+        "priority_info",
+        "additional_config",
+        "is_emoji",
+        "is_picid",
+        "is_command",
+        "is_notify",
+        "is_public_notice",
+        "notice_type",
+        "selected_expressions",
+        "is_read",
+        "actions",
+        "should_reply",
+        "should_act",
+        # 关联对象
+        "user_info",
+        "group_info",
+        "chat_info",
+        # 运行时扩展字段（固定）
+        "semantic_embedding",
+        "interest_calculated",
+        "is_voice",
+        "is_video",
+        "has_emoji",
+        "has_picid",
+    )
+
     def __init__(
         self,
         message_id: str = "",  # 消息唯一 ID
@@ -101,30 +149,38 @@ class DatabaseMessages(BaseDataModel):
         is_emoji: bool = False,  # 是否为表情消息
         is_picid: bool = False,  # 是否为图片消息（包含图片 ID）
         is_command: bool = False,  # 是否为命令消息（如 /help）
-        is_notify: bool = False,  # 是否为notice消息（如禁言、戳一戳等系统事件）
-        is_public_notice: bool = False,  # 是否为公共notice（所有聊天可见）
-        notice_type: str | None = None,  # notice类型（由适配器指定，如 "group_ban", "poke" 等）
+        is_notify: bool = False,  # 是否为 notice 消息（如禁言、戳一戳等系统事件）
+        is_public_notice: bool = False,  # 是否为公共 notice（所有聊天可见）
+        notice_type: str | None = None,  # notice 类型（由适配器指定，如 "group_ban", "poke" 等）
         selected_expressions: str | None = None,  # 选择的表情或响应模板
         is_read: bool = False,  # 是否已读
-        user_id: str = "",  # 用户 ID
-        user_nickname: str = "",  # 用户昵称
-        user_cardname: str | None = None,  # 用户备注名或群名片
-        user_platform: str = "",  # 用户所属平台
-        chat_info_group_id: str | None = None,  # 所属群组 ID（聊天上下文信息）
-        chat_info_group_name: str | None = None,  # 所属群组名称
-        chat_info_group_platform: str | None = None,  # 所属群组平台
-        chat_info_user_id: str = "",  # 聊天上下文中的用户 ID
-        chat_info_user_nickname: str = "",  # 聊天上下文中的用户昵称
-        chat_info_user_cardname: str | None = None,  # 聊天上下文中的用户备注名
-        chat_info_user_platform: str = "",  # 聊天上下文中的用户平台
-        chat_info_stream_id: str = "",  # 聊天上下文的会话流 ID
-        chat_info_platform: str = "",  # 聊天上下文平台
-        chat_info_create_time: float = 0.0,  # 聊天上下文创建时间
-        chat_info_last_active_time: float = 0.0,  # 聊天上下文最后活跃时间
         actions: list | None = None,  # 与消息相关的动作列表（如回复、转发等）
         should_reply: bool = False,  # 是否应该自动回复
         should_act: bool = False,  # 是否应该执行动作（如发送消息）
-        **kwargs: Any,  # 允许传入任意额外字段
+        # 用户信息（用于构建 user_info）
+        user_id: str = "",
+        user_nickname: str = "",
+        user_cardname: str | None = None,
+        user_platform: str = "",
+        # 群组 / 聊天上下文信息（用于构建 group_info / chat_info）
+        chat_info_group_id: str | None = None,
+        chat_info_group_name: str | None = None,
+        chat_info_group_platform: str | None = None,
+        chat_info_user_id: str = "",
+        chat_info_user_nickname: str = "",
+        chat_info_user_cardname: str | None = None,
+        chat_info_user_platform: str = "",
+        chat_info_stream_id: str = "",
+        chat_info_platform: str = "",
+        chat_info_create_time: float = 0.0,
+        chat_info_last_active_time: float = 0.0,
+        # 运行时字段（固定）
+        semantic_embedding: Any | None = None,
+        interest_calculated: bool = False,
+        is_voice: bool = False,  # 是否为语音消息
+        is_video: bool = False,  # 是否为视频消息
+        has_emoji: bool = False,  # 是否包含表情
+        has_picid: bool = False,  # 是否包含图片 ID
     ):
         # 初始化基础字段
         self.message_id = message_id
@@ -186,21 +242,19 @@ class DatabaseMessages(BaseDataModel):
             group_info=self.group_info,
         )
 
-        # 扩展运行时字段
-        self.semantic_embedding = kwargs.pop("semantic_embedding", None)
-        self.interest_calculated = kwargs.pop("interest_calculated", False)
-
-        # 处理额外传入的字段（kwargs）
-        if kwargs:
-            for key, value in kwargs.items():
-                setattr(self, key, value)
+        # 运行时字段
+        self.semantic_embedding = semantic_embedding
+        self.interest_calculated = interest_calculated
+        self.is_voice = is_voice
+        self.is_video = is_video
+        self.has_emoji = has_emoji
+        self.has_picid = has_picid
+        # 注意: id 参数从数据库加载时会传入，但不存储（使用 message_id 作为业务主键）
 
     def flatten(self) -> dict[str, Any]:
         """
         将消息对象转换为字典格式，便于序列化存储或传输。
-
-        Returns:
-            包含所有字段的字典，其中嵌套对象（如 user_info、group_info）已展开为扁平结构。
+        嵌套对象（如 user_info、group_info、chat_info）展开为扁平结构。
         """
         return {
             "message_id": self.message_id,
@@ -228,13 +282,17 @@ class DatabaseMessages(BaseDataModel):
             "is_read": self.is_read,
             "actions": self.actions,
             "should_reply": self.should_reply,
+            "should_act": self.should_act,
+            # user_info 展开
             "user_id": self.user_info.user_id,
             "user_nickname": self.user_info.user_nickname,
             "user_cardname": self.user_info.user_cardname,
             "user_platform": self.user_info.platform,
+            # group_info 展开（可能为 None）
             "chat_info_group_id": self.group_info.group_id if self.group_info else None,
             "chat_info_group_name": self.group_info.group_name if self.group_info else None,
             "chat_info_group_platform": self.group_info.platform if self.group_info else None,
+            # chat_info 展开
             "chat_info_stream_id": self.chat_info.stream_id,
             "chat_info_platform": self.chat_info.platform,
             "chat_info_create_time": self.chat_info.create_time,
@@ -243,6 +301,9 @@ class DatabaseMessages(BaseDataModel):
             "chat_info_user_nickname": self.chat_info.user_info.user_nickname,
             "chat_info_user_cardname": self.chat_info.user_info.user_cardname,
             "chat_info_user_platform": self.chat_info.user_info.platform,
+            # 运行时字段
+            "semantic_embedding": self.semantic_embedding,
+            "interest_calculated": self.interest_calculated,
         }
 
     def update_message_info(
@@ -301,13 +362,62 @@ class DatabaseMessages(BaseDataModel):
             "display_message": self.display_message,
         }
 
+    # DatabaseMessages 接受的所有参数名集合（用于 from_dict 过滤）
+    _VALID_INIT_PARAMS: frozenset[str] = frozenset({
+        "message_id", "time", "chat_id", "reply_to", "interest_value",
+        "key_words", "key_words_lite", "is_mentioned", "is_at",
+        "reply_probability_boost", "processed_plain_text", "display_message",
+        "priority_mode", "priority_info", "additional_config",
+        "is_emoji", "is_picid", "is_command", "is_notify", "is_public_notice",
+        "notice_type", "selected_expressions", "is_read", "actions",
+        "should_reply", "should_act",
+        "user_id", "user_nickname", "user_cardname", "user_platform",
+        "chat_info_group_id", "chat_info_group_name", "chat_info_group_platform",
+        "chat_info_user_id", "chat_info_user_nickname", "chat_info_user_cardname",
+        "chat_info_user_platform", "chat_info_stream_id", "chat_info_platform",
+        "chat_info_create_time", "chat_info_last_active_time",
+        "semantic_embedding", "interest_calculated",
+        "is_voice", "is_video", "has_emoji", "has_picid",
+        "id",  # 数据库自增主键
+    })
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DatabaseMessages":
+        """
+        从字典创建 DatabaseMessages 实例，自动过滤掉不支持的参数。
+
+        Args:
+            data: 包含消息数据的字典（如从数据库查询返回的结果）
+
+        Returns:
+            DatabaseMessages 实例
+        """
+        # 只保留有效的参数
+        filtered_data = {k: v for k, v in data.items() if k in cls._VALID_INIT_PARAMS}
+        return cls(**filtered_data)
+
 
 @dataclass(init=False)
 class DatabaseActionRecords(BaseDataModel):
     """
     动作记录数据模型，用于记录系统执行的某个操作或动作的详细信息。
     用于审计、日志或调试。
+    使用 __slots__ 优化内存占用和属性访问性能。
     """
+
+    __slots__ = (
+        "action_id",
+        "time",
+        "action_name",
+        "action_data",
+        "action_done",
+        "action_build_into_prompt",
+        "action_prompt_display",
+        "chat_id",
+        "chat_info_stream_id",
+        "chat_info_platform",
+    )
+
     def __init__(
         self,
         action_id: str,  # 动作唯一 ID

@@ -533,7 +533,7 @@ class StreamContext(BaseDataModel):
                 loaded_count = 0
                 for msg_dict in db_messages:
                     try:
-                        db_msg = DatabaseMessages(**msg_dict)
+                        db_msg = DatabaseMessages.from_dict(msg_dict)
                         db_msg.is_read = True
                         self.history_messages.append(db_msg)
                         loaded_count += 1
