@@ -101,7 +101,11 @@ class RelationshipFetcher:
                 del self.info_fetched_cache[person_id]
 
     async def build_relation_info(self, person_id, points_num=5):
-        """构建详细的人物关系信息，包含从数据库中查询的丰富关系描述"""
+        """构建详细的人物关系信息
+        
+        注意：现在只从 user_relationships 表读取印象和关系数据，
+        person_info 表只用于获取基础信息（用户名、平台等）
+        """
         # 初始化log_prefix
         await self._initialize_log_prefix()
 
@@ -109,128 +113,84 @@ class RelationshipFetcher:
         self._cleanup_expired_cache()
 
         person_info_manager = get_person_info_manager()
+        
+        # 仅从 person_info 获取基础信息（不获取印象相关字段）
         person_name = await person_info_manager.get_value(person_id, "person_name")
-        short_impression = await person_info_manager.get_value(person_id, "short_impression")
-        full_impression = await person_info_manager.get_value(person_id, "impression")
-        attitude = await person_info_manager.get_value(person_id, "attitude") or 50
-
-        nickname_str = await person_info_manager.get_value(person_id, "nickname")
         platform = await person_info_manager.get_value(person_id, "platform")
-        know_times = await person_info_manager.get_value(person_id, "know_times") or 0
-        know_since = await person_info_manager.get_value(person_id, "know_since")
-        last_know = await person_info_manager.get_value(person_id, "last_know")
-
-        # 获取用户特征点
-        current_points = await person_info_manager.get_value(person_id, "points") or []
-        forgotten_points = await person_info_manager.get_value(person_id, "forgotten_points") or []
-
-        # 确保 points 是列表类型（可能从数据库返回字符串）
-        if not isinstance(current_points, list):
-            current_points = []
-        if not isinstance(forgotten_points, list):
-            forgotten_points = []
-
-        # 按时间排序并选择最有代表性的特征点
-        all_points = current_points + forgotten_points
-        if all_points:
-            # 按权重和时效性综合排序
-            all_points.sort(
-                key=lambda x: (float(x[1]) if len(x) > 1 else 0, float(x[2]) if len(x) > 2 else 0), reverse=True
-            )
-            selected_points = all_points[:points_num]
-            points_text = "\n".join([f"- {point[0]}（{point[2]}）" for point in selected_points if len(point) > 2])
-        else:
-            points_text = ""
 
         # 构建详细的关系描述
         relation_parts = []
 
-        # 1. 基本信息
-        if nickname_str and person_name != nickname_str:
-            relation_parts.append(f"用户{person_name}在{platform}平台的昵称是{nickname_str}")
-
-        # 2. 认识时间和频率
-        if know_since:
-            from datetime import datetime
-
-            know_time = datetime.fromtimestamp(know_since).strftime("%Y年%m月%d日")
-            relation_parts.append(f"你从{know_time}开始认识{person_name}")
-
-        if know_times > 0:
-            relation_parts.append(f"你们已经交流过{int(know_times)}次")
-
-        if last_know:
-            from datetime import datetime
-
-            last_time = datetime.fromtimestamp(last_know).strftime("%m月%d日")
-            relation_parts.append(f"最近一次交流是在{last_time}")
-
-        # 3. 态度和印象
-        attitude_desc = self._get_attitude_description(attitude)
-        relation_parts.append(f"你对{person_name}的态度是{attitude_desc}")
-
-        if short_impression:
-            relation_parts.append(f"你对ta的总体印象：{short_impression}")
-
-        if full_impression:
-            relation_parts.append(f"更详细的了解：{full_impression}")
-
-        # 4. 特征点和记忆
-        if points_text:
-            relation_parts.append(f"你记得关于{person_name}的一些事情：\n{points_text}")
-
-        # 5. 从UserRelationships表获取完整关系信息（新系统）
+        # 从 UserRelationships 表获取完整关系信息（这是唯一的印象数据来源）
         try:
             from src.common.database.api.specialized import get_user_relationship
 
             # 查询用户关系数据
             user_id = str(await person_info_manager.get_value(person_id, "user_id"))
-            platform = str(await person_info_manager.get_value(person_id, "platform"))
 
-            # 使用优化后的API（带缓存）
-            relationship = await get_user_relationship(
-                platform=platform,
-                user_id=user_id,
-                target_id="bot",  # 或者根据实际需要传入目标用户ID
-            )
+            # 使用优化后的API（带缓存）- 只需要user_id
+            relationship = await get_user_relationship(user_id=user_id)
 
             if relationship:
-                # 将SQLAlchemy对象转换为字典以保持兼容性
-                # 直接使用 __dict__ 访问，避免触发 SQLAlchemy 的描述符和 lazy loading
-                # 方案A已经确保所有字段在缓存前都已预加载，所以 __dict__ 中有完整数据
+                # 将SQLAlchemy对象转换为字典
                 try:
                     rel_data = {
                         "user_aliases": relationship.__dict__.get("user_aliases"),
                         "relationship_text": relationship.__dict__.get("relationship_text"),
+                        "impression_text": relationship.__dict__.get("impression_text"),
                         "preference_keywords": relationship.__dict__.get("preference_keywords"),
+                        "key_facts": relationship.__dict__.get("key_facts"),
                         "relationship_score": relationship.__dict__.get("relationship_score"),
+                        "relationship_stage": relationship.__dict__.get("relationship_stage"),
+                        "first_met_time": relationship.__dict__.get("first_met_time"),
                     }
                 except Exception as attr_error:
                     logger.warning(f"访问relationship对象属性失败: {attr_error}")
                     rel_data = {}
 
-                # 5.1 用户别名
+                # 1. 用户别名
                 if rel_data.get("user_aliases"):
                     aliases_list = [alias.strip() for alias in rel_data["user_aliases"].split(",") if alias.strip()]
                     if aliases_list:
                         aliases_str = "、".join(aliases_list)
                         relation_parts.append(f"{person_name}的别名有：{aliases_str}")
 
-                # 5.2 关系印象文本（主观认知）
-                if rel_data.get("relationship_text"):
-                    relation_parts.append(f"你对{person_name}的整体认知：{rel_data['relationship_text']}")
+                # 2. 关系阶段和好感度
+                if rel_data.get("relationship_score") is not None:
+                    score = rel_data["relationship_score"]
+                    stage = rel_data.get("relationship_stage") or self._get_stage_from_score(score)
+                    stage_desc = self._get_stage_description(stage)
+                    relation_parts.append(f"你和{person_name}的关系：{stage_desc}（好感度{score:.2f}）")
 
-                # 5.3 用户偏好关键词
+                # 3. 认识时间
+                if rel_data.get("first_met_time"):
+                    from datetime import datetime
+                    first_met = datetime.fromtimestamp(rel_data["first_met_time"]).strftime("%Y年%m月")
+                    relation_parts.append(f"你们从{first_met}开始认识")
+
+                # 4. 长期印象（优先使用新字段 impression_text，回退到 relationship_text）
+                impression = rel_data.get("impression_text") or rel_data.get("relationship_text")
+                if impression:
+                    relation_parts.append(f"\n你对{person_name}的印象：\n{impression}")
+
+                # 5. 用户偏好关键词
                 if rel_data.get("preference_keywords"):
                     keywords_list = [kw.strip() for kw in rel_data["preference_keywords"].split(",") if kw.strip()]
                     if keywords_list:
                         keywords_str = "、".join(keywords_list)
-                        relation_parts.append(f"{person_name}的偏好和兴趣：{keywords_str}")
+                        relation_parts.append(f"\n{person_name}的偏好和兴趣：{keywords_str}")
 
-                # 5.4 关系亲密程度（好感分数）
-                if rel_data.get("relationship_score") is not None:
-                    score_desc = self._get_relationship_score_description(rel_data["relationship_score"])
-                    relation_parts.append(f"你们的关系程度：{score_desc}（{rel_data['relationship_score']:.2f}）")
+                # 6. 关键信息
+                if rel_data.get("key_facts"):
+                    try:
+                        import orjson
+                        facts = orjson.loads(rel_data["key_facts"])
+                        if facts and isinstance(facts, list):
+                            facts_lines = self._format_key_facts(facts, person_name)
+                            if facts_lines:
+                                relation_parts.append(f"\n你记住的关于{person_name}的重要信息：\n{facts_lines}")
+                    except Exception:
+                        pass
 
         except Exception as e:
             logger.error(f"查询UserRelationships表失败: {e}")
@@ -382,6 +342,54 @@ class RelationshipFetcher:
             return "认识但不熟悉"
         else:
             return "陌生人"
+
+    def _get_stage_from_score(self, score: float) -> str:
+        """根据好感度分数返回关系阶段"""
+        if score >= 0.9:
+            return "bestie"
+        elif score >= 0.75:
+            return "close_friend"
+        elif score >= 0.6:
+            return "friend"
+        elif score >= 0.4:
+            return "familiar"
+        elif score >= 0.2:
+            return "acquaintance"
+        else:
+            return "stranger"
+
+    def _get_stage_description(self, stage: str) -> str:
+        """根据关系阶段返回描述性文字"""
+        stage_map = {
+            "stranger": "陌生人",
+            "acquaintance": "初识",
+            "familiar": "熟人",
+            "friend": "朋友",
+            "close_friend": "好友",
+            "bestie": "挚友",
+        }
+        return stage_map.get(stage, "未知关系")
+
+    def _format_key_facts(self, facts: list, person_name: str) -> str:
+        """格式化关键信息列表"""
+        type_names = {
+            "birthday": "生日",
+            "job": "工作",
+            "location": "所在地",
+            "dream": "理想",
+            "family": "家庭",
+            "pet": "宠物",
+            "other": "其他"
+        }
+        lines = []
+        for fact in facts:
+            if isinstance(fact, dict):
+                fact_type = fact.get("type", "other")
+                value = fact.get("value", "")
+                type_name = type_names.get(fact_type, "其他")
+                if value:
+                    lines.append(f"• {type_name}：{value}")
+        return "\n".join(lines)
 
     async def _build_fetch_query(self, person_id, target_message, chat_history):
         nickname_str = ",".join(global_config.bot.alias_names)

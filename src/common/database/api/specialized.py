@@ -401,26 +401,21 @@ async def get_usage_statistics(
 
 
 # ===== UserRelationships 业务API =====
-@cached(ttl=600, key_prefix="user_relationship")  # 缓存10分钟
+# 注意：这个函数不使用缓存，因为用户画像工具会频繁更新，需要实时读取最新数据
 async def get_user_relationship(
-    platform: str,
     user_id: str,
-    target_id: str,
+    **_kwargs,  # 兼容旧调用，忽略platform和target_id
 ) -> UserRelationships | None:
     """获取用户关系
 
     Args:
-        platform: 平台
         user_id: 用户ID
-        target_id: 目标用户ID
 
     Returns:
         用户关系实例
     """
     return await _user_relationships_crud.get_by(
-        platform=platform,
         user_id=user_id,
-        target_id=target_id,
     )
 
 

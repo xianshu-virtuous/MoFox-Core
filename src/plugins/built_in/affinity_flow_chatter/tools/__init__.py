@@ -5,6 +5,7 @@ AffinityFlow Chatter 工具模块
 """
 
 from .chat_stream_impression_tool import ChatStreamImpressionTool
+from .user_fact_tool import UserFactTool
 from .user_profile_tool import UserProfileTool
 
-__all__ = ["ChatStreamImpressionTool", "UserProfileTool"]
+__all__ = ["ChatStreamImpressionTool", "UserProfileTool", "UserFactTool"]

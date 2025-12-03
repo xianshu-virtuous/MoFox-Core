@@ -105,8 +105,7 @@ async def check_and_migrate_database(existing_engine=None):
                             column = table.c[column_name]
                             
                             # 获取列类型的 SQL 表示
-                            # 使用 compile 方法获取正确的类型字符串
-                            type_compiler = dialect.type_compiler(dialect)
+                            # 直接使用 compile 方法，它会自动选择正确的方言
                             column_type_sql = column.type.compile(dialect=dialect)
                             
                             # 构建 ALTER TABLE 语句

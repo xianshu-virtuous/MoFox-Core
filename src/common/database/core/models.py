@@ -655,7 +655,16 @@ class UserPermissions(Base):
 
 
 class UserRelationships(Base):
-    """用户关系模型 - 存储用户与bot的关系数据"""
+    """用户关系模型 - 存储用户与bot的关系数据
+    
+    核心字段：
+    - relationship_text: 当前印象描述（用于兼容旧系统，逐步迁移到 impression_text）
+    - impression_text: 长期印象（新字段，自然叙事风格）
+    - preference_keywords: 用户偏好关键词
+    - relationship_score: 好感度分数(0-1)
+    - key_facts: 关键信息JSON（生日、职业、理想等）
+    - relationship_stage: 关系阶段（stranger/acquaintance/friend/close_friend/bestie）
+    """
 
     __tablename__ = "user_relationships"
 
@@ -663,9 +672,22 @@ class UserRelationships(Base):
     user_id: Mapped[str] = mapped_column(get_string_field(100), nullable=False, unique=True, index=True)
     user_name: Mapped[str | None] = mapped_column(get_string_field(100), nullable=True)
     user_aliases: Mapped[str | None] = mapped_column(Text, nullable=True)  # 用户别名，逗号分隔
-    relationship_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # 印象相关（新旧兼容）
+    relationship_text: Mapped[str | None] = mapped_column(Text, nullable=True)  # 旧字段，保持兼容
+    impression_text: Mapped[str | None] = mapped_column(Text, nullable=True)  # 新字段：长期印象（自然叙事）
+    
+    # 用户信息
     preference_keywords: Mapped[str | None] = mapped_column(Text, nullable=True)  # 用户偏好关键词，逗号分隔
-    relationship_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.3)  # 关系分数(0-1)
+    key_facts: Mapped[str | None] = mapped_column(Text, nullable=True)  # 关键信息JSON（生日、职业等）
+    
+    # 关系状态
+    relationship_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.3)  # 好感度(0-1)
+    relationship_stage: Mapped[str | None] = mapped_column(get_string_field(50), nullable=True, default="stranger")  # 关系阶段
+    
+    # 时间记录
+    first_met_time: Mapped[float | None] = mapped_column(Float, nullable=True)  # 首次认识时间戳
+    last_impression_update: Mapped[float | None] = mapped_column(Float, nullable=True)  # 上次更新印象时间
     last_updated: Mapped[float] = mapped_column(Float, nullable=False, default=time.time)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
@@ -673,4 +695,5 @@ class UserRelationships(Base):
         Index("idx_user_relationship_id", "user_id"),
         Index("idx_relationship_score", "relationship_score"),
         Index("idx_relationship_updated", "last_updated"),
+        Index("idx_relationship_stage", "relationship_stage"),
     )
