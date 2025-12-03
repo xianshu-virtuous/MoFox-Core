@@ -88,7 +88,9 @@ kfc_SITUATION_NEW_MESSAGE = Prompt(
     name="kfc_situation_new_message",
     template="""现在是 {current_time}。
 
-{user_name} 刚刚给你发了消息。这是一次新的对话发起（不是对你之前消息的回复）。
+{user_name} 刚刚给你发了消息：「{latest_message}」
+
+这是一次新的对话发起（不是对你之前消息的回复）。
 
 请决定你要怎么回应。你可以：
 - 发送文字消息回复
@@ -103,7 +105,7 @@ kfc_SITUATION_REPLY_IN_TIME = Prompt(
 
 你之前发了消息后一直在等 {user_name} 的回复。
 等了大约 {elapsed_minutes:.1f} 分钟（你原本打算最多等 {max_wait_minutes:.1f} 分钟）。
-现在 {user_name} 回复了！
+现在 {user_name} 回复了：「{latest_message}」
 
 请决定你接下来要怎么回应。""",
 )
@@ -114,7 +116,7 @@ kfc_SITUATION_REPLY_LATE = Prompt(
 
 你之前发了消息后在等 {user_name} 的回复。
 你原本打算最多等 {max_wait_minutes:.1f} 分钟，但实际等了 {elapsed_minutes:.1f} 分钟才收到回复。
-虽然有点迟，但 {user_name} 终于回复了。
+虽然有点迟，但 {user_name} 终于回复了：「{latest_message}」
 
 请决定你接下来要怎么回应。（可以选择轻轻抱怨一下迟到，也可以装作没在意）""",
 )

@@ -177,7 +177,12 @@ class KFCContextBuilder:
             return f"你与{sender_name}是普通朋友关系。"
     
     async def _build_memory_block(self, chat_history: str, target_message: str) -> str:
-        """构建记忆块（使用三层记忆系统）"""
+        """构建记忆块（使用三层记忆系统）
+        
+        Args:
+            chat_history: 聊天历史文本
+            target_message: 目标消息/查询文本。如果为空，将使用 chat_history 的前 200 字符作为查询
+        """
         config = _get_config()
         
         if not (config.memory and config.memory.enable):
@@ -192,8 +197,18 @@ class KFCContextBuilder:
                 logger.debug("[三层记忆] 管理器未初始化")
                 return ""
             
+            # 如果 target_message 为空，使用 chat_history 的前 200 字符作为查询
+            query_text = target_message.strip() if target_message else ""
+            if not query_text and chat_history:
+                query_text = chat_history[:200].strip()
+                logger.debug(f"[三层记忆] target_message 为空，使用 chat_history 前 200 字符作为查询")
+            
+            if not query_text:
+                logger.debug("[三层记忆] 没有可用的查询文本，跳过记忆搜索")
+                return ""
+            
             search_result = await unified_manager.search_memories(
-                query_text=target_message,
+                query_text=query_text,
                 use_judge=True,
                 recent_chat_history=chat_history,
             )
