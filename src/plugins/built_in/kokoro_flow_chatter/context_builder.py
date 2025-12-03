@@ -5,6 +5,7 @@ Kokoro Flow Chatter 上下文构建器
 包含：
 - 关系信息 (relation_info)
 - 记忆块 (memory_block)
+- 工具调用 (tool_info)
 - 表达习惯 (expression_habits)
 - 日程信息 (schedule)
 - 时间信息 (time)
@@ -51,6 +52,7 @@ class KFCContextBuilder:
         target_message: str,
         context: Optional["StreamContext"] = None,
         user_id: Optional[str] = None,
+        enable_tool: bool = True,
     ) -> dict[str, str]:
         """
         并行构建所有上下文模块
@@ -60,46 +62,73 @@ class KFCContextBuilder:
             target_message: 目标消息内容
             context: 聊天流上下文（可选）
             user_id: 用户ID（可选，用于精确查找关系信息）
+            enable_tool: 是否启用工具调用
             
         Returns:
             dict: 包含所有上下文块的字典
         """
+        logger.debug(f"[KFC上下文] 开始构建上下文: sender={sender_name}, target={target_message[:50] if target_message else '(空)'}...")
+        
         chat_history = await self._get_chat_history_text(context)
         
         tasks = {
             "relation_info": self._build_relation_info(sender_name, target_message, user_id),
-            "memory_block": self._build_memory_block(chat_history, target_message),
+            "memory_block": self._build_memory_block(chat_history, target_message, context),
+            "tool_info": self._build_tool_info(chat_history, sender_name, target_message, enable_tool),
             "expression_habits": self._build_expression_habits(chat_history, target_message),
             "schedule": self._build_schedule_block(),
             "time": self._build_time_block(),
         }
         
         results = {}
+        timing_logs = []
+        
+        # 任务名称中英文映射
+        task_name_mapping = {
+            "relation_info": "感受关系",
+            "memory_block": "回忆",
+            "tool_info": "使用工具",
+            "expression_habits": "选取表达方式",
+            "schedule": "日程",
+            "time": "时间",
+        }
+        
         try:
             task_results = await asyncio.gather(
-                *[self._wrap_task(name, coro) for name, coro in tasks.items()],
+                *[self._wrap_task_with_timing(name, coro) for name, coro in tasks.items()],
                 return_exceptions=True
             )
             
             for result in task_results:
-                if isinstance(result, tuple):
-                    name, value = result
+                if isinstance(result, tuple) and len(result) == 3:
+                    name, value, duration = result
                     results[name] = value
-                else:
+                    chinese_name = task_name_mapping.get(name, name)
+                    timing_logs.append(f"{chinese_name}: {duration:.1f}s")
+                    if duration > 8:
+                        logger.warning(f"KFC 上下文构建耗时过长: {chinese_name} 耗时: {duration:.1f}s")
+                elif isinstance(result, Exception):
                     logger.warning(f"上下文构建任务异常: {result}")
         except Exception as e:
             logger.error(f"并行构建上下文失败: {e}")
         
+        # 输出耗时日志
+        if timing_logs:
+            logger.info(f"在回复前的步骤耗时: {'; '.join(timing_logs)}")
+        
         return results
     
-    async def _wrap_task(self, name: str, coro) -> tuple[str, str]:
-        """包装任务以返回名称和结果"""
+    async def _wrap_task_with_timing(self, name: str, coro) -> tuple[str, str, float]:
+        """包装任务以返回名称、结果和耗时"""
+        start_time = time.time()
         try:
             result = await coro
-            return (name, result or "")
+            duration = time.time() - start_time
+            return (name, result or "", duration)
         except Exception as e:
+            duration = time.time() - start_time
             logger.error(f"构建 {name} 失败: {e}")
-            return (name, "")
+            return (name, "", duration)
     
     async def _get_chat_history_text(
         self,
@@ -176,11 +205,17 @@ class KFCContextBuilder:
             logger.error(f"获取关系信息失败: {e}")
             return f"你与{sender_name}是普通朋友关系。"
     
-    async def _build_memory_block(self, chat_history: str, target_message: str) -> str:
+    async def _build_memory_block(
+        self,
+        chat_history: str,
+        target_message: str,
+        context: Optional["StreamContext"] = None,
+    ) -> str:
         """构建记忆块（使用三层记忆系统）"""
         config = _get_config()
         
         if not (config.memory and config.memory.enable):
+            logger.debug("[KFC记忆] 记忆系统未启用")
             return ""
         
         try:
@@ -189,16 +224,21 @@ class KFCContextBuilder:
             
             unified_manager = get_unified_memory_manager()
             if not unified_manager:
-                logger.debug("[三层记忆] 管理器未初始化")
+                logger.warning("[KFC记忆] 管理器未初始化，跳过记忆检索")
                 return ""
             
+            # 构建查询文本（使用最近多条消息的组合块）
+            query_text = self._build_memory_query_text(target_message, context)
+            logger.debug(f"[KFC记忆] 开始检索，查询文本: {query_text[:100]}...")
+            
             search_result = await unified_manager.search_memories(
-                query_text=target_message,
+                query_text=query_text,
                 use_judge=True,
                 recent_chat_history=chat_history,
             )
             
             if not search_result:
+                logger.debug("[KFC记忆] 未找到相关记忆")
                 return ""
             
             perceptual_blocks = search_result.get("perceptual_blocks", [])
@@ -214,15 +254,126 @@ class KFCContextBuilder:
             total_count = len(perceptual_blocks) + len(short_term_memories) + len(long_term_memories)
             if total_count > 0 and formatted_memories.strip():
                 logger.info(
-                    f"[三层记忆] 检索到 {total_count} 条记忆 "
+                    f"[KFC记忆] 检索到 {total_count} 条记忆 "
                     f"(感知:{len(perceptual_blocks)}, 短期:{len(short_term_memories)}, 长期:{len(long_term_memories)})"
                 )
                 return f"### 🧠 相关记忆\n\n{formatted_memories}"
             
+            logger.debug("[KFC记忆] 记忆为空")
             return ""
             
         except Exception as e:
-            logger.error(f"[三层记忆] 检索失败: {e}")
+            logger.error(f"[KFC记忆] 检索失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return ""
+    
+    def _build_memory_query_text(
+        self,
+        fallback_text: str,
+        context: Optional["StreamContext"] = None,
+        block_size: int = 5,
+    ) -> str:
+        """
+        将最近若干条消息拼接为一个查询块，用于生成语义向量。
+        
+        Args:
+            fallback_text: 如果无法拼接消息块时使用的后备文本
+            context: 聊天流上下文
+            block_size: 组合的消息数量
+            
+        Returns:
+            str: 用于检索的查询文本
+        """
+        if not context:
+            return fallback_text
+        
+        try:
+            messages = context.get_messages(limit=block_size, include_unread=True)
+            if not messages:
+                return fallback_text
+            
+            lines = []
+            for msg in messages:
+                sender = ""
+                if msg.user_info:
+                    sender = msg.user_info.user_nickname or msg.user_info.user_cardname or ""
+                content = msg.processed_plain_text or msg.display_message or ""
+                if sender and content:
+                    lines.append(f"{sender}: {content}")
+                elif content:
+                    lines.append(content)
+            
+            return "\n".join(lines) if lines else fallback_text
+        except Exception:
+            return fallback_text
+    
+    async def _build_tool_info(
+        self,
+        chat_history: str,
+        sender_name: str,
+        target_message: str,
+        enable_tool: bool = True,
+    ) -> str:
+        """构建工具信息块
+        
+        Args:
+            chat_history: 聊天历史记录
+            sender_name: 发送者名称
+            target_message: 目标消息内容
+            enable_tool: 是否启用工具调用
+            
+        Returns:
+            str: 工具信息字符串
+        """
+        if not enable_tool:
+            return ""
+        
+        try:
+            from src.plugin_system.core.tool_use import ToolExecutor
+            
+            tool_executor = ToolExecutor(chat_id=self.chat_id)
+            
+            # 首先获取当前的历史记录（在执行新工具调用之前）
+            tool_history_str = tool_executor.history_manager.format_for_prompt(
+                max_records=3, include_results=True
+            )
+            
+            # 然后执行工具调用
+            tool_results, _, _ = await tool_executor.execute_from_chat_message(
+                sender=sender_name,
+                target_message=target_message,
+                chat_history=chat_history,
+                return_details=False,
+            )
+            
+            info_parts = []
+            
+            # 显示之前的工具调用历史（不包括当前这次调用）
+            if tool_history_str:
+                info_parts.append(tool_history_str)
+            
+            # 显示当前工具调用的结果（简要信息）
+            if tool_results:
+                current_results_parts = ["### 🔧 刚获取的工具信息"]
+                for tool_result in tool_results:
+                    tool_name = tool_result.get("tool_name", "unknown")
+                    content = tool_result.get("content", "")
+                    # 不进行截断，让工具自己处理结果长度
+                    current_results_parts.append(f"- **{tool_name}**: {content}")
+                
+                info_parts.append("\n".join(current_results_parts))
+                logger.info(f"[工具调用] 获取到 {len(tool_results)} 个工具结果")
+            
+            # 如果没有任何信息，返回空字符串
+            if not info_parts:
+                logger.debug("[工具调用] 未获取到任何工具结果或历史记录")
+                return ""
+            
+            return "\n\n".join(info_parts)
+            
+        except Exception as e:
+            logger.error(f"[工具调用] 工具信息获取失败: {e}")
             return ""
     
     async def _build_expression_habits(self, chat_history: str, target_message: str) -> str:

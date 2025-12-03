@@ -23,6 +23,9 @@ kfc_MAIN_PROMPT = Prompt(
 ## 相关记忆
 {memory_block}
 
+## 工具信息
+{tool_info}
+
 ## 你们之间最近的活动记录
 以下是你和 {user_name} 最近的互动历史，按时间顺序记录了你们的对话和你的心理活动：
 
@@ -277,6 +280,9 @@ kfc_REPLYER_PROMPT = Prompt(
 
 ## 相关记忆
 {memory_block}
+
+## 工具信息
+{tool_info}
 
 ## 你们之间发生的事（活动流）
 以下是你和 {user_name} 最近的互动历史，按时间顺序记录了你们的对话和你的心理活动：

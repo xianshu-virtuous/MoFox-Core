@@ -1,8 +1,9 @@
 """
 用户画像更新工具
 
-直接更新用户画像信息，包括别名、主观印象、偏好关键词和好感分数
-现在依赖工具调用历史记录，LLM可以看到之前的调用结果，因此直接覆盖更新即可
+采用两阶段设计：
+1. 工具调用模型(tool_use)负责判断是否需要更新，传入基本信息
+2. 关系追踪模型(relationship_tracker)负责生成高质量的、有人设特色的印象内容
 """
 
 import time
@@ -13,7 +14,7 @@ from sqlalchemy import select
 from src.common.database.compatibility import get_db_session
 from src.common.database.core.models import UserRelationships
 from src.common.logger import get_logger
-from src.config.config import global_config
+from src.config.config import global_config, model_config
 from src.plugin_system import BaseTool, ToolParamType
 
 logger = get_logger("user_profile_tool")
@@ -22,18 +23,22 @@ logger = get_logger("user_profile_tool")
 class UserProfileTool(BaseTool):
     """用户画像更新工具
 
-    直接使用LLM传入的参数更新用户画像。
-    由于工具执行器现在支持历史记录，LLM可以看到之前的调用结果，因此无需再次调用LLM进行合并。
+    两阶段设计：
+    - 第一阶段：tool_use模型判断是否更新，传入简要信息
+    - 第二阶段：relationship_tracker模型生成有人设特色的印象描述
     """
 
     name = "update_user_profile"
-    description = "当你通过聊天记录对某个用户产生了新的认识或印象时使用此工具，更新该用户的画像信息。包括：用户别名、你对TA的主观印象、TA的偏好兴趣、你对TA的好感程度。调用时机：当你发现用户透露了新的个人信息、展现了性格特点、表达了兴趣偏好，或者你们的互动让你对TA的看法发生变化时。"
+    description = """当你通过聊天对某个人产生了新的认识或印象时使用此工具。
+调用时机：当你发现TA透露了新信息、展现了性格特点、表达了兴趣爱好，或你们的互动让你对TA有了新感受时。
+注意：impression_hint只需要简单描述你观察到的要点，系统会自动用你的人设风格来润色生成最终印象。"""
     parameters = [
         ("target_user_id", ToolParamType.STRING, "目标用户的ID（必须）", True, None),
-        ("user_aliases", ToolParamType.STRING, "该用户的昵称或别名，如果发现用户自称或被他人称呼的其他名字时填写，多个别名用逗号分隔（可选）", False, None),
-        ("impression_description", ToolParamType.STRING, "你对该用户的整体印象和性格感受，例如'这个用户很幽默开朗'、'TA对技术很有热情'等。当你通过对话了解到用户的性格、态度、行为特点时填写（可选）", False, None),
-        ("preference_keywords", ToolParamType.STRING, "该用户表现出的兴趣爱好或偏好，如'编程,游戏,动漫'。当用户谈论自己喜欢的事物时填写，多个关键词用逗号分隔（可选）", False, None),
-        ("affection_score", ToolParamType.FLOAT, "你对该用户的好感程度，0.0(陌生/不喜欢)到1.0(很喜欢/爱人)。当你们的互动让你对TA的感觉发生变化时更新【注意：0.6分已经是一个很高的分数，打分一定要保守谨慎】（可选）", False, None),
+        ("target_user_name", ToolParamType.STRING, "目标用户的名字/昵称（必须，用于生成印象时称呼）", True, None),
+        ("user_aliases", ToolParamType.STRING, "TA的其他昵称或别名，多个用逗号分隔（可选）", False, None),
+        ("impression_hint", ToolParamType.STRING, "【简要描述】你观察到的关于TA的要点，如'很健谈，喜欢聊游戏，有点害羞'。系统会用你的人设风格润色（可选）", False, None),
+        ("preference_keywords", ToolParamType.STRING, "TA的兴趣爱好关键词，如'编程,游戏,音乐'，用逗号分隔（可选）", False, None),
+        ("affection_score", ToolParamType.FLOAT, "你对TA的好感度(0.0-1.0)。0.3=普通认识，0.5=还不错的朋友，0.7=很喜欢，0.9=非常亲密。打分要保守（可选）", False, None),
     ]
     available_for_llm = True
     history_ttl = 5
@@ -50,6 +55,7 @@ class UserProfileTool(BaseTool):
         try:
             # 提取参数
             target_user_id = function_args.get("target_user_id")
+            target_user_name = function_args.get("target_user_name", target_user_id)
             if not target_user_id:
                 return {
                     "type": "error",
@@ -59,25 +65,35 @@ class UserProfileTool(BaseTool):
 
             # 从LLM传入的参数
             new_aliases = function_args.get("user_aliases", "")
-            new_impression = function_args.get("impression_description", "")
+            impression_hint = function_args.get("impression_hint", "")
             new_keywords = function_args.get("preference_keywords", "")
             new_score = function_args.get("affection_score")
 
-            # 从数据库获取现有用户画像（用于返回信息）
+            # 从数据库获取现有用户画像
             existing_profile = await self._get_user_profile(target_user_id)
 
             # 如果LLM没有传入任何有效参数，返回提示
-            if not any([new_aliases, new_impression, new_keywords, new_score is not None]):
+            if not any([new_aliases, impression_hint, new_keywords, new_score is not None]):
                 return {
                     "type": "info",
                     "id": target_user_id,
                     "content": "提示：需要提供至少一项更新内容（别名、印象描述、偏好关键词或好感分数）"
                 }
 
-            # 直接使用LLM传入的值进行覆盖更新（保留未更新的字段）
+            # 🎯 核心：使用relationship_tracker模型生成高质量印象
+            final_impression = existing_profile.get("relationship_text", "")
+            if impression_hint:
+                final_impression = await self._generate_impression_with_personality(
+                    target_user_name=str(target_user_name) if target_user_name else str(target_user_id),
+                    impression_hint=str(impression_hint),
+                    existing_impression=str(existing_profile.get("relationship_text", "")),
+                    preference_keywords=str(new_keywords or existing_profile.get("preference_keywords", "")),
+                )
+
+            # 构建最终画像
             final_profile = {
                 "user_aliases": new_aliases if new_aliases else existing_profile.get("user_aliases", ""),
-                "relationship_text": new_impression if new_impression else existing_profile.get("relationship_text", ""),
+                "relationship_text": final_impression,
                 "preference_keywords": new_keywords if new_keywords else existing_profile.get("preference_keywords", ""),
                 "relationship_score": new_score if new_score is not None else existing_profile.get("relationship_score", global_config.affinity_flow.base_relationship_score),
             }
@@ -93,13 +109,13 @@ class UserProfileTool(BaseTool):
             if final_profile.get("user_aliases"):
                 updates.append(f"别名: {final_profile['user_aliases']}")
             if final_profile.get("relationship_text"):
-                updates.append(f"印象: {final_profile['relationship_text'][:50]}...")
+                updates.append(f"印象: {final_profile['relationship_text'][:80]}...")
             if final_profile.get("preference_keywords"):
                 updates.append(f"偏好: {final_profile['preference_keywords']}")
             if final_profile.get("relationship_score") is not None:
                 updates.append(f"好感分: {final_profile['relationship_score']:.2f}")
 
-            result_text = f"已更新用户 {target_user_id} 的画像：\n" + "\n".join(updates)
+            result_text = f"已更新用户 {target_user_name} 的画像：\n" + "\n".join(updates)
             logger.info(f"用户画像更新成功: {target_user_id}")
 
             return {
@@ -115,6 +131,90 @@ class UserProfileTool(BaseTool):
                 "id": function_args.get("target_user_id", "unknown"),
                 "content": f"用户画像更新失败: {e!s}"
             }
+
+    async def _generate_impression_with_personality(
+        self,
+        target_user_name: str,
+        impression_hint: str,
+        existing_impression: str,
+        preference_keywords: str,
+    ) -> str:
+        """使用relationship_tracker模型生成有人设特色的印象描述
+        
+        Args:
+            target_user_name: 目标用户的名字
+            impression_hint: 工具调用模型传入的简要观察
+            existing_impression: 现有的印象描述
+            preference_keywords: 用户的兴趣偏好
+            
+        Returns:
+            str: 生成的印象描述
+        """
+        try:
+            from src.llm_models.utils_model import LLMRequest
+            
+            # 获取人设信息
+            bot_name = global_config.bot.nickname
+            personality_core = global_config.personality.personality_core
+            personality_side = global_config.personality.personality_side
+            
+            # 构建提示词
+            prompt = f"""你是{bot_name}，现在要记录你对一个人的印象。
+
+## 你的人设
+{personality_core}
+
+## 你的性格特点
+{personality_side}
+
+## 任务
+根据下面的观察要点，用你自己的语气和视角，写一段对"{target_user_name}"的印象描述。
+
+## 观察到的要点
+{impression_hint}
+
+## TA的兴趣爱好
+{preference_keywords if preference_keywords else "暂未了解"}
+
+## 之前对TA的印象（如果有）
+{existing_impression if existing_impression else "这是第一次记录对TA的印象"}
+
+## 写作要求
+1. 用第一人称"我"来写，就像在写日记或者跟朋友聊天时描述一个人
+2. 用"{target_user_name}"或"TA"来称呼对方，不要用"该用户"、"此人"
+3. 写出你真实的、主观的感受，可以带情绪和直觉判断
+4. 如果有之前的印象，可以结合新观察进行补充或修正
+5. 长度控制在50-150字，自然流畅
+
+请直接输出印象描述，不要加任何前缀或解释："""
+
+            # 使用relationship_tracker模型
+            llm = LLMRequest(
+                model_set=model_config.model_task_config.relationship_tracker,
+                request_type="user_profile.impression_generator"
+            )
+            
+            response, _ = await llm.generate_response_async(
+                prompt=prompt,
+                temperature=0.7,
+                max_tokens=300,
+            )
+            
+            # 清理响应
+            impression = response.strip()
+            
+            # 如果响应为空或太短，回退到原始hint
+            if not impression or len(impression) < 10:
+                logger.warning(f"印象生成结果过短，使用原始hint: {impression_hint}")
+                return impression_hint
+                
+            logger.info(f"成功生成有人设特色的印象描述，长度: {len(impression)}")
+            return impression
+            
+        except Exception as e:
+            logger.error(f"生成印象描述失败，回退到原始hint: {e}")
+            # 失败时回退到工具调用模型传入的hint
+            return impression_hint
 
     async def _get_user_profile(self, user_id: str) -> dict[str, Any]:
         """从数据库获取用户现有画像

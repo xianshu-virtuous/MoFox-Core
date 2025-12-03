@@ -416,12 +416,16 @@ async def _build_context_data(
     user_id: Optional[str] = None,
 ) -> dict[str, str]:
     """
-    构建上下文数据（关系、记忆、表达习惯等）
+    构建上下文数据（关系、记忆、工具、表达习惯等）
     """
+    logger.debug(f"[KFC Unified] 开始构建上下文数据: user={user_name}")
+    
     if not chat_stream:
+        logger.warning("[KFC Unified] 无 chat_stream，返回默认上下文")
         return {
             "relation_info": f"你与 {user_name} 还不太熟悉，这是早期的交流阶段。",
             "memory_block": "",
+            "tool_info": "",
             "expression_habits": "",
             "schedule": "",
         }
@@ -445,13 +449,21 @@ async def _build_context_data(
             user_id=user_id,
         )
         
+        # 打印关键信息
+        memory_len = len(context_data.get("memory_block", ""))
+        tool_len = len(context_data.get("tool_info", ""))
+        logger.debug(f"[KFC Unified] 上下文构建完成: memory_block={memory_len}字符, tool_info={tool_len}字符")
+        
         return context_data
         
     except Exception as e:
-        logger.warning(f"构建上下文数据失败: {e}")
+        logger.error(f"[KFC Unified] 构建上下文数据失败: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "relation_info": f"你与 {user_name} 还不太熟悉，这是早期的交流阶段。",
             "memory_block": "",
+            "tool_info": "",
             "expression_habits": "",
             "schedule": "",
         }

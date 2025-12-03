@@ -65,6 +65,12 @@ def init_tool_executor_prompt():
 - 避免重复调用历史记录中已执行的工具（除非参数不同）
 - 优先考虑使用已有的缓存结果，避免重复调用
 
+**🎭 重要：保持人设一致性**
+你在填写任何工具参数时，都要以"{bot_name}"的身份和视角来写：
+- 涉及"印象"、"感受"、"评价"类的参数，要用符合你人设的语气和表达方式
+- 不要用客观冷漠的AI口吻，要像一个真实的人在记录对朋友的感受
+- 你的人格特质会影响你对他人的看法，请体现出来
+
 **历史记录说明：**
 - 上方显示的是**之前**的工具调用记录
 - 请参考历史记录避免重复调用相同参数的工具
@@ -220,8 +226,9 @@ class ToolExecutor:
         all_tools = get_llm_available_tool_definitions(self.chat_id)
 
         # 获取基础工具定义（包括二步工具的第一步）
+        # 工具定义格式为 {"name": ..., "description": ..., "parameters": ...}
         tool_definitions = [
-            definition for definition in all_tools if definition.get("function", {}).get("name")
+            definition for definition in all_tools if definition.get("name")
         ]
 
         # 检查是否有待处理的二步工具第二步调用
@@ -229,6 +236,10 @@ class ToolExecutor:
         if pending_step_two:
             # 添加第二步工具定义
             tool_definitions.extend(list(pending_step_two.values()))
+
+        # 打印可用的工具名称，方便调试
+        tool_names = [d.get("name") for d in tool_definitions]
+        logger.debug(f"{self.log_prefix}当前可用工具 ({len(tool_names)}个): {tool_names}")
 
         return tool_definitions
 

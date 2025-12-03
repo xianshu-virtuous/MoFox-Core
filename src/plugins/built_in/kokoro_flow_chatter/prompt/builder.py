@@ -69,10 +69,11 @@ class PromptBuilder:
         # 1. 构建人设块
         persona_block = self._build_persona_block()
         
-        # 2. 使用 context_builder 获取关系、记忆、表达习惯等
+        # 2. 使用 context_builder 获取关系、记忆、工具、表达习惯等
         context_data = await self._build_context_data(user_name, chat_stream, user_id)
         relation_block = context_data.get("relation_info", f"你与 {user_name} 还不太熟悉，这是早期的交流阶段。")
         memory_block = context_data.get("memory_block", "")
+        tool_info = context_data.get("tool_info", "")
         expression_habits = self._build_combined_expression_block(context_data.get("expression_habits", ""))
         
         # 3. 构建活动流
@@ -99,6 +100,7 @@ class PromptBuilder:
             persona_block=persona_block,
             relation_block=relation_block,
             memory_block=memory_block or "（暂无相关记忆）",
+            tool_info=tool_info or "（暂无工具信息）",
             expression_habits=expression_habits or "（根据自然对话风格回复即可）",
             activity_stream=activity_stream or "（这是你们第一次聊天）",
             current_situation=current_situation,
@@ -140,10 +142,11 @@ class PromptBuilder:
         # 1. 构建人设块
         persona_block = self._build_persona_block()
         
-        # 2. 使用 context_builder 获取关系、记忆、表达习惯等
+        # 2. 使用 context_builder 获取关系、记忆、工具、表达习惯等
         context_data = await self._build_context_data(user_name, chat_stream, user_id)
         relation_block = context_data.get("relation_info", f"你与 {user_name} 还不太熟悉，这是早期的交流阶段。")
         memory_block = context_data.get("memory_block", "")
+        tool_info = context_data.get("tool_info", "")
         expression_habits = self._build_combined_expression_block(context_data.get("expression_habits", ""))
         
         # 3. 构建活动流
@@ -169,6 +172,7 @@ class PromptBuilder:
             persona_block=persona_block,
             relation_block=relation_block,
             memory_block=memory_block or "（暂无相关记忆）",
+            tool_info=tool_info or "（暂无工具信息）",
             activity_stream=activity_stream or "（这是你们第一次聊天）",
             current_situation=current_situation,
             chat_history_block=chat_history_block,
@@ -237,12 +241,13 @@ class PromptBuilder:
         """
         使用 KFCContextBuilder 构建完整的上下文数据
         
-        包括：关系信息、记忆、表达习惯等
+        包括：关系信息、记忆、工具、表达习惯等
         """
         if not chat_stream:
             return {
                 "relation_info": f"你与 {user_name} 还不太熟悉，这是早期的交流阶段。",
                 "memory_block": "",
+                "tool_info": "",
                 "expression_habits": "",
             }
         
@@ -275,6 +280,7 @@ class PromptBuilder:
             return {
                 "relation_info": f"你与 {user_name} 还不太熟悉，这是早期的交流阶段。",
                 "memory_block": "",
+                "tool_info": "",
                 "expression_habits": "",
             }
     
@@ -881,10 +887,11 @@ class PromptBuilder:
         # 1. 构建人设块
         persona_block = self._build_persona_block()
         
-        # 2. 使用 context_builder 获取关系、记忆、表达习惯等
+        # 2. 使用 context_builder 获取关系、记忆、工具、表达习惯等
         context_data = await self._build_context_data(user_name, chat_stream, user_id)
         relation_block = context_data.get("relation_info", f"你与 {user_name} 还不太熟悉，这是早期的交流阶段。")
         memory_block = context_data.get("memory_block", "")
+        tool_info = context_data.get("tool_info", "")
         expression_habits = self._build_combined_expression_block(context_data.get("expression_habits", ""))
         
         # 3. 构建活动流
@@ -911,6 +918,7 @@ class PromptBuilder:
             persona_block=persona_block,
             relation_block=relation_block,
             memory_block=memory_block or "（暂无相关记忆）",
+            tool_info=tool_info or "（暂无工具信息）",
             expression_habits=expression_habits or "（根据自然对话风格回复即可）",
             activity_stream=activity_stream or "（这是你们第一次聊天）",
             current_situation=current_situation,

@@ -139,6 +139,9 @@ def build_context_module(
     # 记忆
     memory_block = context_data.get("memory_block", "")
     
+    # 工具调用结果
+    tool_info = context_data.get("tool_info", "")
+    
     parts = []
     
     # 时间和场景
@@ -159,6 +162,10 @@ def build_context_module(
     # 记忆
     if memory_block:
         parts.append(f"\n{memory_block}")
+    
+    # 工具调用结果
+    if tool_info:
+        parts.append(f"\n{tool_info}")
     
     return "\n".join(parts)
 

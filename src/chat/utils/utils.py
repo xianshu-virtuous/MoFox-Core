@@ -957,6 +957,8 @@ def filter_system_format_content(content: str | None) -> str:
         last_bracket_index = cleaned_content.rfind("]")
         if last_bracket_index != -1:
             cleaned_content = cleaned_content[last_bracket_index + 1 :].strip()
+            # 专门清理 "，说：" 或 "说："
+            cleaned_content = re.sub(r"^(，|,)说：", "", cleaned_content).strip()
 
     # 在处理完回复格式后，再清理其他简单的格式
     # 新增：移除所有残余的 [...] 格式，例如 [at=...] 等
