@@ -16,7 +16,7 @@ class InjectionType(Enum):
         return self.value
 
 
-@dataclass
+@dataclass(slots=True)
 class InjectionRule:
     """Prompt注入规则"""
 
@@ -32,9 +32,6 @@ class InjectionRule:
             InjectionType.INSERT_AFTER,
         ] and self.target_content is None:
             raise ValueError(f"'{self.injection_type.value}'类型的注入规则必须提供 'target_content'。")
-
-
-from maim_message import Seg
 
 from src.llm_models.payload_content.tool_option import ToolCall as ToolCall
 from src.llm_models.payload_content.tool_option import ToolParamType as ToolParamType
@@ -53,6 +50,8 @@ class ComponentType(Enum):
     CHATTER = "chatter"  # 聊天处理器组件
     INTEREST_CALCULATOR = "interest_calculator"  # 兴趣度计算组件
     PROMPT = "prompt"  # Prompt组件
+    ROUTER = "router"  # 路由组件
+    ADAPTER = "adapter"  # 适配器组件
 
     def __str__(self) -> str:
         return self.value
@@ -107,6 +106,7 @@ class EventType(Enum):
     ON_START = "on_start"  # 启动事件，用于调用按时任务
     ON_STOP = "on_stop"
     ON_MESSAGE = "on_message"
+    ON_NOTICE_RECEIVED = "on_notice_received"  # Notice 消息事件（戳一戳、禁言等）
     ON_PLAN = "on_plan"
     POST_LLM = "post_llm"
     AFTER_LLM = "after_llm"
@@ -118,7 +118,7 @@ class EventType(Enum):
         return self.value
 
 
-@dataclass
+@dataclass(slots=True)
 class PythonDependency:
     """Python包依赖信息"""
 
@@ -139,12 +139,28 @@ class PythonDependency:
         return self.install_name
 
 
-@dataclass
+@dataclass(slots=True)
 class PermissionNodeField:
     """权限节点声明字段"""
 
     node_name: str  # 节点名称 (例如 "manage" 或 "view")
     description: str  # 权限描述
+
+
+@dataclass(slots=True)
+class AdapterInfo:
+    """适配器组件信息"""
+
+    name: str  # 适配器名称
+    component_type: ComponentType = field(default=ComponentType.ADAPTER, init=False)
+    plugin_name: str = ""  # �����������
+    version: str = "1.0.0"  # 适配器版本
+    platform: str = "unknown"  # 平台名称
+    description: str = ""  # 适配器描述
+    enabled: bool = True  # 是否启用
+    run_in_subprocess: bool = False  # 是否在子进程中运行
+    subprocess_entry: str | None = None  # 子进程入口脚本
+
 
 @dataclass
 class ComponentInfo:
@@ -193,6 +209,7 @@ class ActionInfo(ComponentInfo):
     mode_enable: ChatMode = ChatMode.ALL
     parallel_action: bool = False
     chat_type_allow: ChatType = ChatType.ALL  # 允许的聊天类型
+    chatter_allow: list[str] = field(default_factory=list)  # 允许的 Chatter 列表，空则允许所有
     # 二步Action相关属性
     is_two_step_action: bool = False  # 是否为二步Action
     step_one_description: str = ""  # 第一步的描述
@@ -210,6 +227,8 @@ class ActionInfo(ComponentInfo):
             self.associated_types = []
         if self.sub_actions is None:
             self.sub_actions = []
+        if self.chatter_allow is None:
+            self.chatter_allow = []
         self.component_type = ComponentType.ACTION
 
 
@@ -394,51 +413,9 @@ class PluginInfo:
 
 
 @dataclass
-class MaiMessages:
-    """MaiM插件消息"""
-
-    message_segments: list[Seg] = field(default_factory=list)
-    """消息段列表，支持多段消息"""
-
-    message_base_info: dict[str, Any] = field(default_factory=dict)
-    """消息基本信息，包含平台，用户信息等数据"""
-
-    plain_text: str = ""
-    """纯文本消息内容"""
-
-    raw_message: str | None = None
-    """原始消息内容"""
-
-    is_group_message: bool = False
-    """是否为群组消息"""
-
-    is_private_message: bool = False
-    """是否为私聊消息"""
-
-    stream_id: str | None = None
-    """流ID，用于标识消息流"""
-
-    llm_prompt: str | None = None
-    """LLM提示词"""
-
-    llm_response_content: str | None = None
-    """LLM响应内容"""
-
-    llm_response_reasoning: str | None = None
-    """LLM响应推理内容"""
-
-    llm_response_model: str | None = None
-    """LLM响应模型名称"""
-
-    llm_response_tool_call: list[ToolCall] | None = None
-    """LLM使用的工具调用"""
-
-    action_usage: list[str] | None = None
-    """使用的Action"""
-
-    additional_data: dict[Any, Any] = field(default_factory=dict)
-    """附加数据，可以存储额外信息"""
+class RouterInfo(ComponentInfo):
+    """路由组件信息"""
 
     def __post_init__(self):
-        if self.message_segments is None:
-            self.message_segments = []
+        super().__post_init__()
+        self.component_type = ComponentType.ROUTER

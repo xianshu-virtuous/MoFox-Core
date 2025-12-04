@@ -1,19 +1,47 @@
 # 使用基于时间戳的文件处理器，简单的轮转份数限制
 
 import logging
+from logging.handlers import QueueHandler, QueueListener
 import tarfile
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from queue import SimpleQueue
 import orjson
 import structlog
 import tomlkit
 from rich.console import Console
 from rich.text import Text
 from structlog.typing import EventDict, WrappedLogger
+
+# 守护线程版本的队列监听器，防止退出时卡住
+class DaemonQueueListener(QueueListener):
+    """QueueListener 的工作线程作为守护进程运行，以避免阻塞关闭。"""
+
+    def start(self):
+        """Start the listener.
+        This starts up a background thread to monitor the queue for
+        LogRecords to process.
+        """
+        # 覆盖 start 方法以设置 daemon=True
+        # 注意：_monitor 是 QueueListener 的内部方法
+        self._thread = threading.Thread(target=self._monitor, daemon=True)  # type: ignore
+        self._thread.start()
+
+    def stop(self):
+        """停止监听器，避免在退出时无限期阻塞。"""
+        try:
+            self._stop.set()  # type: ignore[attr-defined]
+            self.enqueue_sentinel()
+            # join with timeout; if it does not finish we continue exit
+            if hasattr(self, "_thread") and self._thread is not None:  # type: ignore[attr-defined]
+                self._thread.join(timeout=1.5)  # type: ignore[attr-defined]
+        except Exception:
+            # best-effort; swallow errors on shutdown
+            pass
 
 # 创建logs目录
 LOG_DIR = Path("logs")
@@ -26,6 +54,11 @@ _console_handler: logging.Handler | None = None
 # 动态 logger 元数据注册表 (name -> {alias:str|None, color:str|None})
 _LOGGER_META_LOCK = threading.Lock()
 _LOGGER_META: dict[str, dict[str, str | None]] = {}
+
+# 日志格式化器
+_log_queue: SimpleQueue[logging.LogRecord] | None = None
+_queue_handler: QueueHandler | None = None
+_queue_listener: QueueListener | None = None
 
 
 def _register_logger_meta(name: str, *, alias: str | None = None, color: str | None = None):
@@ -88,6 +121,51 @@ def get_console_handler():
         console_level = LOG_CONFIG.get("console_log_level", LOG_CONFIG.get("log_level", "INFO"))
         _console_handler.setLevel(getattr(logging, console_level.upper(), logging.INFO))
     return _console_handler
+
+
+def _start_queue_logging(handlers: Sequence[logging.Handler]) -> QueueHandler | None:
+    """为日志处理器启动异步队列；无处理器时返回 None"""
+    global _log_queue, _queue_handler, _queue_listener
+
+    if _queue_listener is not None:
+        _queue_listener.stop()
+        _queue_listener = None
+
+    if not handlers:
+        return None
+
+    _log_queue = SimpleQueue()
+    _queue_handler = StructlogQueueHandler(_log_queue)
+    _queue_listener = DaemonQueueListener(_log_queue, *handlers, respect_handler_level=True)
+    _queue_listener.start()
+    return _queue_handler
+
+
+def _stop_queue_logging():
+    """停止异步日志队列"""
+    global _log_queue, _queue_handler, _queue_listener
+
+    if _queue_listener is not None:
+        try:
+            stopper = threading.Thread(target=_queue_listener.stop, name="log-queue-stop", daemon=True)
+            stopper.start()
+            stopper.join(timeout=3.0)
+            if stopper.is_alive():
+                print("[日志系统] 停止日志队列监听器超时，继续退出")
+        except Exception as e:
+            print(f"[日志系统] 停止日志队列监听器失败: {e}")
+        _queue_listener = None
+
+    _log_queue = None
+    _queue_handler = None
+
+
+class StructlogQueueHandler(QueueHandler):
+    """Queue handler that keeps structlog event dicts intact."""
+
+    def prepare(self, record):
+        # Keep the original LogRecord so processor formatters can access the event dict.
+        return record
 
 
 class TimestampedFileHandler(logging.Handler):
@@ -221,6 +299,8 @@ def close_handlers():
     """安全关闭所有handler"""
     global _file_handler, _console_handler
 
+    _stop_queue_logging()
+
     if _file_handler:
         _file_handler.close()
         _file_handler = None
@@ -270,10 +350,12 @@ def load_log_config():  # sourcery skip: use-contextlib-suppress
             "websockets",
             "httpcore",
             "requests",
+            "aiosqlite",
             "peewee",
             "openai",
             "uvicorn",
             "rjieba",
+            "message_bus",
         ],
         "library_log_levels": {"aiohttp": "WARNING"},
     }
@@ -408,7 +490,7 @@ DEFAULT_MODULE_COLORS = {
     "main": "#FFFFFF",  # 亮白色+粗体 (主程序)
     "api": "#00FF00",  # 亮绿色
     "emoji": "#FFAF00",  # 橙黄色，偏向橙色但与replyer和action_manager不同
-    "chat": "#00FF00",  # 亮蓝色
+    "message_handler": "#00FF00",  # 亮蓝色
     "config": "#FFFF00",  # 亮黄色
     "common": "#FF00FF",  # 亮紫色
     "tools": "#00FFFF",  # 亮青色
@@ -487,7 +569,7 @@ DEFAULT_MODULE_COLORS = {
     # 数据库和消息
     "database_model": "#875F00",  # 橙褐色
     "database": "#00FF00",  # 橙褐色
-    "maim_message": "#AF87D7",  # 紫褐色
+    "mofox_wire": "#AF87D7",  # 紫褐色
     # 日志系统
     "logger": "#808080",  # 深灰色
     "confirm": "#FFFF00",  # 黄色+粗体
@@ -563,6 +645,12 @@ DEFAULT_MODULE_COLORS = {
     "context_web": "#5F5F00",  # 深黄色
     "gift_manager": "#D7005F",  # 粉红色
     "prompt": "#875FFF",  # 紫色（mais4u的prompt）
+    # Kokoro Flow Chatter (KFC) 系统
+    "kfc_planner": "#b19cd9",  # 淡紫色 - KFC 规划器
+    "kfc_replyer": "#b19cd9",  # 淡紫色 - KFC 回复器
+    "kfc_chatter": "#b19cd9",  # 淡紫色 - KFC 主模块
+    "kfc_unified": "#d7afff",  # 柔和紫色 - KFC 统一模式
+    "kfc_proactive_thinker": "#d7afff",  # 柔和紫色 - KFC 主动思考器
     "super_chat_manager": "#AF005F",  # 紫红色
     "watching": "#AF5F5F",  # 深橙色
     "offline_llm": "#303030",  # 深灰色
@@ -599,6 +687,15 @@ DEFAULT_MODULE_COLORS = {
     "AioHTTP-Gemini客户端": "#5FD7FF",
     "napcat_adapter": "#5F87AF",  # 柔和的灰蓝色，不刺眼且低调
     "event_manager": "#5FD7AF",  # 柔和的蓝绿色，稍微醒目但不刺眼
+    # Kokoro Flow Chatter (KFC) 相关 - 超融合架构专用颜色
+    "kokoro_flow_chatter": "#FF5FAF",  # 粉紫色 - 主聊天器
+    "kokoro_prompt_generator": "#00D7FF",  # 青色 - Prompt构建
+    "kokoro_action_executor": "#FFFF00",  # 黄色 - 动作解析与执行
+    "kfc_context_builder": "#5FD7FF",  # 蓝色 - 上下文构建
+    "kfc_session_manager": "#87D787",  # 绿色 - 会话管理
+    "kfc_scheduler": "#D787AF",  # 柔和粉色 - 调度器
+    "kfc_post_processor": "#5F87FF",  # 蓝色 - 后处理
+    "kfc_unified": "#FF5FAF",  # 粉色 - 统一模式
 }
 
 DEFAULT_MODULE_ALIASES = {
@@ -618,7 +715,7 @@ DEFAULT_MODULE_ALIASES = {
     "memory": "记忆",
     "tool_executor": "工具",
     "hfc": "聊天节奏",
-    "chat": "所见",
+    "message_handler": "所见",
     "anti_injector": "反注入",
     "anti_injector.detector": "反注入检测",
     "anti_injector.shield": "反注入加盾",
@@ -727,6 +824,15 @@ DEFAULT_MODULE_ALIASES = {
     "db_migration": "数据库迁移",
     "小彩蛋": "小彩蛋",
     "AioHTTP-Gemini客户端": "AioHTTP-Gemini客户端",
+    # Kokoro Flow Chatter (KFC) 超融合架构相关
+    "kokoro_flow_chatter": "心流聊天",
+    "kokoro_prompt_generator": "KFC提示词",
+    "kokoro_action_executor": "KFC动作",
+    "kfc_context_builder": "KFC上下文",
+    "kfc_session_manager": "KFC会话",
+    "kfc_scheduler": "KFC调度",
+    "kfc_post_processor": "KFC后处理",
+    "kfc_unified": "KFC统一模式",
 }
 
 
@@ -1037,15 +1143,17 @@ def _immediate_setup():
     # 使用单例handler避免重复创建
     file_handler_local = get_file_handler()
     console_handler_local = get_console_handler()
-
-    for h in (file_handler_local, console_handler_local):
-        if h is not None:
-            root_logger.addHandler(h)
+    active_handlers = [h for h in (file_handler_local, console_handler_local) if h is not None]
 
     # 设置格式化器
     if file_handler_local is not None:
         file_handler_local.setFormatter(file_formatter)
-    console_handler_local.setFormatter(console_formatter)
+    if console_handler_local is not None:
+        console_handler_local.setFormatter(console_formatter)
+
+    queue_handler = _start_queue_logging(active_handlers)
+    if queue_handler is not None:
+        root_logger.addHandler(queue_handler)
 
     # 清理重复的handler
     remove_duplicate_handlers()

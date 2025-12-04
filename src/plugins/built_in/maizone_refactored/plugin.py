@@ -51,7 +51,7 @@ class MaiZoneRefactoredPlugin(BasePlugin):
             "enable_image": ConfigField(type=bool, default=False, description="是否启用说说配图"),
             "enable_ai_image": ConfigField(type=bool, default=False, description="是否启用AI生成配图"),
             "enable_reply": ConfigField(type=bool, default=True, description="完成后是否回复"),
-            "ai_image_number": ConfigField(type=int, default=1, description="AI生成图片数量"),
+            "ai_image_number": ConfigField(type=int, default=1, description="AI生成图片数量（1-4张）"),
             "image_number": ConfigField(type=int, default=1, description="本地配图数量（1-9张）"),
             "image_directory": ConfigField(
                 type=str, default=(Path(__file__).parent / "images").as_posix(), description="图片存储目录"
@@ -71,8 +71,8 @@ class MaiZoneRefactoredPlugin(BasePlugin):
         },
         "schedule": {
             "enable_schedule": ConfigField(type=bool, default=False, description="是否启用定时发送"),
-            "random_interval_min_minutes": ConfigField(type=int, default=5, description="随机间隔分钟数下限"),
-            "random_interval_max_minutes": ConfigField(type=int, default=15, description="随机间隔分钟数上限"),
+            "random_interval_min_minutes": ConfigField(type=int, default=120, description="随机间隔分钟数下限"),
+            "random_interval_max_minutes": ConfigField(type=int, default=135, description="随机间隔分钟数上限"),
             "forbidden_hours_start": ConfigField(type=int, default=2, description="禁止发送的开始小时(24小时制)"),
             "forbidden_hours_end": ConfigField(type=int, default=6, description="禁止发送的结束小时(24小时制)"),
         },
@@ -82,6 +82,9 @@ class MaiZoneRefactoredPlugin(BasePlugin):
             ),
             "http_fallback_port": ConfigField(type=int, default=9999, description="备用Cookie获取服务的端口"),
             "napcat_token": ConfigField(type=str, default="", description="Napcat服务的认证Token（可选）"),
+        },
+        "cross_context": {
+            "user_id": ConfigField(type=str, default="", description="用于获取互通上下文的目标用户QQ号"),
         },
     }
 

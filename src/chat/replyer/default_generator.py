@@ -8,26 +8,24 @@ import random
 import re
 import time
 import traceback
+import uuid
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 
 from src.chat.express.expression_selector import expression_selector
-from src.chat.message_receive.chat_stream import ChatStream
-from src.chat.message_receive.message import MessageSending, Seg, UserInfo
 from src.chat.message_receive.uni_message_sender import HeartFCSender
 from src.chat.utils.chat_message_builder import (
     build_readable_messages,
     get_raw_msg_before_timestamp_with_chat,
     replace_user_references_async,
 )
-from src.chat.utils.memory_mappings import get_memory_type_chinese_label
 
 # 导入新的统一Prompt系统
 from src.chat.utils.prompt import Prompt, global_prompt_manager
 from src.chat.utils.prompt_params import PromptParameters
 from src.chat.utils.timer_calculator import Timer
 from src.chat.utils.utils import get_chat_type_and_target_info
-from src.common.data_models.database_data_model import DatabaseMessages
+from src.common.data_models.database_data_model import DatabaseMessages, DatabaseUserInfo
 from src.common.logger import get_logger
 from src.config.config import global_config, model_config
 from src.individuality.individuality import get_individuality
@@ -37,6 +35,9 @@ from src.person_info.person_info import get_person_info_manager
 from src.plugin_system.apis import llm_api
 from src.plugin_system.apis.permission_api import permission_api
 from src.plugin_system.base.component_types import ActionInfo, EventType
+
+if TYPE_CHECKING:
+    from src.chat.message_receive.chat_stream import ChatStream
 
 logger = get_logger("replyer")
 
@@ -110,6 +111,7 @@ def init_prompt():
 
 ## 其他信息
 {memory_block}
+
 {relation_info_block}
 
 {extra_info_block}
@@ -130,6 +132,7 @@ def init_prompt():
 {safety_guidelines_block}
 
 {group_chat_reminder_block}
+- 在称呼用户时，请使用更自然的昵称或简称。对于长英文名，可使用首字母缩写；对于中文名，可提炼合适的简称。禁止直接复述复杂的用户名或输出用户名中的任何符号，让称呼更像人类习惯，注意，简称不是必须的，合理的使用。
 你的回复应该是一条简短、完整且口语化的回复。
 
  --------------------------------
@@ -212,6 +215,7 @@ If you need to use the search tool, please directly call the function "lpmm_sear
 ## 规则
 {safety_guidelines_block}
 {group_chat_reminder_block}
+- 在称呼用户时，请使用更自然的昵称或简称。对于长英文名，可使用首字母缩写；对于中文名，可提炼合适的简称。禁止直接复述复杂的用户名或输出用户名中的任何符号，让称呼更像人类习惯，注意，简称不是必须的，合理的使用。
 你的回复应该是一条简短、完整且口语化的回复。
 
  --------------------------------
@@ -233,9 +237,11 @@ If you need to use the search tool, please directly call the function "lpmm_sear
 class DefaultReplyer:
     def __init__(
         self,
-        chat_stream: ChatStream,
+        chat_stream: "ChatStream",
         request_type: str = "replyer",
     ):
+        assert global_config is not None
+        assert model_config is not None
         self.express_model = LLMRequest(model_set=model_config.model_task_config.replyer, request_type=request_type)
         self.chat_stream = chat_stream
         # 这些将在异步初始化中设置
@@ -263,6 +269,7 @@ class DefaultReplyer:
 
     async def _build_auth_role_prompt(self) -> str:
         """根据主人配置生成额外提示词"""
+        assert global_config is not None
         master_config = global_config.permission.master_prompt
         if not master_config or not master_config.enable:
             return ""
@@ -376,7 +383,7 @@ class DefaultReplyer:
             if not prompt:
                 logger.warning("构建prompt失败，跳过回复生成")
                 return False, None, None
-            
+
             from src.plugin_system.core.event_manager import event_manager
             # 触发 POST_LLM 事件（请求 LLM 之前）
             if not from_plugin:
@@ -393,7 +400,7 @@ class DefaultReplyer:
 
             try:
                 # 设置正在回复的状态
-                self.chat_stream.context_manager.context.is_replying = True
+                self.chat_stream.context.is_replying = True
                 content, reasoning_content, model_name, tool_call = await self.llm_generate_content(prompt)
                 logger.debug(f"replyer生成内容: {content}")
                 llm_response = {
@@ -410,7 +417,7 @@ class DefaultReplyer:
                 return False, None, prompt  # LLM 调用失败则无法生成回复
             finally:
                 # 重置正在回复的状态
-                self.chat_stream.context_manager.context.is_replying = False
+                self.chat_stream.context.is_replying = False
 
                 # 触发 AFTER_LLM 事件
                 if not from_plugin:
@@ -511,6 +518,7 @@ class DefaultReplyer:
         Returns:
             str: 表达习惯信息字符串
         """
+        assert global_config is not None
         # 检查是否允许在此聊天流中使用表达
         use_expression, _, _ = global_config.expression.get_expression_config_for_chat(self.chat_stream.stream_id)
         if not use_expression:
@@ -563,142 +571,136 @@ class DefaultReplyer:
 
         return f"{expression_habits_title}\n{expression_habits_block}"
 
-    async def build_memory_block(self, chat_history: str, target: str) -> str:
-        """构建记忆块
+    async def build_memory_block(
+        self,
+        chat_history: str,
+        target: str,
+        recent_messages: list[dict[str, Any]] | None = None,
+    ) -> str:
+        """构建记忆块（使用三层记忆系统）
 
         Args:
             chat_history: 聊天历史记录
             target: 目标消息内容
+            recent_messages: 原始聊天消息列表（用于构建查询块）
 
         Returns:
             str: 记忆信息字符串
         """
-        # 使用新的记忆图系统检索记忆（带智能查询优化）
-        all_memories = []
+        assert global_config is not None
+        # 检查是否启用三层记忆系统
+        if not (global_config.memory and global_config.memory.enable):
+            return ""
+
         try:
-            from src.memory_graph.manager_singleton import get_memory_manager, is_initialized
+            from src.memory_graph.manager_singleton import get_unified_memory_manager
+            from src.memory_graph.utils.three_tier_formatter import memory_formatter
 
-            if is_initialized():
-                manager = get_memory_manager()
-                if manager:
-                    # 构建查询上下文
-                    stream = self.chat_stream
-                    user_info_obj = getattr(stream, "user_info", None)
-                    sender_name = ""
-                    if user_info_obj:
-                        sender_name = getattr(user_info_obj, "user_nickname", "") or getattr(user_info_obj, "user_cardname", "")
+            unified_manager = get_unified_memory_manager()
+            if not unified_manager:
+                logger.debug("[三层记忆] 管理器未初始化")
+                return ""
 
-                    # 格式化聊天历史为更友好的格式
-                    formatted_history = ""
-                    if chat_history:
-                        # 移除过长的历史记录，只保留最近部分
-                        lines = chat_history.strip().split("\n")
-                        recent_lines = lines[-10:] if len(lines) > 10 else lines
-                        formatted_history = "\n".join(recent_lines)
+            # 目标查询改为使用最近多条消息的组合块
+            query_text = self._build_memory_query_text(target, recent_messages)
 
-                    query_context = {
-                        "chat_history": formatted_history,
-                        "sender": sender_name,
-                    }
+            # 使用统一管理器的智能检索（Judge模型决策）
+            search_result = await unified_manager.search_memories(
+                query_text=query_text,
+                use_judge=True,
+                recent_chat_history=chat_history,  # 传递最近聊天历史
+            )
 
-                    # 使用记忆管理器的智能检索（多查询策略）
-                    memories = []
-                    if global_config.memory:
-                        memories = []
-                        if global_config.memory:
-                            top_k = global_config.memory.search_top_k
-                            min_importance = global_config.memory.search_min_importance
-                            memories = await manager.search_memories(
-                                query=target,
-                                top_k=top_k,
-                                min_importance=min_importance,
-                                include_forgotten=False,
-                                use_multi_query=True,
-                                context=query_context,
-                            )
+            if not search_result:
+                logger.debug("[三层记忆] 未找到相关记忆")
+                return ""
 
-                    if memories:
-                        logger.info(f"[记忆图] 检索到 {len(memories)} 条相关记忆")
+            # 分类记忆块
+            perceptual_blocks = search_result.get("perceptual_blocks", [])
+            short_term_memories = search_result.get("short_term_memories", [])
+            long_term_memories = search_result.get("long_term_memories", [])
 
-                        # 使用新的格式化工具构建完整的记忆描述
-                        from src.memory_graph.utils.memory_formatter import (
-                            format_memory_for_prompt,
-                            get_memory_type_label,
-                        )
+            # 使用新的三级记忆格式化器
+            formatted_memories = await memory_formatter.format_all_tiers(
+                perceptual_blocks=perceptual_blocks,
+                short_term_memories=short_term_memories,
+                long_term_memories=long_term_memories
+            )
 
-                        for memory in memories:
-                            # 使用格式化工具生成完整的主谓宾描述
-                            content = format_memory_for_prompt(memory, include_metadata=False)
+            total_count = len(perceptual_blocks) + len(short_term_memories) + len(long_term_memories)
+            if total_count > 0:
+                logger.info(
+                    f"[三层记忆] 检索到 {total_count} 条记忆 "
+                    f"(感知:{len(perceptual_blocks)}, 短期:{len(short_term_memories)}, 长期:{len(long_term_memories)})"
+                )
 
-                            # 获取记忆类型
-                            mem_type = memory.memory_type.value if memory.memory_type else "未知"
+                # 添加标题并返回格式化后的记忆
+                if formatted_memories.strip():
+                    return "### 🧠 相关记忆 (Relevant Memories)\n\n" + formatted_memories
 
-                            if content:
-                                all_memories.append({
-                                    "content": content,
-                                    "memory_type": mem_type,
-                                    "importance": memory.importance,
-                                    "relevance": 0.7,
-                                    "source": "memory_graph",
-                                })
-                                logger.debug(f"[记忆构建] 格式化记忆: [{mem_type}] {content[:50]}...")
-                    else:
-                        logger.debug("[记忆图] 未找到相关记忆")
+            return ""
+
         except Exception as e:
-            logger.debug(f"[记忆图] 检索失败: {e}")
-            all_memories = []
+            logger.error(f"[三层记忆] 检索失败: {e}")
+            return ""
 
-        # 构建记忆字符串，使用方括号格式
-        memory_str = ""
-        has_any_memory = False
+    def _build_memory_query_text(
+        self,
+        fallback_text: str,
+        recent_messages: list[dict[str, Any]] | None,
+        block_size: int = 5,
+    ) -> str:
+        """
+        将最近若干条消息拼接为一个查询块，用于生成语义向量。
 
-        # 添加长期记忆（来自记忆图系统）
-        if all_memories:
-            # 使用方括号格式
-            memory_parts = ["### 🧠 相关记忆 (Relevant Memories)", ""]
+        Args:
+            fallback_text: 如果无法拼接消息块时使用的后备文本
+            recent_messages: 最近的消息列表
+            block_size: 组合的消息数量
 
-            # 按相关度排序，并记录相关度信息用于调试
-            sorted_memories = sorted(all_memories, key=lambda x: x.get("relevance", 0.0), reverse=True)
+        Returns:
+            str: 用于检索的查询文本
+        """
+        if not recent_messages:
+            return fallback_text
 
-            # 调试相关度信息
-            relevance_info = [(m.get("memory_type", "unknown"), m.get("relevance", 0.0)) for m in sorted_memories]
-            logger.debug(f"记忆相关度信息: {relevance_info}")
-            logger.debug(f"[记忆构建] 准备将 {len(sorted_memories)} 条记忆添加到提示词")
+        lines: list[str] = []
+        for message in recent_messages[-block_size:]:
+            sender = (
+                message.get("sender_name")
+                or message.get("person_name")
+                or message.get("user_nickname")
+                or message.get("user_cardname")
+                or message.get("nickname")
+                or message.get("sender")
+            )
 
-            for idx, running_memory in enumerate(sorted_memories, 1):
-                content = running_memory.get("content", "")
-                memory_type = running_memory.get("memory_type", "unknown")
+            if not sender and isinstance(message.get("user_info"), dict):
+                user_info = message["user_info"]
+                sender = user_info.get("user_nickname") or user_info.get("user_cardname")
 
-                # 跳过空内容
-                if not content or not content.strip():
-                    logger.warning(f"[记忆构建] 跳过第 {idx} 条记忆：内容为空 (type={memory_type})")
-                    logger.debug(f"[记忆构建] 空记忆详情: {running_memory}")
-                    continue
+            sender = sender or message.get("user_id") or "未知"
 
-                # 使用记忆图的类型映射（优先）或全局映射
-                try:
-                    from src.memory_graph.utils.memory_formatter import get_memory_type_label
-                    chinese_type = get_memory_type_label(memory_type)
-                except ImportError:
-                    # 回退到全局映射
-                    chinese_type = get_memory_type_chinese_label(memory_type)
+            content = (
+                message.get("processed_plain_text")
+                or message.get("display_message")
+                or message.get("content")
+                or message.get("message")
+                or message.get("text")
+                or ""
+            )
 
-                # 提取纯净内容（如果包含旧格式的元数据）
-                clean_content = content
-                if "（类型:" in content and "）" in content:
-                    clean_content = content.split("（类型:")[0].strip()
+            content = str(content).strip()
+            if content:
+                lines.append(f"{sender}: {content}")
 
-                logger.debug(f"[记忆构建] 添加第 {idx} 条记忆: [{chinese_type}] {clean_content[:50]}...")
-                memory_parts.append(f"- **[{chinese_type}]** {clean_content}")
+        fallback_clean = fallback_text.strip()
+        if not lines:
+            return fallback_clean or fallback_text
 
-            memory_str = "\n".join(memory_parts) + "\n"
-            has_any_memory = True
-            logger.debug(f"[记忆构建] 成功构建记忆字符串，包含 {len(memory_parts) - 2} 条记忆")
+        return "\n".join(lines[-block_size:])
 
-        # 瞬时记忆由另一套系统处理，这里不再添加
 
-        # 只有当完全没有任何记忆时才返回空字符串
-        return memory_str if has_any_memory else ""
 
     async def build_tool_info(self, chat_history: str, sender: str, target: str, enable_tool: bool = True) -> str:
         """构建工具信息块
@@ -779,6 +781,7 @@ class DefaultReplyer:
         Returns:
             str: 关键词反应提示字符串，如果没有触发任何反应则为空字符串
         """
+        assert global_config is not None
         if target is None:
             return ""
 
@@ -822,7 +825,7 @@ class DefaultReplyer:
                     pass
 
         except Exception as e:
-            logger.error(f"关键词检测与反应时发生异常: {e!s}", exc_info=True)
+            logger.error(f"关键词检测与反应时发生异常: {e!s}")
 
         return reaction_prompt
 
@@ -837,6 +840,7 @@ class DefaultReplyer:
         Returns:
             str: 格式化的notice信息文本，如果没有notice或未启用则返回空字符串
         """
+        assert global_config is not None
         try:
             logger.debug(f"开始构建notice块，chat_id={chat_id}")
 
@@ -871,7 +875,7 @@ class DefaultReplyer:
                 return ""
 
         except Exception as e:
-            logger.error(f"构建notice块失败，chat_id={chat_id}: {e}", exc_info=True)
+            logger.error(f"构建notice块失败，chat_id={chat_id}: {e}")
             return ""
 
     async def _time_and_run_task(self, coroutine, name: str) -> tuple[str, Any, float]:
@@ -905,6 +909,7 @@ class DefaultReplyer:
         Returns:
             Tuple[str, str]: (已读历史消息prompt, 未读历史消息prompt)
         """
+        assert global_config is not None
         try:
             # 从message_manager获取真实的已读/未读消息
 
@@ -914,13 +919,13 @@ class DefaultReplyer:
             chat_manager = get_chat_manager()
             chat_stream = await chat_manager.get_stream(chat_id)
             if chat_stream:
-                stream_context = chat_stream.context_manager
+                stream_context = chat_stream.context
 
                 # 确保历史消息已从数据库加载
                 await stream_context.ensure_history_initialized()
 
                 # 直接使用内存中的已读和未读消息，无需再查询数据库
-                read_messages = stream_context.context.history_messages  # 已读消息（已从数据库加载）
+                read_messages = stream_context.history_messages  # 已读消息（已从数据库加载）
                 unread_messages = stream_context.get_unread_messages()  # 未读消息
 
                 # 构建已读历史消息 prompt
@@ -1005,6 +1010,7 @@ class DefaultReplyer:
         """
         回退的已读/未读历史消息构建方法
         """
+        assert global_config is not None
         # 通过is_read字段分离已读和未读消息
         read_messages = []
         unread_messages = []
@@ -1118,6 +1124,7 @@ class DefaultReplyer:
         Returns:
             str: 构建好的上下文
         """
+        assert global_config is not None
         if available_actions is None:
             available_actions = {}
         chat_stream = self.chat_stream
@@ -1132,6 +1139,10 @@ class DefaultReplyer:
         if reply_to:
             # 兼容旧的reply_to
             sender, target = self._parse_reply_target(reply_to)
+            # 回退逻辑：为 'reply_to' 路径提供 platform 和 user_id 的回退值，以修复 UnboundLocalError
+            # 这样就不再强制要求必须有 user_id，解决了QQ空间插件等场景下的崩溃问题
+            platform = chat_stream.platform
+            user_id = ""
         else:
             # 对于 respond 动作，reply_message 可能为 None（统一回应未读消息）
             # 对于 reply 动作，reply_message 必须存在（针对特定消息回复）
@@ -1144,7 +1155,7 @@ class DefaultReplyer:
                     chat_stream_obj = await chat_manager.get_stream(chat_id)
 
                     if chat_stream_obj:
-                        unread_messages = chat_stream_obj.context_manager.get_unread_messages()
+                        unread_messages = chat_stream_obj.context.get_unread_messages()
                         if unread_messages:
                             # 使用最后一条未读消息作为参考
                             last_msg = unread_messages[-1]
@@ -1266,12 +1277,12 @@ class DefaultReplyer:
 
         if chat_stream_obj:
             # 确保历史消息已初始化
-            await chat_stream_obj.context_manager.ensure_history_initialized()
+            await chat_stream_obj.context.ensure_history_initialized()
 
             # 获取所有消息（历史+未读）
             all_messages = (
-                chat_stream_obj.context_manager.context.history_messages +
-                chat_stream_obj.context_manager.get_unread_messages()
+                chat_stream_obj.context.history_messages +
+                chat_stream_obj.context.get_unread_messages()
             )
 
             # 转换为字典格式
@@ -1320,7 +1331,10 @@ class DefaultReplyer:
                 self._time_and_run_task(self.build_relation_info(sender, target), "relation_info")
             ),
             "memory_block": asyncio.create_task(
-                self._time_and_run_task(self.build_memory_block(chat_talking_prompt_short, target), "memory_block")
+                self._time_and_run_task(
+                    self.build_memory_block(chat_talking_prompt_short, target, message_list_before_short),
+                    "memory_block",
+                )
             ),
             "tool_info": asyncio.create_task(
                 self._time_and_run_task(
@@ -1333,8 +1347,8 @@ class DefaultReplyer:
             ),
             "cross_context": asyncio.create_task(
                 self._time_and_run_task(
-                    Prompt.build_cross_context(chat_id, "s4u", target_user_info),
-                    "cross_context",
+                    # cross_context 的构建已移至 prompt.py
+                    asyncio.sleep(0, result=""), "cross_context"
                 )
             ),
             "notice_block": asyncio.create_task(
@@ -1401,12 +1415,15 @@ class DefaultReplyer:
         cross_context_block = results_dict["cross_context"]
         notice_block = results_dict["notice_block"]
 
+        # 使用统一的记忆块（已整合三层记忆系统）
+        combined_memory_block = memory_block if memory_block else ""
+
         # 检查是否为视频分析结果，并注入引导语
         if target and ("[视频内容]" in target or "好的，我将根据您提供的" in target):
             video_prompt_injection = (
                 "\n请注意，以上内容是你刚刚观看的视频，请以第一人称分享你的观后感，而不是在分析一份报告。"
             )
-            memory_block += video_prompt_injection
+            combined_memory_block += video_prompt_injection
 
         keywords_reaction_prompt = await self.build_keywords_reaction_prompt(target)
 
@@ -1519,6 +1536,8 @@ class DefaultReplyer:
 
         # 使用新的统一Prompt系统 - 创建PromptParameters
         prompt_parameters = PromptParameters(
+            platform=platform,
+            user_id=user_id,
             chat_scene=chat_scene_prompt,
             chat_id=chat_id,
             is_group_chat=is_group_chat,
@@ -1537,7 +1556,7 @@ class DefaultReplyer:
             # 传递已构建的参数
             expression_habits_block=expression_habits_block,
             relation_info_block=relation_info,
-            memory_block=memory_block,
+            memory_block=combined_memory_block,  # 使用合并后的记忆块
             tool_info_block=tool_info,
             knowledge_prompt=prompt_info,
             cross_context_block=cross_context_block,
@@ -1598,6 +1617,7 @@ class DefaultReplyer:
         reply_to: str,
         reply_message: dict[str, Any] | DatabaseMessages | None = None,
     ) -> str:  # sourcery skip: merge-else-if-into-elif, remove-redundant-if
+        assert global_config is not None
         chat_stream = self.chat_stream
         chat_id = chat_stream.stream_id
         is_group_chat = bool(chat_stream.group_info)
@@ -1637,12 +1657,12 @@ class DefaultReplyer:
 
         if chat_stream_obj:
             # 确保历史消息已初始化
-            await chat_stream_obj.context_manager.ensure_history_initialized()
+            await chat_stream_obj.context.ensure_history_initialized()
 
             # 获取所有消息（历史+未读）
             all_messages = (
-                chat_stream_obj.context_manager.context.history_messages +
-                chat_stream_obj.context_manager.get_unread_messages()
+                chat_stream_obj.context.history_messages +
+                chat_stream_obj.context.get_unread_messages()
             )
 
             # 转换为字典格式，限制数量
@@ -1757,49 +1777,8 @@ class DefaultReplyer:
 
         return prompt_text
 
-    async def _build_single_sending_message(
-        self,
-        message_id: str,
-        message_segment: Seg,
-        reply_to: bool,
-        is_emoji: bool,
-        thinking_start_time: float,
-        display_message: str,
-        anchor_message: DatabaseMessages | None = None,
-    ) -> MessageSending:
-        """构建单个发送消息"""
-
-        bot_user_info = UserInfo(
-            user_id=str(global_config.bot.qq_account),
-            user_nickname=global_config.bot.nickname,
-            platform=self.chat_stream.platform,
-        )
-
-        # 从 DatabaseMessages 获取 sender_info 并转换为 UserInfo
-        sender_info = None
-        if anchor_message and anchor_message.user_info:
-            db_user_info = anchor_message.user_info
-            sender_info = UserInfo(
-                platform=db_user_info.platform,
-                user_id=db_user_info.user_id,
-                user_nickname=db_user_info.user_nickname,
-                user_cardname=db_user_info.user_cardname,
-            )
-
-        return MessageSending(
-            message_id=message_id,  # 使用片段的唯一ID
-            chat_stream=self.chat_stream,
-            bot_user_info=bot_user_info,
-            sender_info=sender_info,
-            message_segment=message_segment,
-            reply=anchor_message,  # 回复原始锚点
-            is_head=reply_to,
-            is_emoji=is_emoji,
-            thinking_start_time=thinking_start_time,  # 传递原始思考开始时间
-            display_message=display_message,
-        )
-
     async def llm_generate_content(self, prompt: str):
+        assert global_config is not None
         with Timer("LLM生成", {}):  # 内部计时器，可选保留
             # 直接使用已初始化的模型实例
             logger.info(f"使用模型集生成回复: {self.express_model.model_for_task}")
@@ -1825,6 +1804,8 @@ class DefaultReplyer:
         return content, reasoning_content, model_name, tool_calls
 
     async def get_prompt_info(self, message: str, sender: str, target: str):
+        assert global_config is not None
+        assert model_config is not None
         related_info = ""
         start_time = time.time()
         from src.plugins.built_in.knowledge.lpmm_get_knowledge import SearchKnowledgeFromLPMMTool
@@ -1876,10 +1857,11 @@ class DefaultReplyer:
             return ""
 
     async def build_relation_info(self, sender: str, target: str):
+        assert global_config is not None
         # 获取用户ID
         if sender == f"{global_config.bot.nickname}(你)":
-            return f"你将要回复的是你自己发送的消息。"
-        
+            return "你将要回复的是你自己发送的消息。"
+
         person_info_manager = get_person_info_manager()
         person_id = await person_info_manager.get_person_id_by_person_name(sender)
 
@@ -1960,6 +1942,7 @@ class DefaultReplyer:
             reply_to: 回复对象
             reply_message: 回复的原始消息
         """
+        assert global_config is not None
         return  # 已禁用，保留函数签名以防其他地方有引用
 
         # 以下代码已废弃，不再执行
@@ -2069,12 +2052,12 @@ class DefaultReplyer:
 
             if chat_stream_obj:
                 # 确保历史消息已初始化
-                await chat_stream_obj.context_manager.ensure_history_initialized()
+                await chat_stream_obj.context.ensure_history_initialized()
 
                 # 获取所有消息（历史+未读）
                 all_messages = (
-                    chat_stream_obj.context_manager.context.history_messages +
-                    chat_stream_obj.context_manager.get_unread_messages()
+                    chat_stream_obj.context.history_messages +
+                    chat_stream_obj.context.get_unread_messages()
                 )
 
                 # 转换为字典格式，限制数量

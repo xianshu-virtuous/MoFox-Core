@@ -15,7 +15,7 @@ from src.common.logger import get_logger
 logger = get_logger("stream_tool_history")
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolCallRecord:
     """工具调用记录"""
     tool_name: str
@@ -32,15 +32,35 @@ class ToolCallRecord:
         """后处理：生成结果预览"""
         if self.result and not self.result_preview:
             content = self.result.get("content", "")
+            # 联网搜索等重要工具不截断结果
+            no_truncate_tools = {"web_search", "web_surfing", "knowledge_search"}
+            should_truncate = self.tool_name not in no_truncate_tools
+            max_length = 500 if should_truncate else 10000  # 联网搜索给更大的限制
+            
             if isinstance(content, str):
-                self.result_preview = content[:500] + ("..." if len(content) > 500 else "")
+                if len(content) > max_length:
+                    self.result_preview = content[:max_length] + "..."
+                else:
+                    self.result_preview = content
             elif isinstance(content, list | dict):
                 try:
-                    self.result_preview = orjson.dumps(content, option=orjson.OPT_NON_STR_KEYS).decode("utf-8")[:500] + "..."
+                    json_str = orjson.dumps(content, option=orjson.OPT_NON_STR_KEYS).decode("utf-8")
+                    if len(json_str) > max_length:
+                        self.result_preview = json_str[:max_length] + "..."
+                    else:
+                        self.result_preview = json_str
                 except Exception:
-                    self.result_preview = str(content)[:500] + "..."
+                    str_content = str(content)
+                    if len(str_content) > max_length:
+                        self.result_preview = str_content[:max_length] + "..."
+                    else:
+                        self.result_preview = str_content
             else:
-                self.result_preview = str(content)[:500] + "..."
+                str_content = str(content)
+                if len(str_content) > max_length:
+                    self.result_preview = str_content[:max_length] + "..."
+                else:
+                    self.result_preview = str_content
 
 
 class StreamToolHistoryManager:
@@ -245,7 +265,7 @@ class StreamToolHistoryManager:
 
         lines = ["## 🔧 最近工具调用记录"]
         for i, record in enumerate(recent_records, 1):
-            status_icon = "✅" if record.status == "success" else "❌" if record.status == "error" else "⏳"
+            status_icon = "success" if record.status == "success" else "error" if record.status == "error" else "pending"
 
             # 格式化参数
             args_preview = self._format_args_preview(record.args)
@@ -387,8 +407,36 @@ class StreamToolHistoryManager:
             return result
 
 
-# 全局管理器字典，按chat_id索引
+# 内存优化：全局管理器字典，按chat_id索引，添加 LRU 淘汰
 _stream_managers: dict[str, StreamToolHistoryManager] = {}
+_stream_managers_last_used: dict[str, float] = {}  # 记录最后使用时间
+_STREAM_MANAGERS_MAX_SIZE = 100  # 最大保留数量
+
+
+def _evict_old_stream_managers() -> None:
+    """内存优化：淘汰最久未使用的 stream manager"""
+    import time
+
+    if len(_stream_managers) < _STREAM_MANAGERS_MAX_SIZE:
+        return
+
+    # 按最后使用时间排序，淘汰最旧的 20%
+    evict_count = max(1, len(_stream_managers) // 5)
+    sorted_by_time = sorted(
+        _stream_managers_last_used.items(),
+        key=lambda x: x[1]
+    )
+
+    evicted = []
+    for chat_id, _ in sorted_by_time[:evict_count]:
+        if chat_id in _stream_managers:
+            del _stream_managers[chat_id]
+        if chat_id in _stream_managers_last_used:
+            del _stream_managers_last_used[chat_id]
+        evicted.append(chat_id)
+
+    if evicted:
+        logger.info(f"🔧 StreamToolHistoryManager LRU淘汰: 释放了 {len(evicted)} 个不活跃的管理器")
 
 
 def get_stream_tool_history_manager(chat_id: str) -> StreamToolHistoryManager:
@@ -400,7 +448,14 @@ def get_stream_tool_history_manager(chat_id: str) -> StreamToolHistoryManager:
     Returns:
         工具历史记录管理器实例
     """
+    import time
+
+    # 🔧 更新最后使用时间
+    _stream_managers_last_used[chat_id] = time.time()
+
     if chat_id not in _stream_managers:
+        # 🔧 检查是否需要淘汰
+        _evict_old_stream_managers()
         _stream_managers[chat_id] = StreamToolHistoryManager(chat_id)
     return _stream_managers[chat_id]
 
@@ -413,4 +468,6 @@ def cleanup_stream_manager(chat_id: str) -> None:
     """
     if chat_id in _stream_managers:
         del _stream_managers[chat_id]
-        logger.info(f"已清理聊天 {chat_id} 的工具历史记录管理器")
+    if chat_id in _stream_managers_last_used:
+        del _stream_managers_last_used[chat_id]
+    logger.info(f"已清理聊天 {chat_id} 的工具历史记录管理器")

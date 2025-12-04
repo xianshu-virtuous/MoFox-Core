@@ -5,6 +5,7 @@ LLM 工具接口：定义记忆系统的工具 schema 和执行逻辑
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from src.common.logger import get_logger
@@ -16,7 +17,6 @@ from src.memory_graph.storage.graph_store import GraphStore
 from src.memory_graph.storage.persistence import PersistenceManager
 from src.memory_graph.storage.vector_store import VectorStore
 from src.memory_graph.utils.embeddings import EmbeddingGenerator
-from src.memory_graph.utils.graph_expansion import expand_memories_with_semantic_filter
 from src.memory_graph.utils.path_expansion import PathExpansionConfig, PathScoreExpansion
 
 logger = get_logger(__name__)
@@ -83,13 +83,7 @@ class MemoryTools:
         self.search_min_importance = search_min_importance
         self.search_similarity_threshold = search_similarity_threshold
 
-        logger.info(
-            f"MemoryTools 初始化: max_expand_depth={max_expand_depth}, "
-            f"expand_semantic_threshold={expand_semantic_threshold}, "
-            f"search_top_k={search_top_k}, "
-            f"权重配置: vector={search_vector_weight}, importance={search_importance_weight}, recency={search_recency_weight}, "
-            f"阈值过滤: min_importance={search_min_importance}, similarity_threshold={search_similarity_threshold}"
-        )
+        logger.debug(f"MemoryTools 初始化完成")
 
         # 初始化组件
         self.extractor = MemoryExtractor()
@@ -98,7 +92,7 @@ class MemoryTools:
             graph_store=graph_store,
             embedding_generator=embedding_generator,
         )
-        
+
         # 初始化路径扩展器（延迟初始化，仅在启用时创建）
         self.path_expander: PathScoreExpansion | None = None
 
@@ -363,7 +357,7 @@ class MemoryTools:
             执行结果
         """
         try:
-            logger.info(f"创建记忆: {params.get('subject')} - {params.get('topic')}")
+            logger.debug(f"创建记忆: {params.get('subject')} - {params.get('topic')}")
 
             # 0. 确保初始化
             await self._ensure_initialized()
@@ -380,7 +374,7 @@ class MemoryTools:
             # 4. 异步保存到磁盘（不阻塞当前操作）
             asyncio.create_task(self._async_save_graph_store())
 
-            logger.info(f"记忆创建成功: {memory.id}")
+            logger.debug(f"记忆创建成功: {memory.id}")
 
             return {
                 "success": True,
@@ -391,7 +385,7 @@ class MemoryTools:
             }
 
         except Exception as e:
-            logger.error(f"记忆创建失败: {e}", exc_info=True)
+            logger.error(f"记忆创建失败: {e}")
             return {
                 "success": False,
                 "error": str(e),
@@ -409,7 +403,7 @@ class MemoryTools:
             执行结果
         """
         try:
-            logger.info(
+            logger.debug(
                 f"关联记忆: {params.get('source_memory_description')} -> "
                 f"{params.get('target_memory_description')}"
             )
@@ -460,7 +454,7 @@ class MemoryTools:
             # 5. 异步保存（不阻塞当前操作）
             asyncio.create_task(self._async_save_graph_store())
 
-            logger.info(f"记忆关联成功: {source_memory.id} -> {target_memory.id}")
+            logger.debug(f"记忆关联成功: {source_memory.id} -> {target_memory.id}")
 
             return {
                 "success": True,
@@ -471,7 +465,7 @@ class MemoryTools:
             }
 
         except Exception as e:
-            logger.error(f"记忆关联失败: {e}", exc_info=True)
+            logger.error(f"记忆关联失败: {e}")
             return {
                 "success": False,
                 "error": str(e),
@@ -507,10 +501,7 @@ class MemoryTools:
             prefer_node_types = params.get("prefer_node_types", [])  # 🆕 优先节点类型
             context = params.get("context", None)
 
-            logger.info(
-                f"搜索记忆: {query} (top_k={top_k}, expand_depth={expand_depth}, "
-                f"multi_query={use_multi_query}, prefer_types={prefer_node_types})"
-            )
+            logger.info(f"搜索记忆: {query} (返回{top_k}条)")
 
             # 0. 确保初始化
             await self._ensure_initialized()
@@ -528,7 +519,7 @@ class MemoryTools:
             # 合并用户指定的偏好类型和LLM识别的偏好类型
             all_prefer_types = list(set(prefer_node_types + llm_prefer_types))
             if all_prefer_types:
-                logger.info(f"最终偏好节点类型: {all_prefer_types} (用户指定: {prefer_node_types}, LLM识别: {llm_prefer_types})")
+                logger.debug(f"最终偏好节点类型: {all_prefer_types} (用户指定: {prefer_node_types}, LLM识别: {llm_prefer_types})")
                 # 更新prefer_node_types用于后续评分
                 prefer_node_types = all_prefer_types
 
@@ -553,19 +544,20 @@ class MemoryTools:
                             if mem_id not in memory_scores or similarity > memory_scores[mem_id]:
                                 memory_scores[mem_id] = similarity
 
-            # 🔥 详细日志：检查初始召回情况
-            logger.info(
-                f"初始向量搜索: 返回{len(similar_nodes)}个节点 → "
-                f"提取{len(initial_memory_ids)}条记忆"
-            )
+            # 检查初始召回情况
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    f"初始向量搜索: 返回{len(similar_nodes)}个节点 → "
+                    f"提取{len(initial_memory_ids)}条记忆"
+                )
             if len(initial_memory_ids) == 0:
                 logger.warning(
                     "⚠️ 向量搜索未找到任何记忆！"
                     "可能原因：1) 嵌入模型理解问题 2) 记忆节点未建立索引 3) 查询表达与存储内容差异过大"
                 )
                 # 输出相似节点的详细信息用于调试
-                if similar_nodes:
-                    logger.debug(f"向量搜索返回的节点元数据样例: {similar_nodes[0][2] if len(similar_nodes) > 0 else 'None'}")
+                if logger.isEnabledFor(logging.DEBUG) and similar_nodes:
+                    logger.debug(f"向量搜索返回的节点元数据样例: {similar_nodes[0][2]}")
             elif len(initial_memory_ids) < 3:
                 logger.warning(f"⚠️ 初始召回记忆数量较少({len(initial_memory_ids)}条)，可能影响结果质量")
 
@@ -573,7 +565,7 @@ class MemoryTools:
             # 检查是否启用路径扩展算法
             use_path_expansion = getattr(global_config.memory, "enable_path_expansion", False) and expand_depth > 0
             expanded_memory_scores = {}
-            
+
             if expand_depth > 0 and initial_memory_ids:
                 # 获取查询的embedding
                 query_embedding = None
@@ -582,12 +574,13 @@ class MemoryTools:
                         query_embedding = await self.builder.embedding_generator.generate(query)
                     except Exception as e:
                         logger.warning(f"生成查询embedding失败: {e}")
-                
+
                 if query_embedding is not None:
                     if use_path_expansion:
-                        # 🆕 使用路径评分扩展算法
-                        logger.info(f"🔬 使用路径评分扩展算法: 初始{len(similar_nodes)}个节点, 深度={expand_depth}")
-                        
+                        # 使用路径评分扩展算法
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug(f"使用路径评分扩展算法: 初始{len(similar_nodes)}个节点, 深度={expand_depth}")
+
                         # 延迟初始化路径扩展器
                         if self.path_expander is None:
                             path_config = PathExpansionConfig(
@@ -607,7 +600,7 @@ class MemoryTools:
                                 vector_store=self.vector_store,
                                 config=path_config
                             )
-                        
+
                         try:
                             # 执行路径扩展（传递偏好类型）
                             path_results = await self.path_expander.expand_with_path_scoring(
@@ -616,11 +609,11 @@ class MemoryTools:
                                 top_k=top_k,
                                 prefer_node_types=all_prefer_types  # 🆕 传递偏好类型
                             )
-                            
+
                             # 路径扩展返回的是 [(Memory, final_score, paths), ...]
                             # 我们需要直接返回这些记忆，跳过后续的传统评分
-                            logger.info(f"✅ 路径扩展返回 {len(path_results)} 条记忆")
-                            
+                            logger.debug(f"✅ 路径扩展返回 {len(path_results)} 条记忆")
+
                             # 直接构建返回结果
                             path_memories = []
                             for memory, score, paths in path_results:
@@ -635,44 +628,19 @@ class MemoryTools:
                                             "max_path_depth": max(p.depth for p in paths) if paths else 0
                                         }
                                     })
-                            
-                            logger.info(f"🎯 路径扩展最终返回: {len(path_memories)} 条记忆")
-                            
+
+                            logger.debug(f"路径扩展最终返回: {len(path_memories)} 条记忆")
+
                             return {
                                 "success": True,
                                 "results": path_memories,
                                 "total": len(path_memories),
                                 "expansion_method": "path_scoring"
                             }
-                            
-                        except Exception as e:
-                            logger.error(f"路径扩展失败: {e}", exc_info=True)
-                            logger.info("回退到传统图扩展算法")
-                            # 继续执行下面的传统图扩展
-                    
-                    # 传统图扩展（仅在未启用路径扩展或路径扩展失败时执行）
-                    if not use_path_expansion or expanded_memory_scores == {}:
-                        logger.info(f"开始传统图扩展: 初始记忆{len(initial_memory_ids)}个, 深度={expand_depth}")
-                        
-                        try:
-                            # 使用共享的图扩展工具函数
-                            expanded_results = await expand_memories_with_semantic_filter(
-                                graph_store=self.graph_store,
-                                vector_store=self.vector_store,
-                                initial_memory_ids=list(initial_memory_ids),
-                                query_embedding=query_embedding,
-                                max_depth=expand_depth,
-                                semantic_threshold=self.expand_semantic_threshold,
-                                max_expanded=top_k * 2
-                            )
-
-                            # 合并扩展结果
-                            expanded_memory_scores.update(dict(expanded_results))
-
-                            logger.info(f"传统图扩展完成: 新增{len(expanded_memory_scores)}个相关记忆")
 
                         except Exception as e:
-                            logger.warning(f"传统图扩展失败: {e}")
+                            logger.error(f"路径扩展失败: {e}")
+                            # 路径扩展失败，不再回退到旧的图扩展算法
 
             # 4. 合并初始记忆和扩展记忆
             all_memory_ids = set(initial_memory_ids) | set(expanded_memory_scores.keys())
@@ -694,16 +662,10 @@ class MemoryTools:
                 reverse=True
             )  # 🔥 不再提前截断，让所有候选参与详细评分
 
-            # 🔍 统计初始记忆的相似度分布（用于诊断）
-            if memory_scores:
+            # 统计初始记忆的相似度分布（用于诊断）
+            if logger.isEnabledFor(logging.DEBUG) and memory_scores:
                 similarities = list(memory_scores.values())
-                logger.info(
-                    f"📊 向量相似度分布: 最高={max(similarities):.3f}, "
-                    f"最低={min(similarities):.3f}, "
-                    f"平均={sum(similarities)/len(similarities):.3f}, "
-                    f">0.3: {len([s for s in similarities if s > 0.3])}/{len(similarities)}, "
-                    f">0.2: {len([s for s in similarities if s > 0.2])}/{len(similarities)}"
-                )
+                logger.debug(f"向量相似度分布: 最高={max(similarities):.3f}, 最低={min(similarities):.3f}, 平均={sum(similarities)/len(similarities):.3f}")
 
             # 5. 获取完整记忆并进行最终排序（优化后的动态权重系统）
             memories_with_scores = []
@@ -813,28 +775,24 @@ class MemoryTools:
                     # if not is_initial_memory and some_score < threshold:
                     #     continue
 
-                    # 记录通过过滤的记忆（用于调试）
-                    if is_initial_memory:
-                        logger.debug(
-                            f"✅ 保留 {memory.id[:8]} [初始]: 相似度={true_similarity:.3f}, "
-                            f"重要性={memory.importance:.2f}, 综合分数={final_score:.4f}"
-                        )
-                    else:
-                        logger.debug(
-                            f"✅ 保留 {memory.id[:8]} [扩展]: 重要性={memory.importance:.2f}, "
-                            f"综合分数={final_score:.4f}"
-                        )
+                    # 记录通过过滤的记忆（仅保留关键信息用于调试）
+                    if logger.isEnabledFor(logging.DEBUG):
+                        if is_initial_memory:
+                            logger.debug(f"保留记忆 {memory.id[:8]} [初始]: 相似度={true_similarity:.3f}, 综合分数={final_score:.4f}")
+                        else:
+                            logger.debug(f"保留记忆 {memory.id[:8]} [扩展]: 综合分数={final_score:.4f}")
 
                     # 🆕 节点类型加权：对REFERENCE/ATTRIBUTE节点额外加分（促进事实性信息召回）
                     if "REFERENCE" in node_types_count or "ATTRIBUTE" in node_types_count:
                         final_score *= 1.1  # 10% 加成
 
-                    # 🆕 用户指定的优先节点类型额外加权
+                    # 用户指定的优先节点类型额外加权
                     if prefer_node_types:
                         for prefer_type in prefer_node_types:
                             if prefer_type in node_types_count:
                                 final_score *= 1.15  # 15% 额外加成
-                                logger.debug(f"记忆 {memory.id[:8]} 包含优先节点类型 {prefer_type}，加权后分数: {final_score:.4f}")
+                                if logger.isEnabledFor(logging.DEBUG):
+                                    logger.debug(f"记忆 {memory.id[:8]} 包含优先节点类型 {prefer_type}，加权后分数: {final_score:.4f}")
                                 break
 
                     memories_with_scores.append((memory, final_score, dominant_node_type))
@@ -860,13 +818,7 @@ class MemoryTools:
                 }
                 results.append(result)
 
-            logger.info(
-                f"搜索完成: 初始{len(initial_memory_ids)}个 → "
-                f"扩展{len(expanded_memory_scores)}个 → "
-                f"候选{total_candidates}个 → "
-                f"过滤{filtered_count}个 (重要性过滤) → "
-                f"最终返回{len(results)}条记忆"
-            )
+            logger.info(f"搜索完成: 初始{len(initial_memory_ids)}个 → 最终返回{len(results)}条记忆")
 
             # 如果过滤率过高，发出警告
             if total_candidates > 0:
@@ -889,7 +841,7 @@ class MemoryTools:
             }
 
         except Exception as e:
-            logger.error(f"记忆搜索失败: {e}", exc_info=True)
+            logger.error(f"记忆搜索失败: {e}")
             return {
                 "success": False,
                 "error": str(e),
@@ -1113,10 +1065,8 @@ class MemoryTools:
             prefer_node_types = [t for t in prefer_node_types if t in valid_types]
 
             if result_queries:
-                logger.info(
-                    f"生成查询: {[q for q, _ in result_queries]} "
-                    f"(偏好类型: {prefer_node_types if prefer_node_types else '无'})"
-                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f"生成{len(result_queries)}个查询，偏好类型: {prefer_node_types if prefer_node_types else '无'}")
                 return result_queries, prefer_node_types
 
         except Exception as e:
@@ -1155,9 +1105,8 @@ class MemoryTools:
             min_similarity=0.0,  # 不在这里过滤，交给后续评分
         )
 
-        logger.debug(f"单查询向量搜索: 查询='{query}', 返回节点数={len(similar_nodes)}")
-        if similar_nodes:
-            logger.debug(f"Top 3相似度: {[f'{sim:.3f}' for _, sim, _ in similar_nodes[:3]]}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"单查询搜索: 返回{len(similar_nodes)}个节点")
 
         return similar_nodes
 
@@ -1186,7 +1135,8 @@ class MemoryTools:
             # 1. 使用小模型生成多个查询 + 节点类型识别
             multi_queries, prefer_node_types = await self._generate_multi_queries_simple(query, context)
 
-            logger.debug(f"生成 {len(multi_queries)} 个查询: {multi_queries}, 偏好类型: {prefer_node_types}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"多查询搜索: 生成{len(multi_queries)}个查询，偏好类型: {prefer_node_types}")
 
             # 2. 生成所有查询的嵌入
             if not self.builder.embedding_generator:
@@ -1197,8 +1147,10 @@ class MemoryTools:
             query_embeddings = []
             query_weights = []
 
-            for sub_query, weight in multi_queries:
-                embedding = await self.builder.embedding_generator.generate(sub_query)
+            batch_texts = [sub_query for sub_query, _ in multi_queries]
+            batch_embeddings = await self.builder.embedding_generator.generate_batch(batch_texts)
+
+            for (sub_query, weight), embedding in zip(multi_queries, batch_embeddings):
                 if embedding is not None:
                     query_embeddings.append(embedding)
                     query_weights.append(weight)
@@ -1217,14 +1169,13 @@ class MemoryTools:
                 fusion_strategy="weighted_max",
             )
 
-            logger.info(f"多查询检索完成: {len(similar_nodes)} 个节点 (偏好类型: {prefer_node_types})")
-            if similar_nodes:
-                logger.debug(f"Top 5融合相似度: {[f'{sim:.3f}' for _, sim, _ in similar_nodes[:5]]}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"多查询检索完成: {len(similar_nodes)}个节点，偏好类型: {prefer_node_types}")
 
             return similar_nodes, prefer_node_types
 
         except Exception as e:
-            logger.warning(f"多查询搜索失败，回退到单查询模式: {e}", exc_info=True)
+            logger.warning(f"多查询搜索失败，回退到单查询模式: {e}")
             single_results = await self._single_query_search(query, top_k)
             return single_results, []
 
@@ -1237,6 +1188,9 @@ class MemoryTools:
         for node in memory.nodes:
             if node.embedding is not None:
                 await self.vector_store.add_node(node)
+                node.mark_vector_stored()
+                if self.graph_store.graph.has_node(node.id):
+                    self.graph_store.graph.nodes[node.id]["has_vector"] = True
 
     async def _find_memory_by_description(self, description: str) -> Memory | None:
         """
@@ -1255,7 +1209,8 @@ class MemoryTools:
 
         # 如果嵌入生成失败，无法进行语义搜索
         if query_embedding is None:
-            logger.debug("嵌入生成失败，跳过描述搜索")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("嵌入生成失败，跳过描述搜索")
             return None
 
         # 搜索相似节点
@@ -1332,6 +1287,7 @@ class MemoryTools:
                 return
 
             await self.persistence_manager.save_graph_store(self.graph_store)
-            logger.debug("异步保存图数据成功")
+            if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("异步保存图数据成功")
         except Exception as e:
-            logger.error(f"异步保存图数据失败: {e}", exc_info=True)
+            logger.error(f"异步保存图数据失败: {e}")

@@ -1,9 +1,13 @@
 """
 向量存储层：基于 ChromaDB 的语义向量存储
+
+注意：ChromaDB 是同步库，所有操作都必须使用 asyncio.to_thread() 包装
+以避免阻塞 asyncio 事件循环导致死锁。
 """
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -47,33 +51,39 @@ class VectorStore:
         self.collection = None
         self.embedding_function = embedding_function
 
-        logger.info(f"初始化向量存储: collection={collection_name}, dir={self.data_dir}")
-
     async def initialize(self) -> None:
         """异步初始化 ChromaDB"""
         try:
             import chromadb
             from chromadb.config import Settings
 
-            # 创建持久化客户端
-            self.client = chromadb.PersistentClient(
-                path=str(self.data_dir / "chroma"),
-                settings=Settings(
-                    anonymized_telemetry=False,
-                    allow_reset=True,
-                ),
-            )
+            # 创建持久化客户端 - 同步操作需要在线程中执行
+            def _create_client():
+                return chromadb.PersistentClient(
+                    path=str(self.data_dir / "chroma"),
+                    settings=Settings(
+                        anonymized_telemetry=False,
+                        allow_reset=True,
+                    ),
+                )
+            
+            self.client = await asyncio.to_thread(_create_client)
 
-            # 获取或创建集合
-            self.collection = self.client.get_or_create_collection(
-                name=self.collection_name,
-                metadata={"description": "Memory graph node embeddings"},
-            )
+            # 获取或创建集合 - 同步操作需要在线程中执行
+            def _get_or_create_collection():
+                return self.client.get_or_create_collection(
+                    name=self.collection_name,
+                    metadata={"description": "Memory graph node embeddings"},
+                )
+            
+            self.collection = await asyncio.to_thread(_get_or_create_collection)
 
-            logger.info(f"ChromaDB 初始化完成，集合包含 {self.collection.count()} 个节点")
+            # count() 也是同步操作
+            count = await asyncio.to_thread(self.collection.count)
+            logger.debug(f"ChromaDB 初始化完成，集合包含 {count} 个节点")
 
         except Exception as e:
-            logger.error(f"初始化 ChromaDB 失败: {e}", exc_info=True)
+            logger.error(f"初始化 ChromaDB 失败: {e}")
             raise
 
     async def add_node(self, node: MemoryNode) -> None:
@@ -108,17 +118,21 @@ class VectorStore:
                 else:
                     metadata[key] = str(value)
 
-            self.collection.add(
-                ids=[node.id],
-                embeddings=[node.embedding.tolist()],
-                metadatas=[metadata],
-                documents=[node.content],  # 文本内容用于检索
-            )
+            # ChromaDB add() 是同步阻塞操作，必须在线程中执行
+            def _add_node():
+                self.collection.add(
+                    ids=[node.id],
+                    embeddings=[node.embedding.tolist()],
+                    metadatas=[metadata],
+                    documents=[node.content],
+                )
+            
+            await asyncio.to_thread(_add_node)
 
             logger.debug(f"添加节点到向量存储: {node}")
 
         except Exception as e:
-            logger.error(f"添加节点失败: {e}", exc_info=True)
+            logger.error(f"添加节点失败: {e}")
             raise
 
     async def add_nodes_batch(self, nodes: list[MemoryNode]) -> None:
@@ -157,17 +171,19 @@ class VectorStore:
                         metadata[key] = str(value)
                 metadatas.append(metadata)
 
-            self.collection.add(
-                ids=[n.id for n in valid_nodes],
-                embeddings=[n.embedding.tolist() for n in valid_nodes],  # type: ignore
-                metadatas=metadatas,
-                documents=[n.content for n in valid_nodes],
-            )
-
-            logger.info(f"批量添加 {len(valid_nodes)} 个节点到向量存储")
+            # ChromaDB add() 是同步阻塞操作，必须在线程中执行
+            def _add_batch():
+                self.collection.add(
+                    ids=[n.id for n in valid_nodes],
+                    embeddings=[n.embedding.tolist() for n in valid_nodes],  # type: ignore
+                    metadatas=metadatas,
+                    documents=[n.content for n in valid_nodes],
+                )
+            
+            await asyncio.to_thread(_add_batch)
 
         except Exception as e:
-            logger.error(f"批量添加节点失败: {e}", exc_info=True)
+            logger.error(f"批量添加节点失败: {e}")
             raise
 
     async def search_similar_nodes(
@@ -198,12 +214,15 @@ class VectorStore:
             if node_types:
                 where_filter = {"node_type": {"$in": [nt.value for nt in node_types]}}
 
-            # 执行查询
-            results = self.collection.query(
-                query_embeddings=[query_embedding.tolist()],
-                n_results=limit,
-                where=where_filter,
-            )
+            # ChromaDB query() 是同步阻塞操作，必须在线程中执行
+            def _query():
+                return self.collection.query(
+                    query_embeddings=[query_embedding.tolist()],
+                    n_results=limit,
+                    where=where_filter,
+                )
+            
+            results = await asyncio.to_thread(_query)
 
             # 解析结果
             import orjson
@@ -237,7 +256,7 @@ class VectorStore:
             return similar_nodes
 
         except Exception as e:
-            logger.error(f"相似节点搜索失败: {e}", exc_info=True)
+            logger.error(f"相似节点搜索失败: {e}")
             raise
 
     async def search_with_multiple_queries(
@@ -344,15 +363,10 @@ class VectorStore:
             fused_results.sort(key=lambda x: x[1], reverse=True)
             final_results = fused_results[:limit]
 
-            logger.info(
-                f"多查询融合搜索完成: {len(query_embeddings)} 个查询, "
-                f"融合后 {len(fused_results)} 个结果, 返回 {len(final_results)} 个"
-            )
-
             return final_results
 
         except Exception as e:
-            logger.error(f"多查询融合搜索失败: {e}", exc_info=True)
+            logger.error(f"多查询融合搜索失败: {e}")
             raise
 
     async def get_node_by_id(self, node_id: str) -> dict[str, Any] | None:
@@ -369,7 +383,11 @@ class VectorStore:
             raise RuntimeError("向量存储未初始化")
 
         try:
-            result = self.collection.get(ids=[node_id], include=["metadatas", "embeddings"])
+            # ChromaDB get() 是同步阻塞操作，必须在线程中执行
+            def _get():
+                return self.collection.get(ids=[node_id], include=["metadatas", "embeddings"])
+            
+            result = await asyncio.to_thread(_get)
 
             # 修复：直接检查 ids 列表是否非空（避免 numpy 数组的布尔值歧义）
             if result is not None:
@@ -387,7 +405,8 @@ class VectorStore:
             return None
 
         except Exception as e:
-            logger.error(f"获取节点失败: {e}", exc_info=True)
+            # 节点不存在是正常情况，降级为 debug
+            logger.debug(f"获取节点失败（节点可能不存在）: {e}")
             return None
 
     async def delete_node(self, node_id: str) -> None:
@@ -401,11 +420,15 @@ class VectorStore:
             raise RuntimeError("向量存储未初始化")
 
         try:
-            self.collection.delete(ids=[node_id])
+            # ChromaDB delete() 是同步阻塞操作，必须在线程中执行
+            def _delete():
+                self.collection.delete(ids=[node_id])
+            
+            await asyncio.to_thread(_delete)
             logger.debug(f"删除节点: {node_id}")
 
         except Exception as e:
-            logger.error(f"删除节点失败: {e}", exc_info=True)
+            logger.error(f"删除节点失败: {e}")
             raise
 
     async def update_node_embedding(self, node_id: str, embedding: np.ndarray) -> None:
@@ -420,18 +443,28 @@ class VectorStore:
             raise RuntimeError("向量存储未初始化")
 
         try:
-            self.collection.update(ids=[node_id], embeddings=[embedding.tolist()])
+            # ChromaDB update() 是同步阻塞操作，必须在线程中执行
+            def _update():
+                self.collection.update(ids=[node_id], embeddings=[embedding.tolist()])
+            
+            await asyncio.to_thread(_update)
             logger.debug(f"更新节点 embedding: {node_id}")
 
         except Exception as e:
-            logger.error(f"更新节点 embedding 失败: {e}", exc_info=True)
+            logger.error(f"更新节点 embedding 失败: {e}")
             raise
 
     def get_total_count(self) -> int:
-        """获取向量存储中的节点总数"""
+        """获取向量存储中的节点总数（同步方法，谨慎在 async 上下文中使用）"""
         if not self.collection:
             return 0
         return self.collection.count()
+    
+    async def get_total_count_async(self) -> int:
+        """异步获取向量存储中的节点总数"""
+        if not self.collection:
+            return 0
+        return await asyncio.to_thread(self.collection.count)
 
     async def clear(self) -> None:
         """清空向量存储（危险操作，仅用于测试）"""
@@ -439,14 +472,17 @@ class VectorStore:
             return
 
         try:
-            # 删除并重新创建集合
-            self.client.delete_collection(self.collection_name)
-            self.collection = self.client.get_or_create_collection(
-                name=self.collection_name,
-                metadata={"description": "Memory graph node embeddings"},
-            )
+            # ChromaDB delete_collection 和 get_or_create_collection 都是同步阻塞操作
+            def _clear():
+                self.client.delete_collection(self.collection_name)
+                return self.client.get_or_create_collection(
+                    name=self.collection_name,
+                    metadata={"description": "Memory graph node embeddings"},
+                )
+            
+            self.collection = await asyncio.to_thread(_clear)
             logger.warning(f"向量存储已清空: {self.collection_name}")
 
         except Exception as e:
-            logger.error(f"清空向量存储失败: {e}", exc_info=True)
+            logger.error(f"清空向量存储失败: {e}")
             raise

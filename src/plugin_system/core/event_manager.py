@@ -7,6 +7,7 @@ from threading import Lock
 from typing import Any, Optional
 
 from src.common.logger import get_logger
+from src.config.config import global_config
 from src.plugin_system.base.base_event import BaseEvent, HandlerResultsCollection
 from src.plugin_system.base.base_events_handler import BaseEventHandler
 from src.plugin_system.base.component_types import EventType
@@ -40,6 +41,15 @@ class EventManager:
         self._event_handlers: dict[str, BaseEventHandler] = {}
         self._pending_subscriptions: dict[str, list[str]] = {}  # 缓存失败的订阅
         self._scheduler_callback: Any | None = None  # scheduler 回调函数
+        plugin_cfg = getattr(global_config, "plugin_http_system", None)
+        self._default_handler_timeout: float | None = (
+            getattr(plugin_cfg, "event_handler_timeout", 30.0) if plugin_cfg else 30.0
+        )
+        default_concurrency = getattr(plugin_cfg, "event_handler_max_concurrency", None) if plugin_cfg else None
+        self._default_handler_concurrency: int | None = (
+            default_concurrency if default_concurrency and default_concurrency > 0 else None
+        )
+        self._background_tasks: set[asyncio.Task[Any]] = set()
         self._initialized = True
         logger.info("EventManager 单例初始化完成")
 
@@ -210,6 +220,36 @@ class EventManager:
         """
         return self._event_handlers.copy()
 
+    def remove_event_handler(self, handler_name: str) -> bool:
+        """
+        完全移除一个事件处理器，包括其所有订阅。
+
+        Args:
+            handler_name (str): 要移除的事件处理器的名称。
+
+        Returns:
+            bool: 如果成功移除则返回 True，否则返回 False。
+        """
+        if handler_name not in self._event_handlers:
+            logger.warning(f"事件处理器 {handler_name} 未注册，无需移除。")
+            return False
+
+        # 从主注册表中删除
+        del self._event_handlers[handler_name]
+        logger.debug(f"事件处理器 {handler_name} 已从主注册表移除。")
+
+        # 遍历所有事件，取消其订阅
+        for event in self._events.values():
+            # 创建订阅者列表的副本进行迭代，以安全地修改原始列表
+            for subscriber in list(event.subscribers):
+                if getattr(subscriber, 'handler_name', None) == handler_name:
+                    event.subscribers.remove(subscriber)
+                    logger.debug(f"事件处理器 {handler_name} 已从事件 {event.name} 取消订阅。")
+
+        logger.info(f"事件处理器 {handler_name} 已被完全移除。")
+        return True
+
+
     def subscribe_handler_to_event(self, handler_name: str, event_name: EventType | str) -> bool:
         """订阅事件处理器到指定事件
 
@@ -293,7 +333,13 @@ class EventManager:
         return {handler.handler_name: handler for handler in event.subscribers}
 
     async def trigger_event(
-        self, event_name: EventType | str, permission_group: str | None = "", **kwargs
+        self,
+        event_name: EventType | str,
+        permission_group: str | None = "",
+        *,
+        handler_timeout: float | None = None,
+        max_concurrency: int | None = None,
+        **kwargs,
     ) -> HandlerResultsCollection | None:
         """触发指定事件
 
@@ -326,9 +372,12 @@ class EventManager:
                 # 使用 create_task 异步执行，避免死锁
                 asyncio.create_task(self._scheduler_callback(event_name, params))
             except Exception as e:
-                logger.error(f"调用 scheduler 回调时出错: {e}", exc_info=True)
+                logger.error(f"调用 scheduler 回调时出错: {e}")
 
-        return await event.activate(params)
+        timeout = handler_timeout if handler_timeout is not None else self._default_handler_timeout
+        concurrency = max_concurrency if max_concurrency is not None else self._default_handler_concurrency
+
+        return await event.activate(params, handler_timeout=timeout, max_concurrency=concurrency)
 
     def register_scheduler_callback(self, callback) -> None:
         """注册 scheduler 回调函数
@@ -344,6 +393,35 @@ class EventManager:
         self._scheduler_callback = None
         logger.info("Scheduler 回调已取消注册")
 
+    def emit_event(
+        self,
+        event_name: EventType | str,
+        permission_group: str | None = "",
+        *,
+        handler_timeout: float | None = None,
+        max_concurrency: int | None = None,
+        **kwargs,
+    ) -> asyncio.Task[Any] | None:
+        """调度事件但不等待结果，返回后台任务对象"""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logger.warning(f"调度事件 {event_name} 失败：当前没有运行中的事件循环")
+            return None
+
+        task = loop.create_task(
+            self.trigger_event(
+                event_name,
+                permission_group=permission_group,
+                handler_timeout=handler_timeout,
+                max_concurrency=max_concurrency,
+                **kwargs,
+            ),
+            name=f"event::{event_name}",
+        )
+        self._track_background_task(task)
+        return task
+
     def init_default_events(self) -> None:
         """初始化默认事件"""
         default_events = [
@@ -355,6 +433,7 @@ class EventManager:
             EventType.AFTER_LLM,
             EventType.POST_SEND,
             EventType.AFTER_SEND,
+            EventType.ON_NOTICE_RECEIVED
         ]
 
         for event_name in default_events:
@@ -436,6 +515,19 @@ class EventManager:
 
         return processed_count
 
+
+    def _track_background_task(self, task: asyncio.Task[Any]) -> None:
+        """跟踪后台事件任务，避免被 GC 清理"""
+        self._background_tasks.add(task)
+
+        def _cleanup(fut: asyncio.Task[Any]) -> None:
+            self._background_tasks.discard(fut)
+
+        task.add_done_callback(_cleanup)
+
+    def get_background_task_count(self) -> int:
+        """返回当前仍在运行的后台事件任务数量"""
+        return len(self._background_tasks)
 
 # 创建全局事件管理器实例
 event_manager = EventManager()

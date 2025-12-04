@@ -296,8 +296,10 @@ class DatabaseManager:
             # 使用线程执行器运行潜在的阻塞操作
             await initialize_sql_database()
             elapsed_time = time.time() - start_time
+
+            db_type = global_config.database.database_type if global_config else "unknown"
             logger.info(
-                f"数据库连接初始化成功，使用 {global_config.database.database_type} 数据库，耗时: {elapsed_time:.2f}秒"
+                f"数据库连接初始化成功，使用 {db_type} 数据库，耗时: {elapsed_time:.2f}秒"
             )
 
             return self
@@ -320,6 +322,10 @@ class ConfigurationValidator:
         """验证关键配置"""
         try:
             from src.config.config import global_config
+
+            if global_config is None:
+                logger.error("全局配置未初始化")
+                return False
 
             # 检查必要的配置节
             required_sections = ["database", "bot"]
@@ -602,10 +608,9 @@ class MaiBotMain:
 async def wait_for_user_input():
     """等待用户输入（异步方式）"""
     try:
-        # 在非生产环境下，使用异步方式等待输入
         if os.getenv("ENVIRONMENT") != "production":
             logger.info("程序执行完成，按 Ctrl+C 退出...")
-            # 使用 Event 替代 sleep 循环，避免阻塞事件循环
+            # 使用 asyncio.Event 而不是 sleep 循环
             shutdown_event = asyncio.Event()
             await shutdown_event.wait()
     except KeyboardInterrupt:
@@ -614,6 +619,7 @@ async def wait_for_user_input():
     except Exception as e:
         logger.error(f"等待用户输入时发生错误: {e}")
         return False
+
 
 
 async def main_async():
@@ -646,7 +652,7 @@ async def main_async():
             user_input_done = asyncio.create_task(wait_for_user_input())
 
             # 使用wait等待任意一个任务完成
-            done, pending = await asyncio.wait([main_task, user_input_done], return_when=asyncio.FIRST_COMPLETED)
+            done, _pending = await asyncio.wait([main_task, user_input_done], return_when=asyncio.FIRST_COMPLETED)
 
             # 如果用户输入任务完成（用户按了Ctrl+C），取消主任务
             if user_input_done in done and main_task not in done:

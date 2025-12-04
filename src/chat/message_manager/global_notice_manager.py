@@ -66,7 +66,7 @@ class GlobalNoticeManager:
         self._last_cleanup_time = time.time()
 
         # 统计信息
-        self.stats = {
+        self.stats: dict[str, Any] = {
             "total_notices": 0,
             "public_notices": 0,
             "stream_notices": 0,
@@ -228,7 +228,7 @@ class GlobalNoticeManager:
             return result
 
         except Exception as e:
-            logger.error(f"获取notice文本失败: {e}", exc_info=True)
+            logger.error(f"获取notice文本失败: {e}")
             return ""
 
     def clear_notices(self, stream_id: str | None = None, notice_type: str | None = None) -> int:

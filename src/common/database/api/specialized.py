@@ -104,7 +104,7 @@ async def store_action_info(
             return None
 
     except Exception as e:
-        logger.error(f"存储动作信息时发生错误: {e}", exc_info=True)
+        logger.error(f"存储动作信息时发生错误: {e}")
         return None
 
 
@@ -122,7 +122,7 @@ async def get_recent_actions(
         动作记录列表
     """
     query = QueryBuilder(ActionRecords)
-    return await query.filter(chat_id=chat_id).order_by("-time").limit(limit).all()
+    return await query.filter(chat_id=chat_id).order_by("-time").limit(limit).all()  # type: ignore
 
 
 # ===== Messages 业务API =====
@@ -148,7 +148,7 @@ async def get_chat_history(
         .limit(limit)
         .offset(offset)
         .all()
-    )
+    )  # type: ignore
 
 
 async def get_message_count(stream_id: str) -> int:
@@ -246,7 +246,7 @@ async def update_person_affinity(
         return True
 
     except Exception as e:
-        logger.error(f"更新好感度失败: {e}", exc_info=True)
+        logger.error(f"更新好感度失败: {e}")
         return False
 
 
@@ -292,7 +292,7 @@ async def get_active_streams(
     if platform:
         query = query.filter(platform=platform)
 
-    return await query.order_by("-last_message_time").limit(limit).all()
+    return await query.order_by("-last_message_time").limit(limit).all()  # type: ignore
 
 
 # ===== LLMUsage 业务API =====
@@ -390,7 +390,7 @@ async def get_usage_statistics(
     # 聚合统计
     total_input = await query.sum("input_tokens")
     total_output = await query.sum("output_tokens")
-    total_count = await query.filter().count() if hasattr(query, "count") else 0
+    total_count = await getattr(query.filter(), "count")() if hasattr(query, "count") else 0
 
     return {
         "total_input_tokens": int(total_input),
@@ -401,26 +401,21 @@ async def get_usage_statistics(
 
 
 # ===== UserRelationships 业务API =====
-@cached(ttl=600, key_prefix="user_relationship")  # 缓存10分钟
+# 注意：这个函数不使用缓存，因为用户画像工具会频繁更新，需要实时读取最新数据
 async def get_user_relationship(
-    platform: str,
     user_id: str,
-    target_id: str,
+    **_kwargs,  # 兼容旧调用，忽略platform和target_id
 ) -> UserRelationships | None:
     """获取用户关系
 
     Args:
-        platform: 平台
         user_id: 用户ID
-        target_id: 目标用户ID
 
     Returns:
         用户关系实例
     """
     return await _user_relationships_crud.get_by(
-        platform=platform,
         user_id=user_id,
-        target_id=target_id,
     )
 
 
@@ -480,5 +475,5 @@ async def update_relationship_affinity(
         return True
 
     except Exception as e:
-        logger.error(f"更新关系好感度失败: {e}", exc_info=True)
+        logger.error(f"更新关系好感度失败: {e}")
         return False

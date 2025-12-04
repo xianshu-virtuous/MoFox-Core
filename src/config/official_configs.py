@@ -16,8 +16,10 @@ from src.config.config_base import ValidatedConfigBase
 class DatabaseConfig(ValidatedConfigBase):
     """数据库配置类"""
 
-    database_type: Literal["sqlite", "mysql"] = Field(default="sqlite", description="数据库类型")
+    database_type: Literal["sqlite", "mysql", "postgresql"] = Field(default="sqlite", description="数据库类型")
     sqlite_path: str = Field(default="data/MaiBot.db", description="SQLite数据库文件路径")
+
+    # MySQL 配置
     mysql_host: str = Field(default="localhost", description="MySQL服务器地址")
     mysql_port: int = Field(default=3306, ge=1, le=65535, description="MySQL服务器端口")
     mysql_database: str = Field(default="maibot", description="MySQL数据库名")
@@ -33,6 +35,22 @@ class DatabaseConfig(ValidatedConfigBase):
     mysql_ssl_key: str = Field(default="", description="SSL密钥路径")
     mysql_autocommit: bool = Field(default=True, description="自动提交事务")
     mysql_sql_mode: str = Field(default="TRADITIONAL", description="SQL模式")
+
+    # PostgreSQL 配置
+    postgresql_host: str = Field(default="localhost", description="PostgreSQL服务器地址")
+    postgresql_port: int = Field(default=5432, ge=1, le=65535, description="PostgreSQL服务器端口")
+    postgresql_database: str = Field(default="maibot", description="PostgreSQL数据库名")
+    postgresql_user: str = Field(default="postgres", description="PostgreSQL用户名")
+    postgresql_password: str = Field(default="", description="PostgreSQL密码")
+    postgresql_schema: str = Field(default="public", description="PostgreSQL模式名")
+    postgresql_ssl_mode: Literal["disable", "allow", "prefer", "require", "verify-ca", "verify-full"] = Field(
+        default="prefer", description="PostgreSQL SSL模式"
+    )
+    postgresql_ssl_ca: str = Field(default="", description="PostgreSQL SSL CA证书路径")
+    postgresql_ssl_cert: str = Field(default="", description="PostgreSQL SSL客户端证书路径")
+    postgresql_ssl_key: str = Field(default="", description="PostgreSQL SSL密钥路径")
+
+    # 通用连接池配置
     connection_pool_size: int = Field(default=10, ge=1, description="连接池大小")
     connection_timeout: int = Field(default=10, ge=1, description="连接超时时间")
 
@@ -116,6 +134,7 @@ class ChatConfig(ValidatedConfigBase):
     thinking_timeout: int = Field(default=40, description="思考超时时间")
     mentioned_bot_inevitable_reply: bool = Field(default=False, description="提到机器人的必然回复")
     at_bot_inevitable_reply: bool = Field(default=False, description="@机器人的必然回复")
+    private_chat_inevitable_reply: bool = Field(default=False, description="私聊必然回复")
     allow_reply_self: bool = Field(default=False, description="是否允许回复自己说的话")
     timestamp_display_mode: Literal["normal", "normal_no_YMD", "relative"] = Field(
         default="normal_no_YMD", description="时间戳显示模式"
@@ -269,6 +288,16 @@ class ToolConfig(ValidatedConfigBase):
     """工具配置类"""
 
     enable_tool: bool = Field(default=False, description="启用工具")
+    force_parallel_execution: bool = Field(
+        default=True,
+        description="����LLM����ͬʱ������Ҫʹ�ù�����ʱǿ��ʹ�ò���ģʽ��ֹ���������Ϣ",
+    )
+    max_parallel_invocations: int = Field(
+        default=5, ge=1, le=50, description="��ͬһ�������п��Խ������ܹ��ߵ�������"
+    )
+    tool_timeout: float = Field(
+        default=60.0, ge=1.0, le=600.0, description="�������ߵ��õĳ�ʱʱ�䣨�룩"
+    )
 
 
 class VoiceConfig(ValidatedConfigBase):
@@ -424,10 +453,8 @@ class MemoryConfig(ValidatedConfigBase):
     search_top_k: int = Field(default=10, description="默认检索返回数量")
     search_min_importance: float = Field(default=0.3, description="最小重要性阈值")
     search_similarity_threshold: float = Field(default=0.5, description="向量相似度阈值")
-    search_max_expand_depth: int = Field(default=2, description="检索时图扩展深度（0-3）")
-    search_expand_semantic_threshold: float = Field(default=0.3, description="图扩展时语义相似度阈值（建议0.3-0.5，过低可能引入无关记忆，过高无法扩展）")
     enable_query_optimization: bool = Field(default=True, description="启用查询优化")
-    
+
     # 路径扩展配置 (新算法)
     enable_path_expansion: bool = Field(default=False, description="启用路径评分扩展算法（实验性功能）")
     path_expansion_max_hops: int = Field(default=2, description="路径扩展最大跳数")
@@ -442,30 +469,6 @@ class MemoryConfig(ValidatedConfigBase):
     # 🆕 路径扩展 - 记忆去重配置
     enable_memory_deduplication: bool = Field(default=True, description="启用检索结果去重（合并相似记忆）")
     memory_deduplication_threshold: float = Field(default=0.85, description="记忆相似度阈值（0.85表示85%相似即合并）")
-
-    # 检索权重配置 (记忆图系统)
-    search_vector_weight: float = Field(default=0.4, description="向量相似度权重")
-    search_graph_distance_weight: float = Field(default=0.2, description="图距离权重")
-    search_importance_weight: float = Field(default=0.2, description="重要性权重")
-    search_recency_weight: float = Field(default=0.2, description="时效性权重")
-
-    # 记忆整合配置
-    consolidation_enabled: bool = Field(default=False, description="是否启用记忆整合")
-    consolidation_interval_hours: float = Field(default=2.0, description="整合任务执行间隔（小时）")
-    consolidation_deduplication_threshold: float = Field(default=0.93, description="相似记忆去重阈值")
-    consolidation_time_window_hours: float = Field(default=2.0, description="整合时间窗口（小时）- 统一用于去重和关联")
-    consolidation_max_batch_size: int = Field(default=30, description="单次最多处理的记忆数量")
-
-    # 记忆关联配置（整合功能的子模块）
-    consolidation_linking_enabled: bool = Field(default=True, description="是否启用记忆关联建立")
-    consolidation_linking_max_candidates: int = Field(default=10, description="每个记忆最多关联的候选数")
-    consolidation_linking_max_memories: int = Field(default=20, description="单次最多处理的记忆总数")
-    consolidation_linking_min_importance: float = Field(default=0.5, description="最低重要性阈值")
-    consolidation_linking_pre_filter_threshold: float = Field(default=0.7, description="向量相似度预筛选阈值")
-    consolidation_linking_max_pairs_for_llm: int = Field(default=5, description="最多发送给LLM分析的候选对数")
-    consolidation_linking_min_confidence: float = Field(default=0.7, description="LLM分析最低置信度阈值")
-    consolidation_linking_llm_temperature: float = Field(default=0.2, description="LLM分析温度参数")
-    consolidation_linking_llm_max_tokens: int = Field(default=1500, description="LLM分析最大输出长度")
 
     # 遗忘配置 (记忆图系统)
     forgetting_enabled: bool = Field(default=True, description="是否启用自动遗忘")
@@ -489,6 +492,25 @@ class MemoryConfig(ValidatedConfigBase):
     node_merger_similarity_threshold: float = Field(default=0.85, description="节点去重相似度阈值")
     node_merger_context_match_required: bool = Field(default=True, description="节点合并是否要求上下文匹配")
     node_merger_merge_batch_size: int = Field(default=50, description="节点合并批量处理大小")
+
+    # ==================== 三层记忆系统配置 (Three-Tier Memory System) ====================
+    # 感知记忆层配置
+    perceptual_max_blocks: int = Field(default=50, description="记忆堆最大容量（全局）")
+    perceptual_block_size: int = Field(default=5, description="每个记忆块包含的消息数量")
+    perceptual_similarity_threshold: float = Field(default=0.55, description="相似度阈值（0-1）")
+    perceptual_topk: int = Field(default=3, description="TopK召回数量")
+    perceptual_activation_threshold: int = Field(default=3, description="激活阈值（召回次数→短期）")
+
+    # 短期记忆层配置
+    short_term_max_memories: int = Field(default=30, description="短期记忆最大数量")
+    short_term_transfer_threshold: float = Field(default=0.6, description="转移到长期记忆的重要性阈值")
+    short_term_search_top_k: int = Field(default=5, description="搜索时返回的最大数量")
+    short_term_decay_factor: float = Field(default=0.98, description="衰减因子")
+
+    # 长期记忆层配置
+    long_term_batch_size: int = Field(default=10, description="批量转移大小")
+    long_term_decay_factor: float = Field(default=0.95, description="衰减因子")
+    long_term_auto_transfer_interval: int = Field(default=60, description="自动转移间隔（秒）")
 
 
 class MoodConfig(ValidatedConfigBase):
@@ -533,16 +555,6 @@ class CustomPromptConfig(ValidatedConfigBase):
     planner_custom_prompt_content: str = Field(default="", description="规划器自定义提示词内容")
 
 
-class AttentionOptimizationConfig(ValidatedConfigBase):
-    """注意力优化配置类 - 防止提示词过度相似导致LLM注意力退化"""
-
-    enable_noise: bool = Field(default=True, description="启用轻量级噪声注入（空白字符调整）")
-    enable_semantic_variants: bool = Field(default=False, description="启用语义变体替换（实验性功能）")
-    noise_strength: Literal["light", "medium", "heavy"] = Field(
-        default="light", description="噪声强度: light(轻量) | medium(中等) | heavy(强力)"
-    )
-
-
 class ResponsePostProcessConfig(ValidatedConfigBase):
     """回复后处理配置类"""
 
@@ -581,8 +593,18 @@ class ExperimentalConfig(ValidatedConfigBase):
     pfc_chatting: bool = Field(default=False, description="启用PFC聊天")
 
 
-class MaimMessageConfig(ValidatedConfigBase):
-    """maim_message配置类"""
+class MessageBusConfig(ValidatedConfigBase):
+    """mofox_wire 消息服务配置"""
+
+    use_custom: bool = Field(default=False, description="是否使用自定义地址")
+    host: str = Field(default="127.0.0.1", description="消息服务主机")
+    port: int = Field(default=8090, description="消息服务端口")
+    mode: Literal["ws", "tcp"] = Field(default="ws", description="传输模式")
+    use_wss: bool = Field(default=False, description="是否启用 WSS")
+    cert_file: str = Field(default="", description="证书文件路径")
+    key_file: str = Field(default="", description="密钥文件路径")
+    auth_token: list[str] = Field(default_factory=lambda: [], description="认证 token 列表")
+
 
     use_custom: bool = Field(default=False, description="启用自定义")
     host: str = Field(default="127.0.0.1", description="主机")
@@ -617,15 +639,15 @@ class PlanningSystemConfig(ValidatedConfigBase):
     """规划系统配置 (日程与月度计划)"""
 
     # --- 日程生成 (原 ScheduleConfig) ---
-    schedule_enable: bool = Field(True, description="是否启用每日日程生成功能")
-    schedule_guidelines: str = Field("", description="日程生成指导原则")
+    schedule_enable: bool = Field(default=True, description="是否启用每日日程生成功能")
+    schedule_guidelines: str = Field(default="", description="日程生成指导原则")
 
     # --- 月度计划 (原 MonthlyPlanSystemConfig) ---
-    monthly_plan_enable: bool = Field(True, description="是否启用月度计划系统")
-    monthly_plan_guidelines: str = Field("", description="月度计划生成指导原则")
-    max_plans_per_month: int = Field(10, description="每月最多生成的计划数量")
-    avoid_repetition_days: int = Field(7, description="避免在多少天内重复使用同一个月度计划")
-    completion_threshold: int = Field(3, description="一个月度计划被使用多少次后算作完成")
+    monthly_plan_enable: bool = Field(default=True, description="是否启用月度计划系统")
+    monthly_plan_guidelines: str = Field(default="", description="月度计划生成指导原则")
+    max_plans_per_month: int = Field(default=10, description="每月最多生成的计划数量")
+    avoid_repetition_days: int = Field(default=7, description="避免在多少天内重复使用同一个月度计划")
+    completion_threshold: int = Field(default=3, description="一个月度计划被使用多少次后算作完成")
 
 
 class DependencyManagementConfig(ValidatedConfigBase):
@@ -681,28 +703,6 @@ class WebSearchConfig(ValidatedConfigBase):
     search_strategy: Literal["fallback", "single", "parallel"] = Field(default="single", description="搜索策略")
 
 
-class ContextGroup(ValidatedConfigBase):
-    """
-    上下文共享组配置
-
-    定义了一个聊天上下文的共享范围和规则。
-    """
-
-    name: str = Field(..., description="共享组的名称，用于唯一标识一个共享组")
-    mode: Literal["whitelist", "blacklist"] = Field(
-        default="whitelist",
-        description="共享模式。'whitelist'表示仅共享chat_ids中列出的聊天；'blacklist'表示共享除chat_ids中列出的所有聊天。",
-    )
-    default_limit: int = Field(
-        default=5,
-        description="在'blacklist'模式下，对于未明确指定数量的聊天，默认获取的消息条数。",
-    )
-    chat_ids: list[list[str]] = Field(
-        ...,
-        description='定义组内成员的列表。格式为 [["type", "id", "limit"(可选)]]。type为"group"或"private"，id为群号或用户ID，limit为可选的消息条数。',
-    )
-
-
 class MaizoneContextGroup(ValidatedConfigBase):
     """QQ空间专用互通组配置"""
 
@@ -718,8 +718,6 @@ class CrossContextConfig(ValidatedConfigBase):
 
     enable: bool = Field(default=False, description="是否启用跨群聊上下文共享功能")
 
-    # --- Normal模式: 共享组配置 ---
-    groups: list[ContextGroup] = Field(default_factory=list, description="上下文共享组列表")
     # --- S4U模式: 用户中心上下文检索 ---
     s4u_mode: Literal["whitelist", "blacklist"] = Field(
         default="whitelist",
@@ -744,6 +742,29 @@ class CommandConfig(ValidatedConfigBase):
     """命令系统配置类"""
 
     command_prefixes: list[str] = Field(default_factory=lambda: ["/", "!", ".", "#"], description="支持的命令前缀列表")
+
+
+class PluginHttpSystemConfig(ValidatedConfigBase):
+    """插件http系统相关配置"""
+
+    enable_plugin_http_endpoints: bool = Field(
+        default=True, description="总开关，是否允许插件创建HTTP端点"
+    )
+    plugin_api_rate_limit_enable: bool = Field(
+        default=True, description="是否为插件API启用全局速率限制"
+    )
+    plugin_api_rate_limit_default: str = Field(
+        default="100/minute", description="插件API的默认速率限制策略"
+    )
+    plugin_api_valid_keys: list[str] = Field(
+        default_factory=list, description="��Ч��API��Կ�б������ڲ����֤"
+    )
+    event_handler_timeout: float = Field(
+        default=30.0, ge=1.0, le=300.0, description="�¼����������ִ�г�ʱʱ�䣨�룩"
+    )
+    event_handler_max_concurrency: int = Field(
+        default=20, ge=1, le=200, description="����ÿ���¼�ͬʱִ�е�������߸���0��ʾ����������"
+    )
 
 
 class MasterPromptConfig(ValidatedConfigBase):
@@ -867,3 +888,85 @@ class ProactiveThinkingConfig(ValidatedConfigBase):
     # --- 新增：调试与监控 ---
     enable_statistics: bool = Field(default=True, description="是否启用统计功能（记录触发次数、决策分布等）")
     log_decisions: bool = Field(default=False, description="是否记录每次决策的详细日志（用于调试）")
+
+
+class KokoroFlowChatterProactiveConfig(ValidatedConfigBase):
+    """
+    Kokoro Flow Chatter 主动思考子配置
+    
+    设计哲学：主动行为源于内部状态和外部环境的自然反应，而非机械的限制。
+    她的主动是因为挂念、因为关心、因为想问候，而不是因为"任务"。
+    """
+    enabled: bool = Field(default=True, description="是否启用KFC的私聊主动思考")
+    
+    # 1. 沉默触发器：当感到长久的沉默时，她可能会想说些什么
+    silence_threshold_seconds: int = Field(
+        default=7200, ge=60, le=86400,
+        description="用户沉默超过此时长（秒），可能触发主动思考（默认2小时）"
+    )
+    
+    # 2. 关系门槛：她不会对不熟悉的人过于主动
+    min_affinity_for_proactive: float = Field(
+        default=0.3, ge=0.0, le=1.0,
+        description="需要达到最低好感度，她才会开始主动关心"
+    )
+    
+    # 3. 频率呼吸：为了避免打扰，她的关心总是有间隔的
+    min_interval_between_proactive: int = Field(
+        default=1800, ge=0,
+        description="两次主动思考之间的最小间隔（秒，默认30分钟）"
+    )
+    
+    # 4. 自然问候：在特定的时间，她会像朋友一样送上问候
+    enable_morning_greeting: bool = Field(
+        default=True, description="是否启用早安问候 (例如: 8:00 - 9:00)"
+    )
+    enable_night_greeting: bool = Field(
+        default=True, description="是否启用晚安问候 (例如: 22:00 - 23:00)"
+    )
+    
+    # 5. 勿扰时段：在这段时间内不会主动发起对话
+    quiet_hours_start: str = Field(
+        default="23:00", description="勿扰时段开始时间，格式: HH:MM"
+    )
+    quiet_hours_end: str = Field(
+        default="07:00", description="勿扰时段结束时间，格式: HH:MM"
+    )
+    
+    # 6. 触发概率：每次检查时主动发起的概率
+    trigger_probability: float = Field(
+        default=0.3, ge=0.0, le=1.0,
+        description="主动思考触发概率（0.0~1.0），用于避免过于频繁打扰"
+    )
+
+
+class KokoroFlowChatterConfig(ValidatedConfigBase):
+    """
+    Kokoro Flow Chatter 配置类 - 私聊专用心流对话系统
+    
+    设计理念：KFC不是独立人格，它复用全局的人设、情感框架和回复模型，
+    只作为Bot核心人格在私聊中的一种特殊表现模式。
+    """
+
+    # --- 总开关 ---
+    enable: bool = Field(
+        default=True, 
+        description="开启后KFC将接管所有私聊消息；关闭后私聊消息将由AFC处理"
+    )
+
+    # --- 核心行为配置 ---
+    max_wait_seconds_default: int = Field(
+        default=300, ge=30, le=3600,
+        description="默认的最大等待秒数（AI发送消息后愿意等待用户回复的时间）"
+    )
+    enable_continuous_thinking: bool = Field(
+        default=True, 
+        description="是否在等待期间启用心理活动更新"
+    )
+
+    # --- 私聊专属主动思考配置 ---
+    proactive_thinking: KokoroFlowChatterProactiveConfig = Field(
+        default_factory=KokoroFlowChatterProactiveConfig,
+        description="私聊专属主动思考配置"
+    )
+

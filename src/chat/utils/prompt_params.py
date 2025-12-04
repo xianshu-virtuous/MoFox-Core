@@ -11,6 +11,8 @@ class PromptParameters:
 
     # 基础参数
     chat_id: str = ""
+    platform: str = ""
+    user_id: str = ""
     is_group_chat: bool = False
     sender: str = ""
     target: str = ""
@@ -27,7 +29,6 @@ class PromptParameters:
     enable_relation: bool = True
     enable_cross_context: bool = True
     enable_knowledge: bool = True
-    enable_attention_optimization: bool = True  # 注意力优化开关
 
     # 性能控制
     max_context_messages: int = 50
@@ -64,7 +65,7 @@ class PromptParameters:
     action_descriptions: str = ""
     notice_block: str = ""
     group_chat_reminder_block: str = ""
- 
+
     # 可用动作信息
     available_actions: dict[str, Any] | None = None
 

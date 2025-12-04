@@ -3,6 +3,7 @@ from typing import Any
 
 
 class BaseDataModel:
+    __slots__ = ()
     def deepcopy(self):
         return copy.deepcopy(self)
 

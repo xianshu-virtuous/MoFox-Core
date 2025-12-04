@@ -8,9 +8,6 @@ from typing import Any
 
 import numpy as np
 import rjieba
-from maim_message import UserInfo
-
-from src.chat.message_receive.chat_stream import get_chat_manager
 
 # MessageRecv 已被移除，现在使用 DatabaseMessages
 from src.common.logger import get_logger
@@ -18,8 +15,8 @@ from src.common.message_repository import count_messages, find_messages
 from src.config.config import global_config, model_config
 from src.llm_models.utils_model import LLMRequest
 from src.person_info.person_info import PersonInfoManager, get_person_info_manager
-
-from .typo_generator import ChineseTypoGenerator
+from src.common.data_models.database_data_model import DatabaseUserInfo
+from .typo_generator import get_typo_generator
 
 logger = get_logger("chat_utils")
 
@@ -52,6 +49,7 @@ def is_mentioned_bot_in_message(message) -> tuple[bool, float]:
         tuple[bool, float]: (是否提及, 提及类型)
         提及类型: 0=未提及, 1=弱提及（文本匹配）, 2=强提及（@/回复/私聊）
     """
+    assert global_config is not None
     nicknames = global_config.bot.alias_names
     mention_type = 0  # 0=未提及, 1=弱提及, 2=强提及
 
@@ -135,6 +133,7 @@ def is_mentioned_bot_in_message(message) -> tuple[bool, float]:
 
 async def get_embedding(text, request_type="embedding") -> list[float] | None:
     """获取文本的embedding向量"""
+    assert model_config is not None
     # 每次都创建新的LLMRequest实例以避免事件循环冲突
     llm = LLMRequest(model_set=model_config.model_task_config.embedding, request_type=request_type)
     try:
@@ -142,11 +141,12 @@ async def get_embedding(text, request_type="embedding") -> list[float] | None:
     except Exception as e:
         logger.error(f"获取embedding失败: {e!s}")
         embedding = None
-    return embedding
+    return embedding  # type: ignore
 
 
 async def get_recent_group_speaker(chat_stream_id: str, sender, limit: int = 12) -> list:
     # 获取当前群聊记录内发言的人
+    assert global_config is not None
     filter_query = {"chat_id": chat_stream_id}
     sort_order = [("time", -1)]
     recent_messages = await find_messages(message_filter=filter_query, sort=sort_order, limit=limit)
@@ -156,7 +156,7 @@ async def get_recent_group_speaker(chat_stream_id: str, sender, limit: int = 12)
 
     who_chat_in_group = []
     for msg_db_data in recent_messages:
-        user_info = UserInfo.from_dict(
+        user_info = DatabaseUserInfo.from_dict(
             {
                 "platform": msg_db_data["user_platform"],
                 "user_id": msg_db_data["user_id"],
@@ -403,11 +403,12 @@ def recover_quoted_content(sentences: list[str], placeholder_map: dict[str, str]
         recovered_sentences.append(sentence)
     return recovered_sentences
 
-
 def process_llm_response(text: str, enable_splitter: bool = True, enable_chinese_typo: bool = True) -> list[str]:
+    assert global_config is not None
     if not global_config.response_post_process.enable_response_post_process:
         return [text]
 
+    # --- 三层防护系统 ---
     # --- 三层防护系统 ---
     # 第一层：保护颜文字
     protected_text, kaomoji_mapping = protect_kaomoji(text) if global_config.response_splitter.enable_kaomoji_protection else (text, {})
@@ -442,7 +443,8 @@ def process_llm_response(text: str, enable_splitter: bool = True, enable_chinese
     #     logger.warning(f"回复过长 ({len(cleaned_text)} 字符)，返回默认回复")
     #     return ["懒得说"]
 
-    typo_generator = ChineseTypoGenerator(
+    # 🔧 内存优化：使用单例工厂函数，避免重复创建拼音字典
+    typo_generator = get_typo_generator(
         error_rate=global_config.chinese_typo.error_rate,
         min_freq=global_config.chinese_typo.min_freq,
         tone_error_rate=global_config.chinese_typo.tone_error_rate,
@@ -780,6 +782,7 @@ async def get_chat_type_and_target_info(chat_id: str) -> tuple[bool, dict | None
     chat_target_info = None
 
     try:
+        from src.chat.message_receive.chat_stream import get_chat_manager
         if chat_stream := await get_chat_manager().get_stream(chat_id):
             if chat_stream.group_info:
                 is_group_chat = True
@@ -841,7 +844,7 @@ async def get_chat_type_and_target_info(chat_id: str) -> tuple[bool, dict | None
         else:
             logger.warning(f"无法获取 chat_stream for {chat_id} in utils")
     except Exception as e:
-        logger.error(f"获取聊天类型和目标信息时出错 for {chat_id}: {e}", exc_info=True)
+        logger.error(f"获取聊天类型和目标信息时出错 for {chat_id}: {e}")
         # Keep defaults on error
 
     return is_group_chat, chat_target_info
@@ -954,6 +957,8 @@ def filter_system_format_content(content: str | None) -> str:
         last_bracket_index = cleaned_content.rfind("]")
         if last_bracket_index != -1:
             cleaned_content = cleaned_content[last_bracket_index + 1 :].strip()
+            # 专门清理 "，说：" 或 "说："
+            cleaned_content = re.sub(r"^(，|,)说：", "", cleaned_content).strip()
 
     # 在处理完回复格式后，再清理其他简单的格式
     # 新增：移除所有残余的 [...] 格式，例如 [at=...] 等

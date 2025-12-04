@@ -89,7 +89,7 @@ class InterestManager:
                     return False
 
             except Exception as e:
-                logger.error(f"注册兴趣值计算组件失败: {e}", exc_info=True)
+                logger.error(f"注册兴趣值计算组件失败: {e}")
                 return False
 
     async def calculate_interest(self, message: "DatabaseMessages", timeout: float = 2.0) -> InterestCalculationResult:
@@ -144,6 +144,15 @@ class InterestManager:
         start_time = time.time()
         self._total_calculations += 1
 
+        if not self._current_calculator:
+            return InterestCalculationResult(
+                success=False,
+                message_id=getattr(message, "message_id", ""),
+                interest_value=0.0,
+                error_message="没有可用的兴趣值计算组件",
+                calculation_time=time.time() - start_time,
+            )
+
         try:
             # 使用组件的安全执行方法
             result = await self._current_calculator._safe_execute(message)
@@ -159,7 +168,7 @@ class InterestManager:
 
         except Exception as e:
             self._failed_calculations += 1
-            logger.error(f"兴趣值计算异常: {e}", exc_info=True)
+            logger.error(f"兴趣值计算异常: {e}")
             return InterestCalculationResult(
                 success=False,
                 message_id=getattr(message, "message_id", ""),
@@ -185,7 +194,7 @@ class InterestManager:
                 # 任务被取消，退出循环
                 break
             except Exception as e:
-                logger.error(f"计算工作线程异常: {e}", exc_info=True)
+                logger.error(f"计算工作线程异常: {e}")
 
     def get_current_calculator(self) -> BaseInterestCalculator | None:
         """获取当前活跃的兴趣值计算组件"""

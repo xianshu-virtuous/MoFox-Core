@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.chat.planner_actions.action_manager import ChatterActionManager
 from src.common.logger import get_logger
@@ -18,6 +18,7 @@ class ChatterManager:
         self.action_manager = action_manager
         self.chatter_classes: dict[ChatType, list[type]] = {}
         self.instances: dict[str, BaseChatter] = {}
+        self._auto_registered = False
 
         # 管理器统计
         self.stats = {
@@ -40,6 +41,12 @@ class ChatterManager:
         except Exception as e:
             logger.warning(f"自动注册chatter组件时发生错误: {e}")
 
+    def _ensure_chatter_registry(self):
+        """确保聊天处理器注册表已初始化"""
+        if not self.chatter_classes and not self._auto_registered:
+            self._auto_register_from_component_registry()
+            self._auto_registered = True
+
     def register_chatter(self, chatter_class: type):
         """注册聊天处理器类"""
         for chat_type in chatter_class.chat_types:
@@ -50,11 +57,39 @@ class ChatterManager:
 
         self.stats["chatters_registered"] += 1
 
-    def get_chatter_class(self, chat_type: ChatType) -> type | None:
-        """获取指定聊天类型的聊天处理器类"""
-        if chat_type in self.chatter_classes:
-            return self.chatter_classes[chat_type][0]
+    def get_chatter_class_for_chat_type(self, chat_type: ChatType) -> type | None:
+        """
+        获取指定聊天类型的最佳聊天处理器类
+        
+        优先级规则：
+        1. 优先选择明确匹配当前聊天类型的 Chatter（如 PRIVATE 或 GROUP）
+        2. 如果没有精确匹配，才使用 ALL 类型的 Chatter
+        
+        Args:
+            chat_type: 聊天类型
+            
+        Returns:
+            最佳匹配的聊天处理器类，如果没有匹配则返回 None
+        """
+        # 1. 首先尝试精确匹配（排除 ALL 类型）
+        if chat_type != ChatType.ALL and chat_type in self.chatter_classes:
+            chatter_list = self.chatter_classes[chat_type]
+            if chatter_list:
+                logger.debug(f"找到精确匹配的聊天处理器: {chatter_list[0].__name__} for {chat_type.value}")
+                return chatter_list[0]
+        
+        # 2. 如果没有精确匹配，回退到 ALL 类型
+        if ChatType.ALL in self.chatter_classes:
+            chatter_list = self.chatter_classes[ChatType.ALL]
+            if chatter_list:
+                logger.debug(f"使用通用聊天处理器: {chatter_list[0].__name__} for {chat_type.value}")
+                return chatter_list[0]
+        
         return None
+
+    def get_chatter_class(self, chat_type: ChatType) -> type | None:
+        """获取指定聊天类型的聊天处理器类（兼容旧接口）"""
+        return self.get_chatter_class_for_chat_type(chat_type)
 
     def get_supported_chat_types(self) -> list[ChatType]:
         """获取支持的聊天类型列表"""
@@ -76,7 +111,7 @@ class ChatterManager:
         inactive_streams = []
         for stream_id, instance in self.instances.items():
             if hasattr(instance, "get_activity_time"):
-                activity_time = instance.get_activity_time()
+                activity_time = getattr(instance, "get_activity_time")()
                 if (current_time - activity_time) > max_inactive_seconds:
                     inactive_streams.append(stream_id)
 
@@ -84,73 +119,102 @@ class ChatterManager:
             del self.instances[stream_id]
             logger.info(f"清理不活跃聊天流实例: {stream_id}")
 
+    def _schedule_unread_cleanup(self, stream_id: str):
+        """异步清理未读消息计数"""
+        try:
+            from src.chat.message_manager.message_manager import message_manager
+        except Exception as import_error:
+            logger.error("加载 message_manager 失败", stream_id=stream_id, error=import_error)
+            return
+
+        async def _clear_unread():
+            try:
+                await message_manager.clear_stream_unread_messages(stream_id)
+                logger.debug("清理未读消息完成", stream_id=stream_id)
+            except Exception as clear_error:
+                logger.error("清理未读消息失败", stream_id=stream_id, error=clear_error)
+
+        try:
+            asyncio.create_task(_clear_unread(), name=f"clear-unread-{stream_id}")
+        except RuntimeError as runtime_error:
+            logger.error("schedule unread cleanup failed", stream_id=stream_id, error=runtime_error)
+
     async def process_stream_context(self, stream_id: str, context: "StreamContext") -> dict:
-        """处理流上下文"""
+        """
+        处理流上下文
+        
+        每个聊天流只能有一个活跃的 Chatter 组件。
+        选择优先级：明确指定聊天类型的 Chatter > ALL 类型的 Chatter
+        """
         chat_type = context.chat_type
-        logger.debug(f"处理流 {stream_id}，聊天类型: {chat_type.value}")
-        if not self.chatter_classes:
-            self._auto_register_from_component_registry()
+        chat_type_value = chat_type.value
+        logger.debug("处理流上下文", stream_id=stream_id, chat_type=chat_type_value)
 
-        # 获取适合该聊天类型的chatter
-        chatter_class = self.get_chatter_class(chat_type)
-        if not chatter_class:
-            # 如果没有找到精确匹配，尝试查找支持ALL类型的chatter
-            from src.plugin_system.base.component_types import ChatType
+        self._ensure_chatter_registry()
 
-            all_chatter_class = self.get_chatter_class(ChatType.ALL)
-            if all_chatter_class:
-                chatter_class = all_chatter_class
-                logger.info(f"流 {stream_id} 使用通用chatter (类型: {chat_type.value})")
-            else:
+        # 检查是否已有该流的 Chatter 实例
+        stream_instance = self.instances.get(stream_id)
+        
+        if stream_instance is None:
+            # 使用新的优先级选择逻辑获取最佳 Chatter 类
+            chatter_class = self.get_chatter_class_for_chat_type(chat_type)
+            
+            if not chatter_class:
                 raise ValueError(f"No chatter registered for chat type {chat_type}")
 
-        if stream_id not in self.instances:
-            self.instances[stream_id] = chatter_class(stream_id=stream_id, action_manager=self.action_manager)
-            logger.info(f"创建新的聊天流实例: {stream_id} 使用 {chatter_class.__name__} (类型: {chat_type.value})")
+            # 创建新实例
+            stream_instance = chatter_class(stream_id=stream_id, action_manager=self.action_manager)
+            self.instances[stream_id] = stream_instance
+            logger.info(
+                "创建聊天处理器实例",
+                stream_id=stream_id,
+                chatter_class=chatter_class.__name__,
+                chat_type=chat_type_value,
+            )
+        else:
+            # 已有实例，直接使用（每个流只有一个活跃的 Chatter）
+            logger.debug(
+                "使用已有聊天处理器实例",
+                stream_id=stream_id,
+                chatter_class=stream_instance.__class__.__name__,
+            )
 
         self.stats["streams_processed"] += 1
         try:
-            result = await self.instances[stream_id].execute(context)
-
-            # 检查执行结果是否真正成功
+            result = await stream_instance.execute(context)
             success = result.get("success", False)
 
             if success:
                 self.stats["successful_executions"] += 1
-
-                # 只有真正成功时才清空未读消息
-                try:
-                    from src.chat.message_manager.message_manager import message_manager
-                    await message_manager.clear_stream_unread_messages(stream_id)
-                    logger.debug(f"流 {stream_id} 处理成功，已清空未读消息")
-                except Exception as clear_e:
-                    logger.error(f"清除流 {stream_id} 未读消息时发生错误: {clear_e}")
+                self._schedule_unread_cleanup(stream_id)
             else:
                 self.stats["failed_executions"] += 1
-                logger.warning(f"流 {stream_id} 处理失败，不清空未读消息")
+                logger.warning("聊天处理器执行失败", stream_id=stream_id)
 
-            # 记录处理结果
             actions_count = result.get("actions_count", 0)
-            logger.debug(f"流 {stream_id} 处理完成: 成功={success}, 动作数={actions_count}")
+            logger.debug(
+                "聊天处理器执行完成",
+                stream_id=stream_id,
+                success=success,
+                actions_count=actions_count,
+            )
 
             return result
         except asyncio.CancelledError:
             self.stats["failed_executions"] += 1
-            logger.info(f"流 {stream_id} 处理被取消")
-            context.triggering_user_id = None  # 清除触发用户ID
-            # 确保清理 processing_message_id 以防止重复回复检测失效
+            logger.info("流处理被取消", stream_id=stream_id)
+            context.triggering_user_id = None
             context.processing_message_id = None
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.stats["failed_executions"] += 1
-            logger.error(f"处理流 {stream_id} 时发生错误: {e}")
-            context.triggering_user_id = None  # 清除触发用户ID
-            # 确保清理 processing_message_id
+            logger.error("处理流时出错", stream_id=stream_id, error=e)
+            context.triggering_user_id = None
             context.processing_message_id = None
             raise
         finally:
-            # 清除触发用户ID（所有情况下都需要）
             context.triggering_user_id = None
+
     def get_stats(self) -> dict[str, Any]:
         """获取管理器统计信息"""
         stats = self.stats.copy()

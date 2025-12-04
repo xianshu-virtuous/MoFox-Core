@@ -13,6 +13,7 @@ from src.common.database.api import (
 from src.common.database.api import (
     store_action_info as new_store_action_info,
 )
+from src.common.database.api.crud import _model_to_dict as _crud_model_to_dict
 from src.common.database.core.models import (
     ActionRecords,
     AntiInjectionStats,
@@ -122,22 +123,20 @@ async def build_filters(model_class, filters: dict[str, Any]):
     return conditions
 
 
-def _model_to_dict(instance) -> dict[str, Any]:
-    """将模型实例转换为字典
+def _model_to_dict(instance) -> dict[str, Any] | None:
+    """将数据库模型实例转换为字典（兼容旧API
 
     Args:
-        instance: 模型实例
+        instance: 数据库模型实例
 
     Returns:
         字典表示
     """
     if instance is None:
         return None
+    return _crud_model_to_dict(instance)
 
-    result = {}
-    for column in instance.__table__.columns:
-        result[column.name] = getattr(instance, column.name)
-    return result
+
 
 
 async def db_query(
@@ -211,11 +210,9 @@ async def db_query(
 
             # 执行查询
             if single_result:
-                result = await query_builder.first()
-                return _model_to_dict(result)
-            else:
-                results = await query_builder.all()
-                return [_model_to_dict(r) for r in results]
+                return await query_builder.first(as_dict=True)
+
+            return await query_builder.all(as_dict=True)
 
         elif query_type == "create":
             if not data:
@@ -241,7 +238,7 @@ async def db_query(
                 return None
 
             # 更新记录
-            updated = await crud.update(instance.id, data)
+            updated = await crud.update(instance.id, data)  # type: ignore
             return _model_to_dict(updated)
 
         elif query_type == "delete":
@@ -260,7 +257,7 @@ async def db_query(
                 return None
 
             # 删除记录
-            success = await crud.delete(instance.id)
+            success = await crud.delete(instance.id)  # type: ignore
             return {"deleted": success}
 
         elif query_type == "count":
@@ -275,7 +272,7 @@ async def db_query(
             return {"count": count}
 
     except Exception as e:
-        logger.error(f"数据库操作失败: {e}", exc_info=True)
+        logger.error(f"数据库操作失败: {e}")
         return None if single_result or query_type != "get" else []
 
 
@@ -311,7 +308,7 @@ async def db_save(
         return _model_to_dict(instance)
 
     except Exception as e:
-        logger.error(f"保存数据库记录出错: {e}", exc_info=True)
+        logger.error(f"保存数据库记录出错: {e}")
         return None
 
 

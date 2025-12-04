@@ -1,7 +1,11 @@
-from src.chat.message_receive.chat_stream import ChatStream, get_chat_manager
+from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.replyer.default_generator import DefaultReplyer
 from src.common.logger import get_logger
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.chat.message_receive.chat_stream import ChatStream
 logger = get_logger("ReplyerManager")
 
 
@@ -11,7 +15,7 @@ class ReplyerManager:
 
     async def get_replyer(
         self,
-        chat_stream: ChatStream | None = None,
+        chat_stream: "ChatStream | None" = None,
         chat_id: str | None = None,
         request_type: str = "replyer",
     ) -> DefaultReplyer | None:

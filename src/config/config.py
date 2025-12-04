@@ -1,4 +1,4 @@
-import os
+import os   
 import shutil
 import sys
 from datetime import datetime
@@ -13,7 +13,6 @@ from src.common.logger import get_logger
 from src.config.config_base import ValidatedConfigBase
 from src.config.official_configs import (
     AffinityFlowConfig,
-    AttentionOptimizationConfig,
     BotConfig,
     ChatConfig,
     ChineseTypoConfig,
@@ -26,8 +25,9 @@ from src.config.official_configs import (
     EmojiConfig,
     ExperimentalConfig,
     ExpressionConfig,
+    KokoroFlowChatterConfig,
     LPMMKnowledgeConfig,
-    MaimMessageConfig,
+    MessageBusConfig,
     MemoryConfig,
     MessageReceiveConfig,
     MoodConfig,
@@ -35,6 +35,7 @@ from src.config.official_configs import (
     PermissionConfig,
     PersonalityConfig,
     PlanningSystemConfig,
+    PluginHttpSystemConfig,
     ProactiveThinkingConfig,
     ReactionConfig,
     ResponsePostProcessConfig,
@@ -64,7 +65,12 @@ TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "template")
 
 # 考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
 # 对该字段的更新，请严格参照语义化版本规范：https://semver.org/lang/zh-CN/
-MMC_VERSION = "0.12.0"
+MMC_VERSION = "0.13.0"
+
+# 全局配置变量
+_CONFIG_INITIALIZED = False
+global_config: "Config | None" = None
+model_config: "APIAdapterConfig | None" = None
 
 
 def get_key_comment(toml_table, key):
@@ -171,7 +177,7 @@ def _remove_obsolete_keys(target: TOMLDocument | dict | Table, reference: TOMLDo
         if key not in reference:
             del target[key]
         elif isinstance(target.get(key), dict | Table) and isinstance(reference.get(key), dict | Table):
-            _remove_obsolete_keys(target[key], reference[key])
+            _remove_obsolete_keys(target[key], reference[key])  # type: ignore
 
 
 def _update_dict(target: TOMLDocument | dict | Table, source: TOMLDocument | dict):
@@ -184,6 +190,11 @@ def _update_dict(target: TOMLDocument | dict | Table, source: TOMLDocument | dic
         # 跳过version字段的更新
         if key == "version":
             continue
+
+        # 在合并 permission.master_users 时添加特别调试日志
+        if key == "permission" and isinstance(value, (dict, Table)) and "master_users" in value:
+            logger.info(f"【调试日志】在 _update_dict 中检测到 'permission' 表，其 'master_users' 的值为: {value['master_users']}")
+
 
         if key in target:
             # 键已存在，更新值
@@ -387,14 +398,12 @@ class Config(ValidatedConfigBase):
     response_post_process: ResponsePostProcessConfig = Field(..., description="响应后处理配置")
     response_splitter: ResponseSplitterConfig = Field(..., description="响应分割配置")
     experimental: ExperimentalConfig = Field(default_factory=lambda: ExperimentalConfig(), description="实验性功能配置")
-    maim_message: MaimMessageConfig = Field(..., description="Maim消息配置")
+    message_bus: MessageBusConfig = Field(..., description="消息总线配置")
     lpmm_knowledge: LPMMKnowledgeConfig = Field(..., description="LPMM知识配置")
     tool: ToolConfig = Field(..., description="工具配置")
     debug: DebugConfig = Field(..., description="调试配置")
     custom_prompt: CustomPromptConfig = Field(..., description="自定义提示配置")
-    attention_optimization: AttentionOptimizationConfig = Field(
-        default_factory=lambda: AttentionOptimizationConfig(), description="注意力优化配置"
-    )
+
     voice: VoiceConfig = Field(..., description="语音配置")
     permission: PermissionConfig = Field(..., description="权限配置")
     command: CommandConfig = Field(..., description="命令系统配置")
@@ -417,14 +426,20 @@ class Config(ValidatedConfigBase):
     proactive_thinking: ProactiveThinkingConfig = Field(
         default_factory=lambda: ProactiveThinkingConfig(), description="主动思考配置"
     )
+    kokoro_flow_chatter: KokoroFlowChatterConfig = Field(
+        default_factory=lambda: KokoroFlowChatterConfig(), description="心流对话系统配置（私聊专用）"
+    )
+    plugin_http_system: PluginHttpSystemConfig = Field(
+        default_factory=lambda: PluginHttpSystemConfig(), description="插件HTTP端点系统配置"
+    )
 
 
 class APIAdapterConfig(ValidatedConfigBase):
     """API Adapter配置类"""
 
-    models: list[ModelInfo] = Field(..., min_items=1, description="模型列表")
+    models: list[ModelInfo] = Field(..., min_length=1, description="模型列表")
     model_task_config: ModelTaskConfig = Field(..., description="模型任务配置")
-    api_providers: list[APIProvider] = Field(..., min_items=1, description="API提供商列表")
+    api_providers: list[APIProvider] = Field(..., min_length=1, description="API提供商列表")
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -496,6 +511,19 @@ def load_config(config_path: str) -> Config:
         logger.info("正在解析和验证配置文件...")
         config = Config.from_dict(config_data)
         logger.info("配置文件解析和验证完成")
+
+        # 【临时修复】在验证后，手动从原始数据重新加载 master_users
+        try:
+            # 先将 tomlkit 对象转换为纯 Python 字典
+            config_dict = config_data.unwrap()
+            if "permission" in config_dict and "master_users" in config_dict["permission"]:
+                raw_master_users = config_dict["permission"]["master_users"]
+                # 现在 raw_master_users 就是一个标准的 Python 列表了
+                config.permission.master_users = raw_master_users
+                logger.info(f"【临时修复】已手动将 master_users 设置为: {config.permission.master_users}")
+        except Exception as patch_exc:
+            logger.error(f"【临时修复】手动设置 master_users 失败: {patch_exc}")
+
         return config
     except Exception as e:
         logger.critical(f"配置文件解析失败: {e}")
@@ -527,12 +555,30 @@ def api_ada_load_config(config_path: str) -> APIAdapterConfig:
 
 
 # 获取配置文件路径
-logger.info(f"MaiCore当前版本: {MMC_VERSION}")
-update_config()
-update_model_config()
 
-logger.info("正在品鉴配置文件...")
-global_config = load_config(config_path=os.path.join(CONFIG_DIR, "bot_config.toml"))
-model_config = api_ada_load_config(config_path=os.path.join(CONFIG_DIR, "model_config.toml"))
+def initialize_configs_once() -> tuple[Config, APIAdapterConfig]:
+    """
+    初始化配置文件，只执行一次。
+    """
+    global _CONFIG_INITIALIZED, global_config, model_config
+
+    if _CONFIG_INITIALIZED and global_config and model_config:
+        logger.debug("config.py 初始化已执行，跳过重复运行")
+        return global_config, model_config
+
+    logger.info(f"MaiCore当前版本: {MMC_VERSION}")
+    update_config()
+    update_model_config()
+
+    logger.info("正在品鉴配置文件...")
+    global_config = load_config(config_path=os.path.join(CONFIG_DIR, "bot_config.toml"))
+    model_config = api_ada_load_config(config_path=os.path.join(CONFIG_DIR, "model_config.toml"))
+
+    _CONFIG_INITIALIZED = True
+    return global_config, model_config
+
+
+# 同一进程只执行一次初始化，避免重复生成或覆盖配置
+global_config, model_config = initialize_configs_once()
 
 logger.info("非常的新鲜，非常的美味！")

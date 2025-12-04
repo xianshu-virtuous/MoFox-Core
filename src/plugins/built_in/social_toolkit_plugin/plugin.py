@@ -61,7 +61,7 @@ class ReminderTask(AsyncTask):
             logger.info(f"执行提醒任务: 给 {self.target_user_name} 发送关于 '{self.event_details}' 的提醒")
 
             extra_info = f"现在是提醒时间，请你以一种符合你人设的、俏皮的方式提醒 {self.target_user_name}。\n提醒内容: {self.event_details}\n设置提醒的人: {self.creator_name}"
-            last_message = self.chat_stream.context_manager.context.get_last_message()
+            last_message = self.chat_stream.context.get_last_message()
             reply_message_dict = last_message.flatten() if last_message else None
             success, reply_set, _ = await generator_api.generate_reply(
                 chat_stream=self.chat_stream,
@@ -103,7 +103,7 @@ class ReminderTask(AsyncTask):
             logger.info(f"提醒任务 {self.task_name} 成功完成。")
 
         except Exception as e:
-            logger.error(f"执行提醒任务 {self.task_name} 时出错: {e}", exc_info=True)
+            logger.error(f"执行提醒任务 {self.task_name} 时出错: {e}")
 
 
 # =============================== Actions ===============================
@@ -140,14 +140,7 @@ class PokeAction(BaseAction):
 
     # === 基本信息（必须填写）===
     action_name = "poke_user"
-    action_description = """可以让你戳其他用户，为互动增添一份小小的乐趣。
-    判定条件：
-    1. **互动时机**: 这是一个有趣的互动方式，可以在想提醒某人，或者单纯想开个玩笑时使用。
-    2. **用户请求**: 当用户明确要求使用戳一戳时。
-    3. **上下文需求**: 当上下文明确需要你戳一个或多个人时。
-    4. **频率与情绪**: 如果最近已经戳过，或者感觉对方情绪不高，请避免使用，不要打扰到别人哦。
-
-    请根据上述规则，回答“是”或“否”。"""
+    action_description = "可以让你戳其他用户，为互动增添一份小小的乐趣。"
     activation_type = ActionActivationType.ALWAYS
     parallel_action = True
 
@@ -202,7 +195,7 @@ class PokeAction(BaseAction):
         for i in range(times):
             logger.info(f"正在向 {display_name} ({user_id}) 发送第 {i + 1}/{times} 次戳一戳...")
             await self.send_command(
-                "SEND_POKE", args=poke_args, display_message=f"戳了戳 {display_name} ({i + 1}/{times})"
+                "SEND_POKE", args=poke_args
             )
             # 添加一个延迟，避免因发送过快导致后续戳一戳失败
             await asyncio.sleep(1.5)
@@ -251,6 +244,14 @@ class SetEmojiLikeAction(BaseAction):
 
     async def execute(self) -> tuple[bool, str]:
         """执行设置表情回应的动作"""
+        # 检查是否在群聊中，该动作仅在群聊中有效
+        if not self.is_group:
+            logger.warning("set_emoji_like 动作仅在群聊中有效，当前为私聊场景")
+            await self.store_action_info(
+                action_prompt_display="贴表情失败: 该功能仅在群聊中可用", action_done=False
+            )
+            return False, "该功能仅在群聊中可用"
+
         message_id = None
         set_like = self.action_data.get("set", True)
 
@@ -347,7 +348,7 @@ class SetEmojiLikeAction(BaseAction):
                 return False, "设置表情回应失败"
 
         except Exception as e:
-            logger.error(f"设置表情回应时发生异常: {e}", exc_info=True)
+            logger.error(f"设置表情回应时发生异常: {e}")
             await self.store_action_info(action_prompt_display=f"贴表情失败: {e}", action_done=False)
             return False, f"设置表情回应失败: {e}"
 
@@ -438,7 +439,7 @@ class RemindAction(BaseAction):
                 target_time = parse_datetime(converted_time_str, fuzzy=False)
 
         except Exception as e:
-            logger.error(f"[ReminderPlugin] 无法解析或转换时间字符串 '{remind_time_str}': {e}", exc_info=True)
+            logger.error(f"[ReminderPlugin] 无法解析或转换时间字符串 '{remind_time_str}': {e}")
             await self.send_text(f"抱歉，我无法理解您说的时间 '{remind_time_str}'，提醒设置失败。")
             return False, f"无法解析时间 '{remind_time_str}'"
 
@@ -523,7 +524,7 @@ class RemindAction(BaseAction):
 
             # 4. 生成并发送确认消息
             extra_info = f"你已经成功设置了一个提醒，请以一种符合你人设的、俏皮的方式回复用户。\n提醒时间: {target_time.strftime('%Y-%m-%d %H:%M:%S')}\n提醒对象: {user_name_to_remind}\n提醒内容: {event_details}"
-            last_message = self.chat_stream.context_manager.context.get_last_message()
+            last_message = self.chat_stream.context.get_last_message()
             reply_message_dict = last_message.flatten() if last_message else None
             success, reply_set, _ = await generator_api.generate_reply(
                 chat_stream=self.chat_stream,
@@ -541,7 +542,7 @@ class RemindAction(BaseAction):
 
             return True, "提醒设置成功"
         except Exception as e:
-            logger.error(f"[ReminderPlugin] 创建提醒任务时出错: {e}", exc_info=True)
+            logger.error(f"[ReminderPlugin] 创建提醒任务时出错: {e}")
             await self.send_text("抱歉，设置提醒时发生了一点内部错误。")
             return False, "设置提醒时发生内部错误"
 

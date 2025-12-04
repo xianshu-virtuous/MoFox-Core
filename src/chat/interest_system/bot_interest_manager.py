@@ -5,7 +5,7 @@
 
 import traceback
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from sqlalchemy import select
@@ -44,8 +44,7 @@ class BotInterestManager:
     async def initialize(self, personality_description: str, personality_id: str = "default"):
         """初始化兴趣标签系统"""
         try:
-            logger.info("机器人兴趣系统开始初始化...")
-            logger.info(f"人设ID: {personality_id}, 描述长度: {len(personality_description)}")
+            logger.debug("机器人兴趣系统开始初始化...")
 
             # 初始化embedding模型
             await self._initialize_embedding_model()
@@ -62,8 +61,8 @@ class BotInterestManager:
             # 检查是否成功获取兴趣标签
             if self.current_interests and len(self.current_interests.get_active_tags()) > 0:
                 active_tags_count = len(self.current_interests.get_active_tags())
-                logger.info("机器人兴趣系统初始化完成！")
-                logger.info(f"当前已激活 {active_tags_count} 个兴趣标签, Embedding缓存 {len(self.embedding_cache)} 个")
+                logger.debug("机器人兴趣系统初始化完成！")
+                logger.debug(f"当前已激活 {active_tags_count} 个兴趣标签, Embedding缓存 {len(self.embedding_cache)} 个")
             else:
                 raise RuntimeError("未能成功加载或生成兴趣标签")
 
@@ -74,62 +73,42 @@ class BotInterestManager:
 
     async def _initialize_embedding_model(self):
         """初始化embedding模型"""
-        logger.info("🔧 正在配置embedding客户端...")
-
         # 使用项目配置的embedding模型
         from src.config.config import model_config
         from src.llm_models.utils_model import LLMRequest
 
-        logger.debug("✅ 成功导入embedding相关模块")
+        if model_config is None:
+            raise RuntimeError("Model config is not initialized")
 
         # 检查embedding配置是否存在
         if not hasattr(model_config.model_task_config, "embedding"):
             raise RuntimeError("❌ 未找到embedding模型配置")
 
-        logger.info("📋 找到embedding模型配置")
         self.embedding_config = model_config.model_task_config.embedding
 
-        if self.embedding_dimension:
-            logger.info(f"📐 配置的embedding维度: {self.embedding_dimension}")
-        else:
-            logger.info("📐 未在配置中检测到embedding维度，将根据首次返回的向量自动识别")
+        if not self.embedding_dimension:
+            logger.debug("未在配置中检测到embedding维度，将根据首次返回的向量自动识别")
 
         # 创建LLMRequest实例用于embedding
         self.embedding_request = LLMRequest(model_set=self.embedding_config, request_type="interest_embedding")
-        logger.info("✅ Embedding请求客户端初始化成功")
-        logger.info(f"🔗 客户端类型: {type(self.embedding_request).__name__}")
-
-        # 获取第一个embedding模型的ModelInfo
-        if hasattr(self.embedding_config, "model_list") and self.embedding_config.model_list:
-            first_model_name = self.embedding_config.model_list[0]
-            logger.info(f"🎯 使用embedding模型: {first_model_name}")
-        else:
-            logger.warning("⚠️  未找到embedding模型列表")
-
-        logger.info("✅ Embedding模型初始化完成")
 
     async def _load_or_generate_interests(self, personality_description: str, personality_id: str):
         """加载或生成兴趣标签"""
-        logger.info(f"📚 正在为 '{personality_id}' 加载或生成兴趣标签...")
 
         # 首先尝试从数据库加载
-        logger.info("尝试从数据库加载兴趣标签...")
         loaded_interests = await self._load_interests_from_database(personality_id)
 
         if loaded_interests:
             self.current_interests = loaded_interests
-            active_count = len(loaded_interests.get_active_tags())
-            logger.info(f"成功从数据库加载 {active_count} 个兴趣标签 (版本: {loaded_interests.version})")
+            active_count = len(loaded_interests.get_active_tags())        
             tags_info = [f"  - '{tag.tag_name}' (权重: {tag.weight:.2f})" for tag in loaded_interests.get_active_tags()]
             tags_str = "\n".join(tags_info)
-            logger.info(f"当前兴趣标签:\n{tags_str}")
 
             # 为加载的标签生成embedding（数据库不存储embedding，启动时动态生成）
-            logger.info("🧠 为加载的标签生成embedding向量...")
             await self._generate_embeddings_for_tags(loaded_interests)
         else:
             # 生成新的兴趣标签
-            logger.info("数据库中未找到兴趣标签，开始生成...")
+            logger.debug("数据库中未找到兴趣标签，开始生成...")
             generated_interests = await self._generate_interests_from_personality(
                 personality_description, personality_id
             )
@@ -137,15 +116,15 @@ class BotInterestManager:
             if generated_interests:
                 self.current_interests = generated_interests
                 active_count = len(generated_interests.get_active_tags())
-                logger.info(f"成功生成 {active_count} 个新兴趣标签。")
+                logger.debug(f"成功生成 {active_count} 个新兴趣标签。")
                 tags_info = [
                     f"  - '{tag.tag_name}' (权重: {tag.weight:.2f})" for tag in generated_interests.get_active_tags()
                 ]
                 tags_str = "\n".join(tags_info)
-                logger.info(f"当前兴趣标签:\n{tags_str}")
+                logger.debug(f"当前兴趣标签:\n{tags_str}")
 
                 # 保存到数据库
-                logger.info("正在保存至数据库...")
+                logger.debug("正在保存至数据库...")
                 await self._save_interests_to_database(generated_interests)
             else:
                 raise RuntimeError("❌ 兴趣标签生成失败")
@@ -155,15 +134,13 @@ class BotInterestManager:
     ) -> BotPersonalityInterests | None:
         """根据人设生成兴趣标签"""
         try:
-            logger.info("🎨 开始根据人设生成兴趣标签...")
-            logger.info(f"📝 人设长度: {len(personality_description)} 字符")
+            logger.debug("开始根据人设生成兴趣标签...")
 
             # 检查embedding客户端是否可用
             if not hasattr(self, "embedding_request"):
                 raise RuntimeError("❌ Embedding客户端未初始化，无法生成兴趣标签")
 
             # 构建提示词
-            logger.info("📝 构建LLM提示词...")
             prompt = f"""
 基于以下机器人人设描述，生成一套合适的兴趣标签：
 
@@ -218,13 +195,11 @@ class BotInterestManager:
 """
 
             # 调用LLM生成兴趣标签
-            logger.info("🤖 正在调用LLM生成兴趣标签...")
             response = await self._call_llm_for_interest_generation(prompt)
 
             if not response:
                 raise RuntimeError("❌ LLM未返回有效响应")
 
-            logger.info("✅ LLM响应成功，开始解析兴趣标签...")
             # 使用统一的 JSON 解析工具
             interests_data = extract_and_parse_json(response, strict=False)
             if not interests_data or not isinstance(interests_data, dict):
@@ -236,7 +211,7 @@ class BotInterestManager:
 
             # 解析生成的兴趣标签
             interests_list = interests_data.get("interests", [])
-            logger.info(f"📋 解析到 {len(interests_list)} 个兴趣标签")
+            logger.debug(f"📋 解析到 {len(interests_list)} 个兴趣标签")
 
             for i, tag_data in enumerate(interests_list):
                 tag_name = tag_data.get("name", f"标签_{i}")
@@ -259,10 +234,10 @@ class BotInterestManager:
                 bot_interests.interest_tags.append(tag)
 
             # 为所有标签生成embedding
-            logger.info("🧠 开始为兴趣标签生成embedding向量...")
+            logger.debug("开始为兴趣标签生成embedding向量...")
             await self._generate_embeddings_for_tags(bot_interests)
 
-            logger.info("✅ 兴趣标签生成完成")
+            logger.debug("兴趣标签生成完成")
             return bot_interests
 
         except Exception as e:
@@ -271,13 +246,20 @@ class BotInterestManager:
             raise
 
     async def _call_llm_for_interest_generation(self, prompt: str) -> str | None:
-        """调用LLM生成兴趣标签"""
+        """调用LLM生成兴趣标签
+        
+        注意：此方法会临时增加 API 超时时间，以确保初始化阶段的人设标签生成
+        不会因用户配置的较短超时而失败。
+        """
         try:
-            logger.info("🔧 配置LLM客户端...")
+            logger.debug("配置LLM客户端...")
 
             # 使用llm_api来处理请求
             from src.config.config import model_config
             from src.plugin_system.apis import llm_api
+
+            if model_config is None:
+                raise RuntimeError("Model config is not initialized")
 
             # 构建完整的提示词，明确要求只返回纯JSON
             full_prompt = f"""你是一个专业的机器人人设分析师，擅长根据人设描述生成合适的兴趣标签。
@@ -289,24 +271,44 @@ class BotInterestManager:
             # 使用replyer模型配置
             replyer_config = model_config.model_task_config.replyer
 
-            # 调用LLM API
-            logger.info("🚀 正在通过LLM API发送请求...")
-            success, response, reasoning_content, model_name = await llm_api.generate_with_model(
-                prompt=full_prompt,
-                model_config=replyer_config,
-                request_type="interest_generation",
-                temperature=0.7,
-                max_tokens=2000,
-            )
+            # 🔧 临时增加超时时间，避免初始化阶段因超时失败
+            # 人设标签生成需要较长时间（15-25个标签的JSON），使用更长的超时
+            INIT_TIMEOUT = 180  # 初始化阶段使用 180 秒超时
+            original_timeouts: dict[str, int] = {}
+            
+            try:
+                # 保存并修改所有相关模型的 API provider 超时设置
+                for model_name in replyer_config.model_list:
+                    try:
+                        model_info = model_config.get_model_info(model_name)
+                        provider = model_config.get_provider(model_info.api_provider)
+                        original_timeouts[provider.name] = provider.timeout
+                        if provider.timeout < INIT_TIMEOUT:
+                            logger.debug(f"⏱️ 临时增加 API provider '{provider.name}' 超时: {provider.timeout}s → {INIT_TIMEOUT}s")
+                            provider.timeout = INIT_TIMEOUT
+                    except Exception as e:
+                        logger.warning(f"⚠️ 无法修改模型 '{model_name}' 的超时设置: {e}")
+                
+                # 调用LLM API
+                success, response, reasoning_content, model_name = await llm_api.generate_with_model(
+                    prompt=full_prompt,
+                    model_config=replyer_config,
+                    request_type="interest_generation",
+                    temperature=0.7,
+                    max_tokens=2000,
+                )
+            finally:
+                # 🔧 恢复原始超时设置
+                for provider_name, original_timeout in original_timeouts.items():
+                    try:
+                        provider = model_config.get_provider(provider_name)
+                        if provider.timeout != original_timeout:
+                            logger.debug(f"⏱️ 恢复 API provider '{provider_name}' 超时: {provider.timeout}s → {original_timeout}s")
+                            provider.timeout = original_timeout
+                    except Exception as e:
+                        logger.warning(f"⚠️ 无法恢复 provider '{provider_name}' 的超时设置: {e}")
 
             if success and response:
-                logger.info(f"✅ LLM响应成功，模型: {model_name}, 响应长度: {len(response)} 字符")
-                logger.debug(
-                    f"📄 LLM响应内容: {response[:200]}..." if len(response) > 200 else f"📄 LLM响应内容: {response}"
-                )
-                if reasoning_content:
-                    logger.debug(f"🧠 推理内容: {reasoning_content[:100]}...")
-
                 # 直接返回原始响应，后续使用统一的 JSON 解析工具
                 return response
             else:
@@ -329,10 +331,7 @@ class BotInterestManager:
         # 尝试从文件加载缓存
         file_cache = await self._load_embedding_cache_from_file(interests.personality_id)
         if file_cache:
-            logger.info(f"📂 从文件加载 {len(file_cache)} 个embedding缓存")
             self.embedding_cache.update(file_cache)
-
-        logger.info(f"🧠 开始为 {total_tags} 个兴趣标签生成embedding向量...")
 
         memory_cached_count = 0
         file_cached_count = 0
@@ -352,8 +351,6 @@ class BotInterestManager:
             else:
                 # 动态生成新的embedding
                 embedding_text = tag.tag_name
-
-                logger.debug(f"   [{i}/{total_tags}] 🔄 正在为 '{tag.tag_name}' 动态生成embedding...")
                 embedding = await self._get_embedding(embedding_text)
 
                 if embedding:
@@ -371,18 +368,8 @@ class BotInterestManager:
         # 如果有新生成的embedding，保存到文件
         if generated_count > 0:
             await self._save_embedding_cache_to_file(interests.personality_id)
-            logger.info(f"💾 已将 {generated_count} 个新生成的embedding保存到缓存文件")
 
         interests.last_updated = datetime.now()
-        logger.info("=" * 50)
-        logger.info("✅ Embedding生成完成!")
-        logger.info(f"📊 总标签数: {total_tags}")
-        logger.info(f"� 文件缓存命中: {file_cached_count}")
-        logger.info(f"�💾 内存缓存命中: {memory_cached_count}")
-        logger.info(f"🆕 新生成: {generated_count}")
-        logger.info(f"❌ 失败: {failed_count}")
-        logger.info(f"🗃️  总缓存大小: {len(self.embedding_cache)}")
-        logger.info("=" * 50)
 
     async def _get_embedding(self, text: str) -> list[float]:
         """获取文本的embedding向量"""
@@ -391,19 +378,23 @@ class BotInterestManager:
 
         # 检查缓存
         if text in self.embedding_cache:
-            logger.debug(f"💾 使用缓存的embedding: '{text[:30]}...'")
             return self.embedding_cache[text]
 
         # 使用LLMRequest获取embedding
-        logger.debug(f"🔄 正在获取embedding: '{text[:30]}...'")
         if not self.embedding_request:
             raise RuntimeError("❌ Embedding客户端未初始化")
         embedding, model_name = await self.embedding_request.get_embedding(text)
 
         if embedding and len(embedding) > 0:
-            self.embedding_cache[text] = embedding
+            if isinstance(embedding[0], list):
+                # If it's a list of lists, take the first one (though get_embedding(str) should return list[float])
+                embedding = embedding[0]
+            
+            # Now we can safely cast to list[float] as we've handled the nested list case
+            embedding_float = cast(list[float], embedding)
+            self.embedding_cache[text] = embedding_float
 
-            current_dim = len(embedding)
+            current_dim = len(embedding_float)
             if self._detected_embedding_dimension is None:
                 self._detected_embedding_dimension = current_dim
                 if self.embedding_dimension and self.embedding_dimension != current_dim:
@@ -414,16 +405,13 @@ class BotInterestManager:
                     )
                 else:
                     self.embedding_dimension = current_dim
-                logger.info(f"📏 检测到embedding维度: {current_dim}")
             elif current_dim != self.embedding_dimension:
                 logger.warning(
                     "⚠️ 收到的embedding维度发生变化: 之前=%d, 当前=%d。请确认模型配置是否正确。",
                     self.embedding_dimension,
                     current_dim,
                 )
-
-            logger.debug(f"✅ Embedding获取成功，维度: {current_dim}, 模型: {model_name}")
-            return embedding
+            return embedding_float
         else:
             raise RuntimeError(f"❌ 返回的embedding为空: {embedding}")
 
@@ -435,12 +423,49 @@ class BotInterestManager:
         else:
             combined_text = message_text
 
-        logger.debug(f"🔄 正在为消息生成embedding，输入长度: {len(combined_text)}")
-
         # 生成embedding
         embedding = await self._get_embedding(combined_text)
-        logger.debug(f"✅ 消息embedding生成成功，维度: {len(embedding)}")
         return embedding
+
+    async def generate_embeddings_for_texts(
+        self, text_map: dict[str, str], batch_size: int = 16
+    ) -> dict[str, list[float]]:
+        """批量获取多段文本的embedding，供上层统一处理。"""
+        if not text_map:
+            return {}
+
+        if not self.embedding_request:
+            raise RuntimeError("Embedding客户端未初始化")
+
+        batch_size = max(1, batch_size)
+        keys = list(text_map.keys())
+        results: dict[str, list[float]] = {}
+
+        for start in range(0, len(keys), batch_size):
+            chunk_keys = keys[start : start + batch_size]
+            chunk_texts = [text_map[key] or "" for key in chunk_keys]
+
+            try:
+                chunk_embeddings, _ = await self.embedding_request.get_embedding(chunk_texts)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(f"批量获取embedding失败 (chunk {start // batch_size + 1}): {exc}")
+                continue
+
+            if isinstance(chunk_embeddings, list) and chunk_embeddings and isinstance(chunk_embeddings[0], list):
+                normalized = chunk_embeddings
+            elif isinstance(chunk_embeddings, list):
+                normalized = [chunk_embeddings]
+            else:
+                normalized = []
+
+            for idx_offset, message_id in enumerate(chunk_keys):
+                vector = normalized[idx_offset] if idx_offset < len(normalized) else []
+                if isinstance(vector, list) and vector and isinstance(vector[0], float):
+                     results[message_id] = cast(list[float], vector)
+                else:
+                     results[message_id] = []
+
+        return results
 
     async def _calculate_similarity_scores(
         self, result: InterestMatchResult, message_embedding: list[float], keywords: list[str]
@@ -473,7 +498,7 @@ class BotInterestManager:
             logger.error(f"❌ 计算相似度分数失败: {e}")
 
     async def calculate_interest_match(
-        self, message_text: str, keywords: list[str] | None = None
+        self, message_text: str, keywords: list[str] | None = None, message_embedding: list[float] | None = None
     ) -> InterestMatchResult:
         """计算消息与机器人兴趣的匹配度（优化版 - 标签扩展策略）
 
@@ -505,7 +530,8 @@ class BotInterestManager:
 
         # 生成消息的embedding
         logger.debug("正在生成消息 embedding...")
-        message_embedding = await self._get_embedding(message_text)
+        if not message_embedding:
+            message_embedding = await self._get_embedding(message_text)
         logger.debug(f"消息 embedding 生成成功, 维度: {len(message_embedding)}")
 
         # 计算与每个兴趣标签的相似度（使用扩展标签）
@@ -513,6 +539,9 @@ class BotInterestManager:
         high_similarity_count = 0
         medium_similarity_count = 0
         low_similarity_count = 0
+
+        if global_config is None:
+            raise RuntimeError("Global config is not initialized")
 
         # 分级相似度阈值 - 优化后可以提高阈值，因为匹配更准确了
         affinity_config = global_config.affinity_flow
@@ -730,6 +759,9 @@ class BotInterestManager:
     def _calculate_keyword_match_bonus(self, keywords: list[str], matched_tags: list[str]) -> dict[str, float]:
         """计算关键词直接匹配奖励"""
         if not keywords or not matched_tags:
+            return {}
+
+        if global_config is None:
             return {}
 
         affinity_config = global_config.affinity_flow
@@ -1031,7 +1063,10 @@ class BotInterestManager:
             # 验证缓存版本和embedding模型
             cache_version = cache_data.get("version", 1)
             cache_embedding_model = cache_data.get("embedding_model", "")
-            current_embedding_model = self.embedding_config.model_list[0] if hasattr(self.embedding_config, "model_list") else ""
+            
+            current_embedding_model = ""
+            if self.embedding_config and hasattr(self.embedding_config, "model_list") and self.embedding_config.model_list:
+                 current_embedding_model = self.embedding_config.model_list[0]
 
             if cache_embedding_model != current_embedding_model:
                 logger.warning(f"⚠️ Embedding模型已变更 ({cache_embedding_model} → {current_embedding_model})，忽略旧缓存")
@@ -1065,7 +1100,10 @@ class BotInterestManager:
             cache_file = cache_dir / f"{personality_id}_embeddings.json"
 
             # 准备缓存数据
-            current_embedding_model = self.embedding_config.model_list[0] if hasattr(self.embedding_config, "model_list") and self.embedding_config.model_list else ""
+            current_embedding_model = ""
+            if self.embedding_config and hasattr(self.embedding_config, "model_list") and self.embedding_config.model_list:
+                 current_embedding_model = self.embedding_config.model_list[0]
+
             cache_data = {
                 "version": 1,
                 "personality_id": personality_id,

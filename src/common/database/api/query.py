@@ -5,8 +5,10 @@
 - 聚合查询
 - 排序和分页
 - 关联查询
+- 流式迭代（内存优化）
 """
 
+from collections.abc import AsyncIterator
 from typing import Any, Generic, TypeVar
 
 from sqlalchemy import and_, asc, desc, func, or_, select
@@ -20,7 +22,7 @@ from src.common.logger import get_logger
 
 logger = get_logger("database.query")
 
-T = TypeVar("T", bound="Base")
+T = TypeVar("T", bound=Any)
 
 
 class QueryBuilder(Generic[T]):
@@ -183,11 +185,92 @@ class QueryBuilder(Generic[T]):
         self._use_cache = False
         return self
 
-    async def all(self) -> list[T]:
+    async def iter_batches(
+        self,
+        batch_size: int = 1000,
+        *,
+        as_dict: bool = True,
+    ) -> AsyncIterator[list[T] | list[dict[str, Any]]]:
+        """分批迭代获取结果（内存优化）
+
+        使用 LIMIT/OFFSET 分页策略，避免一次性加载全部数据到内存。
+        适用于大数据量的统计、导出等场景。
+
+        Args:
+            batch_size: 每批获取的记录数，默认1000
+            as_dict: 为True时返回字典格式
+
+        Yields:
+            每批的模型实例列表或字典列表
+
+        Example:
+            async for batch in query_builder.iter_batches(batch_size=500):
+                for record in batch:
+                    process(record)
+        """
+        offset = 0
+
+        while True:
+            # 构建带分页的查询
+            paginated_stmt = self._stmt.offset(offset).limit(batch_size)
+
+            async with get_db_session() as session:
+                result = await session.execute(paginated_stmt)
+                # .all() 已经返回 list，无需再包装
+                instances = result.scalars().all()
+
+                if not instances:
+                    # 没有更多数据
+                    break
+
+                # 在 session 内部转换为字典列表
+                instances_dicts = [_model_to_dict(inst) for inst in instances]
+
+                if as_dict:
+                    yield instances_dicts
+                else:
+                    yield [_dict_to_model(self.model, row) for row in instances_dicts]
+
+                # 如果返回的记录数小于 batch_size，说明已经是最后一批
+                if len(instances) < batch_size:
+                    break
+
+                offset += batch_size
+
+    async def iter_all(
+        self,
+        batch_size: int = 1000,
+        *,
+        as_dict: bool = True,
+    ) -> AsyncIterator[T | dict[str, Any]]:
+        """逐条迭代所有结果（内存优化）
+
+        内部使用分批获取，但对外提供逐条迭代的接口。
+        适用于需要逐条处理但数据量很大的场景。
+
+        Args:
+            batch_size: 内部分批大小，默认1000
+            as_dict: 为True时返回字典格式
+
+        Yields:
+            单个模型实例或字典
+
+        Example:
+            async for record in query_builder.iter_all():
+                process(record)
+        """
+        async for batch in self.iter_batches(batch_size=batch_size, as_dict=as_dict):
+            for item in batch:
+                yield item
+
+    async def all(self, *, as_dict: bool = False) -> list[T] | list[dict[str, Any]]:
         """获取所有结果
 
+        Args:
+            as_dict: 为True时返回字典格式
+
         Returns:
-            模型实例列表
+            模型实例列表或字典列表
         """
         cache_key = ":".join(self._cache_key_parts) + ":all"
 
@@ -196,28 +279,33 @@ class QueryBuilder(Generic[T]):
             cache = await get_cache()
             cached_dicts = await cache.get(cache_key)
             if cached_dicts is not None:
-                logger.debug(f"缓存命中: {cache_key}")
-                # 从字典列表恢复对象列表
-                return [_dict_to_model(self.model, d) for d in cached_dicts]
+                dict_rows = [dict(row) for row in cached_dicts]
+                if as_dict:
+                    return dict_rows
+                return [_dict_to_model(self.model, row) for row in dict_rows]
 
         # 从数据库查询
         async with get_db_session() as session:
             result = await session.execute(self._stmt)
             instances = list(result.scalars().all())
 
-            # ✅ 在 session 内部转换为字典列表，此时所有字段都可安全访问
+            # 在 session 内部转换为字典列表，此时所有字段都可安全访问
             instances_dicts = [_model_to_dict(inst) for inst in instances]
 
-            # 写入缓存
             if self._use_cache:
                 cache = await get_cache()
-                await cache.set(cache_key, instances_dicts)
+                cache_payload = [dict(row) for row in instances_dicts]
+                await cache.set(cache_key, cache_payload)
 
-            # 从字典列表重建对象列表返回（detached状态，所有字段已加载）
-            return [_dict_to_model(self.model, d) for d in instances_dicts]
+            if as_dict:
+                return instances_dicts
+            return [_dict_to_model(self.model, row) for row in instances_dicts]
 
-    async def first(self) -> T | None:
-        """获取第一个结果
+    async def first(self, *, as_dict: bool = False) -> T | dict[str, Any] | None:
+        """获取第一条结果
+
+        Args:
+            as_dict: 为True时返回字典格式
 
         Returns:
             模型实例或None
@@ -229,9 +317,10 @@ class QueryBuilder(Generic[T]):
             cache = await get_cache()
             cached_dict = await cache.get(cache_key)
             if cached_dict is not None:
-                logger.debug(f"缓存命中: {cache_key}")
-                # 从字典恢复对象
-                return _dict_to_model(self.model, cached_dict)
+                row = dict(cached_dict)
+                if as_dict:
+                    return row
+                return _dict_to_model(self.model, row)
 
         # 从数据库查询
         async with get_db_session() as session:
@@ -239,15 +328,16 @@ class QueryBuilder(Generic[T]):
             instance = result.scalars().first()
 
             if instance is not None:
-                # ✅ 在 session 内部转换为字典，此时所有字段都可安全访问
+                # 在 session 内部转换为字典，此时所有字段都可安全访问
                 instance_dict = _model_to_dict(instance)
 
                 # 写入缓存
                 if self._use_cache:
                     cache = await get_cache()
-                    await cache.set(cache_key, instance_dict)
+                    await cache.set(cache_key, dict(instance_dict))
 
-                # 从字典重建对象返回（detached状态，所有字段已加载）
+                if as_dict:
+                    return instance_dict
                 return _dict_to_model(self.model, instance_dict)
 
             return None
@@ -265,7 +355,6 @@ class QueryBuilder(Generic[T]):
             cache = await get_cache()
             cached = await cache.get(cache_key)
             if cached is not None:
-                logger.debug(f"缓存命中: {cache_key}")
                 return cached
 
         # 构建count查询
@@ -318,7 +407,7 @@ class QueryBuilder(Generic[T]):
 
         items = await self.all()
 
-        return items, total
+        return items, total  # type: ignore
 
 
 class AggregateQuery:

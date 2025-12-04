@@ -40,10 +40,11 @@ from .base import (
     ConfigField,
     EventHandlerInfo,
     EventType,
-    MaiMessages,
     PluginInfo,
+    AdapterInfo,
     # 新增的增强命令系统
     PlusCommand,
+    BaseRouterComponent,
     PythonDependency,
     ToolInfo,
     ToolParamType,
@@ -56,7 +57,7 @@ from .utils.dependency_manager import configure_dependency_manager, get_dependen
 
 __version__ = "2.0.0"
 
-__all__ = [
+__all__ = [  # noqa: RUF022
     "ActionActivationType",
     "ActionInfo",
     "BaseAction",
@@ -76,12 +77,11 @@ __all__ = [
     "ConfigField",
     "EventHandlerInfo",
     "EventType",
-    # 消息
-    "MaiMessages",
     # 工具函数
     "PluginInfo",
     # 增强命令系统
     "PlusCommand",
+    "BaseRouterComponent"
     "PythonDependency",
     "ToolInfo",
     "ToolParamType",
@@ -114,4 +114,4 @@ __all__ = [
     # "ManifestGenerator",
     # "validate_plugin_manifest",
     # "generate_plugin_manifest",
-]
+] # type: ignore

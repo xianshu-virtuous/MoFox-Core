@@ -19,7 +19,8 @@ import json5
 import orjson
 
 from src.common.logger import get_logger
-from src.plugin_system.apis import config_api, cross_context_api, person_api
+from src.plugin_system.apis import config_api, person_api
+from src.plugin_system.apis import cross_context_api
 
 from .content_service import ContentService
 from .cookie_service import CookieService
@@ -60,13 +61,32 @@ class QZoneService:
         self.processing_comments = set()
 
     # --- Public Methods (High-Level Business Logic) ---
+    async def _get_cross_context(self) -> str:
+        """获取并构建跨群聊上下文"""
+        context = ""
+        user_id = self.get_config("cross_context.user_id")
+
+        if user_id:
+            logger.info(f"检测到互通组用户ID: {user_id}，准备获取上下文...")
+            try:
+                context = await cross_context_api.build_cross_context_for_user(
+                    user_id=user_id,
+                    platform="QQ",  # 硬编码为QQ
+                    limit_per_stream=10,
+                    stream_limit=3,
+                )
+                if context:
+                    logger.info("成功获取到互通组上下文。")
+                else:
+                    logger.info("未获取到有效的互通组上下文。")
+            except Exception as e:
+                logger.error(f"获取互通组上下文时发生异常: {e}")
+        return context
 
     async def send_feed(self, topic: str, stream_id: str | None) -> dict[str, Any]:
         """发送一条说说"""
-        # --- 获取互通组上下文 ---
-        context = await self._get_intercom_context(stream_id) if stream_id else None
-
-        story = await self.content_service.generate_story(topic, context=context)
+        cross_context = await self._get_cross_context()
+        story = await self.content_service.generate_story(topic, context=cross_context)
         if not story:
             return {"success": False, "message": "生成说说内容失败"}
 
@@ -86,12 +106,13 @@ class QZoneService:
                 return {"success": True, "message": story}
             return {"success": False, "message": "发布说说至QQ空间失败"}
         except Exception as e:
-            logger.error(f"发布说说时发生异常: {e}", exc_info=True)
+            logger.error(f"发布说说时发生异常: {e}")
             return {"success": False, "message": f"发布说说异常: {e}"}
 
     async def send_feed_from_activity(self, activity: str) -> dict[str, Any]:
         """根据日程活动发送一条说说"""
-        story = await self.content_service.generate_story_from_activity(activity)
+        cross_context = await self._get_cross_context()
+        story = await self.content_service.generate_story_from_activity(activity, context=cross_context)
         if not story:
             return {"success": False, "message": "根据活动生成说说内容失败"}
 
@@ -112,7 +133,7 @@ class QZoneService:
                 return {"success": True, "message": story}
             return {"success": False, "message": "发布说说至QQ空间失败"}
         except Exception as e:
-            logger.error(f"根据活动发布说说时发生异常: {e}", exc_info=True)
+            logger.error(f"根据活动发布说说时发生异常: {e}")
             return {"success": False, "message": f"发布说说异常: {e}"}
 
     async def read_and_process_feeds(self, target_name: str, stream_id: str | None) -> dict[str, Any]:
@@ -213,8 +234,9 @@ class QZoneService:
                 return {"success": False, "message": error_msg}
             except Exception as e:
                 # 其他未知异常
-                logger.error(f"读取和处理说说时发生异常: {e}", exc_info=True)
+                logger.error(f"读取和处理说说时发生异常: {e}")
                 return {"success": False, "message": f"处理说说时出现异常: {e}"}
+        return {"success": False, "message": "读取和处理说说时发生未知错误，循环意外结束。"}
 
     async def monitor_feeds(self, stream_id: str | None = None):
         """监控并处理所有好友的动态，包括回复自己说说的评论"""
@@ -240,7 +262,7 @@ class QZoneService:
                                 await self._reply_to_own_feed_comments(feed, api_client)
                                 await asyncio.sleep(random.uniform(3, 5))
                     except Exception as e:
-                        logger.error(f"处理自己说说评论时发生异常: {e}", exc_info=True)
+                        logger.error(f"处理自己说说评论时发生异常: {e}")
 
                 # --- 第二步: 处理好友的动态 ---
                 friend_feeds = await api_client["monitor_list_feeds"](20)
@@ -296,17 +318,11 @@ class QZoneService:
 
             except Exception as e:
                 # 其他未知异常
-                logger.error(f"监控好友动态时发生异常: {e}", exc_info=True)
+                logger.error(f"监控好友动态时发生异常: {e}")
                 return
 
     # --- Internal Helper Methods ---
 
-    async def _get_intercom_context(self, stream_id: str) -> str | None:
-        """
-        获取互通组的聊天上下文。
-        """
-        # 实际的逻辑已迁移到 cross_context_api
-        return await cross_context_api.get_intercom_group_context("maizone_context_group")
 
     async def _reply_to_own_feed_comments(self, feed: dict, api_client: dict):
         """处理对自己说说的评论并进行回复"""
@@ -320,7 +336,6 @@ class QZoneService:
 
         # 1. 将评论分为用户评论和自己的回复
         user_comments = [c for c in comments if str(c.get("qq_account")) != str(qq_account)]
-        [c for c in comments if str(c.get("qq_account")) == str(qq_account)]
 
         if not user_comments:
             return
@@ -363,7 +378,7 @@ class QZoneService:
                 else:
                     logger.warning(f"生成回复内容失败，跳过回复'{nickname}'的评论")
             except Exception as e:
-                logger.error(f"回复'{nickname}'的评论时发生异常: {e}", exc_info=True)
+                logger.error(f"回复'{nickname}'的评论时发生异常: {e}")
             finally:
                 # 无论成功与否，都解除锁定
                 logger.debug(f"解锁评论: {comment_key}")
@@ -430,7 +445,7 @@ class QZoneService:
                     else:
                         logger.error(f"评论'{target_name}'的说说失败")
             except Exception as e:
-                logger.error(f"评论'{target_name}'的说说时发生异常: {e}", exc_info=True)
+                logger.error(f"评论'{target_name}'的说说时发生异常: {e}")
             finally:
                 logger.debug(f"解锁说说: {comment_key}")
                 if comment_key in self.processing_comments:
@@ -710,7 +725,7 @@ class QZoneService:
 
                 return bool(tid), tid
             except Exception as e:
-                logger.error(f"发布说说异常: {e}", exc_info=True)
+                logger.error(f"发布说说异常: {e}")
                 return False, ""
 
         def _image_to_base64(image_bytes: bytes) -> str:
@@ -830,7 +845,7 @@ class QZoneService:
                             return None
 
             except Exception as e:
-                logger.error(f"上传图片 {index + 1} 异常: {e}", exc_info=True)
+                logger.error(f"上传图片 {index + 1} 异常: {e}")
                 return None
 
         async def _list_feeds(t_qq: str, num: int) -> list[dict]:
@@ -952,7 +967,7 @@ class QZoneService:
                 raise
             except Exception as e:
                 # 其他异常（如网络错误、JSON解析错误等），记录后返回空列表
-                logger.error(f"获取说说列表失败: {e}", exc_info=True)
+                logger.error(f"获取说说列表失败: {e}")
                 return []
 
         async def _comment(t_qq: str, feed_id: str, text: str) -> bool:
@@ -986,7 +1001,7 @@ class QZoneService:
                     logger.warning(f"评论API响应无法解析为JSON，假定成功: {response_text[:200]}")
                     return True
             except Exception as e:
-                logger.error(f"评论说说异常: {e}", exc_info=True)
+                logger.error(f"评论说说异常: {e}")
                 return False
 
         async def _like(t_qq: str, feed_id: str) -> bool:
@@ -1022,7 +1037,7 @@ class QZoneService:
                     logger.warning(f"点赞API响应无法解析为JSON，假定成功: {response_text[:200]}")
                     return True
             except Exception as e:
-                logger.error(f"点赞说说异常: {e}", exc_info=True)
+                logger.error(f"点赞说说异常: {e}")
                 return False
 
         async def _reply(fid, host_qq, target_name, content, comment_tid):
@@ -1067,7 +1082,7 @@ class QZoneService:
                     logger.warning(f"回复API响应无法解析为JSON，假定成功: {response_text[:200]}")
                     return True
             except Exception as e:
-                logger.error(f"回复评论异常: {e}", exc_info=True)
+                logger.error(f"回复评论异常: {e}")
                 return False
 
         async def _monitor_list_feeds(num: int) -> list[dict]:
@@ -1232,7 +1247,7 @@ class QZoneService:
                 if "错误码: -3000" in str(e):
                     logger.warning("监控任务遇到Cookie失效错误，重新抛出异常以触发上层重试")
                     raise  # 重新抛出异常，让上层处理
-                logger.error(f"监控好友动态失败: {e}", exc_info=True)
+                logger.error(f"监控好友动态失败: {e}")
                 return []
 
         logger.info("[DEBUG] API客户端构造完成，返回包含6个方法的字典")

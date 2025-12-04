@@ -33,12 +33,24 @@ class PluginManager:
 
         self.loaded_plugins: dict[str, PluginBase] = {}  # 已加载的插件类实例注册表，插件名 -> 插件类实例
         self.failed_plugins: dict[str, str] = {}  # 记录加载失败的插件文件及其错误信息，插件名 -> 错误信息
+        
+        # 核心消息接收器（由主程序设置）
+        self._core_sink: Optional[Any] = None
 
         # 确保插件目录存在
         self._ensure_plugin_directories()
         logger.info("插件管理器初始化完成")
 
     # === 插件目录管理 ===
+
+    def set_core_sink(self, core_sink: Any) -> None:
+        """设置核心消息接收器
+        
+        Args:
+            core_sink: 核心消息接收器实例（InProcessCoreSink）
+        """
+        self._core_sink = core_sink
+        logger.info("已设置核心消息接收器")
 
     def add_plugin_directory(self, directory: str) -> bool:
         """添加插件目录"""
@@ -109,7 +121,7 @@ class PluginManager:
 
             if not module or not hasattr(module, "__plugin_meta__"):
                 self.failed_plugins[plugin_name] = "插件模块中缺少 __plugin_meta__"
-                logger.error(f"❌ 插件加载失败: {plugin_name} - 缺少 __plugin_meta__")
+                logger.error(f" 插件加载失败: {plugin_name} - 缺少 __plugin_meta__")
                 return False, 1
 
             metadata: PluginMetadata = getattr(module, "__plugin_meta__")
@@ -151,10 +163,15 @@ class PluginManager:
                     except Exception as e:
                         logger.error(f"调用插件 '{plugin_name}' 的 on_plugin_loaded 钩子时出错: {e}")
 
+                # 检查并注册适配器组件
+                task = asyncio.create_task(self._register_adapter_components(plugin_name, plugin_instance))
+                _background_tasks.add(task)
+                task.add_done_callback(_background_tasks.discard)
+
                 return True, 1
             else:
                 self.failed_plugins[plugin_name] = "插件注册失败"
-                logger.error(f"❌ 插件注册失败: {plugin_name}")
+                logger.error(f" 插件注册失败: {plugin_name}")
                 return False, 1
 
         except Exception as e:
@@ -162,8 +179,66 @@ class PluginManager:
             error_msg = f"未知错误: {e!s}"
             self.failed_plugins[plugin_name] = error_msg
             logger.error(f"❌ 插件加载失败: {plugin_name} - {error_msg}")
-            logger.debug("详细错误信息: ", exc_info=True)
+            logger.debug("详细错误信息: ")
             return False, 1
+
+    async def _register_adapter_components(self, plugin_name: str, plugin_instance: PluginBase) -> None:
+        """注册适配器组件
+        
+        Args:
+            plugin_name: 插件名称
+            plugin_instance: 插件实例
+        """
+        try:
+            from src.plugin_system.base.component_types import AdapterInfo, ComponentType
+            from src.plugin_system.core.adapter_manager import get_adapter_manager
+            from src.plugin_system.core.component_registry import component_registry
+            
+            # 获取所有 ADAPTER 类型的组件
+            plugin_info = plugin_instance.plugin_info
+            adapter_components = [
+                comp for comp in plugin_info.components 
+                if comp.component_type == ComponentType.ADAPTER
+            ]
+            
+            if not adapter_components:
+                return
+            
+            adapter_manager = get_adapter_manager()
+            
+            for comp_info in adapter_components:
+                # 类型检查：确保是 AdapterInfo
+                if not isinstance(comp_info, AdapterInfo):
+                    logger.warning(f"组件 {comp_info.name} 不是 AdapterInfo 类型")
+                    continue
+                
+                try:
+                    # 从组件注册表获取适配器类
+                    adapter_class = component_registry.get_component_class(
+                        comp_info.name, 
+                        ComponentType.ADAPTER
+                    )
+                    
+                    if not adapter_class:
+                        logger.warning(f"无法找到适配器组件类: {comp_info.name}")
+                        continue
+                    
+                    # 创建适配器实例，传入 core_sink 和 plugin
+                    # 注册到适配器管理器，由管理器统一在运行时创建实例
+                    adapter_manager.register_adapter(adapter_class, plugin_instance)  # type: ignore
+                    logger.info(
+                        f"插件 '{plugin_name}' 注册了适配器组件: {comp_info.name} "
+                        f"(平台: {comp_info.platform})"
+                    )
+                    
+                except Exception as e:
+                    logger.error(
+                        f"注册插件 '{plugin_name}' 的适配器组件 '{comp_info.name}' 时出错: {e}",
+                        exc_info=True
+                    )
+        
+        except Exception as e:
+            logger.error(f"处理插件 '{plugin_name}' 的适配器组件时出错: {e}")
 
     async def remove_registered_plugin(self, plugin_name: str) -> bool:
         """
@@ -174,13 +249,11 @@ class PluginManager:
         if plugin_name not in self.loaded_plugins:
             logger.warning(f"插件 {plugin_name} 未加载")
             return False
-        plugin_instance = self.loaded_plugins[plugin_name]
-        plugin_info = plugin_instance.plugin_info
-        success = True
-        for component in plugin_info.components:
-            success &= await component_registry.remove_component(component.name, component.component_type, plugin_name)
-        success &= component_registry.remove_plugin_registry(plugin_name)
-        del self.loaded_plugins[plugin_name]
+        # 调用 component_registry 中统一的卸载方法
+        success = await component_registry.unregister_plugin(plugin_name)
+        if success:
+            # 从已加载插件中移除
+            del self.loaded_plugins[plugin_name]
         return success
 
     async def reload_registered_plugin(self, plugin_name: str) -> bool:
@@ -342,14 +415,14 @@ class PluginManager:
                             if not success:
                                 error_msg = f"Python依赖检查失败: {', '.join(errors)}"
                                 self.failed_plugins[plugin_name] = error_msg
-                                logger.error(f"❌ 插件加载失败: {plugin_name} - {error_msg}")
+                                logger.error(f" 插件加载失败: {plugin_name} - {error_msg}")
                                 return None  # 依赖检查失败，不加载该模块
 
                         # 2. 检查插件依赖
                         if not self._check_plugin_dependencies(metadata):
                             error_msg = f"插件依赖检查失败: 请确保依赖 {metadata.dependencies} 已正确安装并加载。"
                             self.failed_plugins[plugin_name] = error_msg
-                            logger.error(f"❌ 插件加载失败: {plugin_name} - {error_msg}")
+                            logger.error(f" 插件加载失败: {plugin_name} - {error_msg}")
                             return None  # 插件依赖检查失败
 
                     # --- 依赖检查逻辑结束 ---
@@ -405,13 +478,15 @@ class PluginManager:
         plus_command_count = stats.get("plus_command_components", 0)
         chatter_count = stats.get("chatter_components", 0)
         prompt_count = stats.get("prompt_components", 0)
+        router_count = stats.get("router_components", 0)
+        adapter_count = stats.get("adapter_components", 0)
         total_components = stats.get("total_components", 0)
 
         # 📋 显示插件加载总览
         if total_registered > 0:
-            logger.info("🎉 插件系统加载完成!")
+            logger.info(" 插件系统加载完成!")
             logger.info(
-                f"📊 总览: {total_registered}个插件, {total_components}个组件 (Action: {action_count}, Command: {command_count}, Tool: {tool_count}, PlusCommand: {plus_command_count}, EventHandler: {event_handler_count}, Chatter: {chatter_count}, Prompt: {prompt_count})"
+                f"📊 总览: {total_registered}个插件, {total_components}个组件 (Action: {action_count}, Command: {command_count}, Tool: {tool_count}, PlusCommand: {plus_command_count}, EventHandler: {event_handler_count}, Chatter: {chatter_count}, Prompt: {prompt_count}, Router: {router_count}, Adapter: {adapter_count})"
             )
 
             # 显示详细的插件列表
@@ -452,6 +527,12 @@ class PluginManager:
                         prompt_components = [
                             c for c in plugin_info.components if c.component_type == ComponentType.PROMPT
                         ]
+                        router_components = [
+                            c for c in plugin_info.components if c.component_type == ComponentType.ROUTER
+                        ]
+                        adapter_components = [
+                            c for c in plugin_info.components if c.component_type == ComponentType.ADAPTER
+                        ]
 
                         if action_components:
                             action_details = [format_component(c) for c in action_components]
@@ -478,6 +559,12 @@ class PluginManager:
                         if prompt_components:
                             prompt_details = [format_component(c) for c in prompt_components]
                             logger.info(f"    📝 Prompt组件: {', '.join(prompt_details)}")
+                        if router_components:
+                            router_details = [format_component(c) for c in router_components]
+                            logger.info(f"    🌐 Router组件: {', '.join(router_details)}")
+                        if adapter_components:
+                            adapter_details = [format_component(c) for c in adapter_components]
+                            logger.info(f"    🔌 Adapter组件: {', '.join(adapter_details)}")
 
                     # 权限节点信息
                     if plugin_instance := self.loaded_plugins.get(plugin_name):
@@ -579,15 +666,21 @@ class PluginManager:
 
             # 从组件注册表中移除插件的所有组件
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    fut = asyncio.run_coroutine_threadsafe(component_registry.unregister_plugin(plugin_name), loop)
-                    fut.result(timeout=5)
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+
+                if loop and loop.is_running():
+                    # 如果在运行的事件循环中，直接创建任务，不等待结果以避免死锁
+                    # 注意：这意味着我们无法确切知道卸载是否成功完成，但避免了阻塞
+                    logger.warning(f"unload_plugin 在异步上下文中被调用 ({plugin_name})，将异步执行组件卸载。建议使用 remove_registered_plugin。")
+                    loop.create_task(component_registry.unregister_plugin(plugin_name))
                 else:
                     asyncio.run(component_registry.unregister_plugin(plugin_name))
             except Exception as e:  # 捕获并记录卸载阶段协程调用错误
                 logger.debug(
-                    f"卸载插件时调用 component_registry.unregister_plugin 失败: {e}", exc_info=True
+                    f"卸载插件时调用 component_registry.unregister_plugin 失败: {e}"
                 )
 
             # 从已加载插件中移除
@@ -605,7 +698,7 @@ class PluginManager:
             return True
 
         except Exception as e:
-            logger.error(f"❌ 插件卸载失败: {plugin_name} - {e!s}", exc_info=True)
+            logger.error(f"❌ 插件卸载失败: {plugin_name} - {e!s}")
             return False
 
 

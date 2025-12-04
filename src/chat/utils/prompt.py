@@ -375,15 +375,6 @@ class Prompt:
             # 这样做可以更早地组合模板，也使得`Prompt`类的职责更单一。
             result = main_formatted_prompt
 
-            # 步骤 4: 注意力优化（如果启用）
-            # 通过轻量级随机化避免提示词过度相似导致LLM注意力退化
-            if self.parameters.enable_attention_optimization:
-                from src.chat.utils.attention_optimizer import get_attention_optimizer
-
-                optimizer = get_attention_optimizer()
-                result = optimizer.optimize_prompt(result, context_data)
-                logger.debug("已应用注意力优化")
-
             total_time = time.time() - start_time
             logger.debug(
                 f"Prompt构建完成，模式: {self.parameters.prompt_mode}, 耗时: {total_time:.2f}s"
@@ -658,6 +649,7 @@ class Prompt:
 
     async def _build_expression_habits(self) -> dict[str, Any]:
         """构建表达习惯（如表情、口癖）的上下文块."""
+        assert global_config is not None
         # 检查当前聊天是否启用了表达习惯功能
         use_expression, _, _ = global_config.expression.get_expression_config_for_chat(
             self.parameters.chat_id
@@ -718,9 +710,17 @@ class Prompt:
     async def _build_relation_info(self) -> dict[str, Any]:
         """构建与对话目标相关的关系信息."""
         try:
-            # 调用静态方法来执行实际的构建逻辑
-            relation_info = await Prompt.build_relation_info(
-                self.parameters.chat_id, self.parameters.reply_to
+            # [重构] 直接从 PromptParameters 获取稳定的用户身份信息
+            platform = self.parameters.platform
+            user_id = self.parameters.user_id
+
+            if not platform or not user_id:
+                logger.warning("无法从参数中获取platform或user_id，跳过关系信息构建")
+                return {"relation_info_block": ""}
+
+            # 调用新的、基于ID的静态方法
+            relation_info = await Prompt.build_relation_info_by_user_id(
+                self.parameters.chat_id, platform, user_id
             )
             return {"relation_info_block": relation_info}
         except Exception as e:
@@ -729,6 +729,7 @@ class Prompt:
 
     async def _build_tool_info(self) -> dict[str, Any]:
         """构建工具调用结果的上下文块."""
+        assert global_config is not None
         if not global_config.tool.enable_tool:
             return {"tool_info_block": ""}
 
@@ -780,6 +781,7 @@ class Prompt:
 
     async def _build_knowledge_info(self) -> dict[str, Any]:
         """构建从知识库检索到的相关信息的上下文块."""
+        assert global_config is not None
         if not global_config.lpmm_knowledge.enable:
             return {"knowledge_prompt": ""}
 
@@ -874,6 +876,7 @@ class Prompt:
 
     def _prepare_s4u_params(self, context_data: dict[str, Any]) -> dict[str, Any]:
         """为S4U（Scene for You）模式准备最终用于格式化的参数字典."""
+        assert global_config is not None
         return {
             **context_data,
             "expression_habits_block": context_data.get("expression_habits_block", ""),
@@ -916,6 +919,7 @@ class Prompt:
 
     def _prepare_normal_params(self, context_data: dict[str, Any]) -> dict[str, Any]:
         """为Normal模式准备最终用于格式化的参数字典."""
+        assert global_config is not None
         return {
             **context_data,
             "expression_habits_block": context_data.get("expression_habits_block", ""),
@@ -960,6 +964,7 @@ class Prompt:
 
     def _prepare_default_params(self, context_data: dict[str, Any]) -> dict[str, Any]:
         """为默认模式（或其他未指定模式）准备最终用于格式化的参数字典."""
+        assert global_config is not None
         return {
             "expression_habits_block": context_data.get("expression_habits_block", ""),
             "relation_info_block": context_data.get("relation_info_block", ""),
@@ -1072,43 +1077,29 @@ class Prompt:
         return sender, target
 
     @staticmethod
-    async def build_relation_info(chat_id: str, reply_to: str) -> str:
-        """构建关于回复目标用户的关系信息字符串.
-
-        Args:
-            chat_id: 当前聊天的ID。
-            reply_to: 被回复的原始消息字符串。
-
-        Returns:
-            str: 格式化后的关系信息字符串，或在失败时返回空字符串。
+    async def build_relation_info_by_user_id(chat_id: str, platform: str, user_id: str) -> str:
+        """
+        [新] 根据用户ID构建关系信息字符串。
         """
         from src.person_info.relationship_fetcher import relationship_fetcher_manager
+        
+        person_info_manager = get_person_info_manager()
+        person_id = person_info_manager.get_person_id(platform, user_id)
+
+        if not person_id:
+            logger.warning(f"构建关系信息时未找到用户 platform={platform}, user_id={user_id}")
+            return f"你似乎还不认识这位用户（ID: {user_id}），这是你们的第一次互动。"
 
         relationship_fetcher = relationship_fetcher_manager.get_fetcher(chat_id)
-
-        if not reply_to:
-            return ""
-        # 解析出回复目标的发送者
-        sender, text = Prompt.parse_reply_target(reply_to)
-        if not sender or not text:
-            return ""
-
-        # 根据发送者名称查找其用户ID
-        person_info_manager = get_person_info_manager()
-        person_id = await person_info_manager.get_person_id_by_person_name(sender)
-        if not person_id:
-            logger.warning(f"未找到用户 {sender} 的ID，跳过信息提取")
-            return f"你完全不认识{sender}，不理解ta的相关信息。"
-
-        # 使用关系提取器构建用户关系信息和聊天流印象
-        user_relation_info = await relationship_fetcher.build_relation_info(
-            person_id, points_num=5
-        )
-        stream_impression = await relationship_fetcher.build_chat_stream_impression(
-            chat_id
+        
+        # 并行构建用户信息和聊天流印象
+        user_relation_info_task = relationship_fetcher.build_relation_info(person_id, points_num=5)
+        stream_impression_task = relationship_fetcher.build_chat_stream_impression(chat_id)
+        
+        user_relation_info, stream_impression = await asyncio.gather(
+            user_relation_info_task, stream_impression_task
         )
 
-        # 组合两部分信息
         info_parts = []
         if user_relation_info:
             info_parts.append(user_relation_info)
@@ -1158,6 +1149,7 @@ class Prompt:
         Returns:
             str: 构建好的跨群聊上下文字符串。
         """
+        assert global_config is not None
         if not global_config.cross_context.enable:
             return ""
 
@@ -1176,32 +1168,22 @@ class Prompt:
 
         return ""
 
-    @staticmethod
-    async def parse_reply_target_id(reply_to: str) -> str:
-        """从回复目标字符串中解析出原始发送者的用户ID.
-
-        Args:
-            reply_to: 回复目标字符串。
-
-        Returns:
-            str: 找到的用户ID，如果找不到则返回空字符串。
-        """
-        if not reply_to:
-            return ""
-
-        # 首先，解析出发送者的名称
-        sender, _ = Prompt.parse_reply_target(reply_to)
-        if not sender:
-            return ""
-
-        # 然后，通过名称查询用户ID
-        person_info_manager = get_person_info_manager()
-        person_id = await person_info_manager.get_person_id_by_person_name(sender)
-        if person_id:
-            user_id = await person_info_manager.get_value(person_id, "user_id")
-            return str(user_id) if user_id else ""
-
-        return ""
+    # [废弃] 该函数完全依赖于不稳定的名称解析，应被移除
+    # @staticmethod
+    # async def parse_reply_target_id(reply_to: str) -> str:
+    #     """从回复目标字符串中解析出原始发送者的用户ID."""
+    #     if not reply_to:
+    #         return ""
+    #     sender, _ = Prompt.parse_reply_target(reply_to)
+    #     if not sender:
+    #         return ""
+    #     person_info_manager = get_person_info_manager()
+    #     # [脆弱点] 使用了不稳健的按名称查询
+    #     person_id = await person_info_manager.get_person_id_by_name_robust(sender)
+    #     if person_id:
+    #         user_id = await person_info_manager.get_value(person_id, "user_id")
+    #         return str(user_id) if user_id else ""
+    #     return ""
 
 
 # 工厂函数

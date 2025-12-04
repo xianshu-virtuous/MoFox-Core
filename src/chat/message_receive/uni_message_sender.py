@@ -1,170 +1,157 @@
+"""统一消息发送器"""
+
+from __future__ import annotations
+
 import asyncio
 import traceback
+from typing import TYPE_CHECKING
 
 from rich.traceback import install
 
-from src.chat.message_receive.message import MessageSending
+from mofox_wire import MessageEnvelope
+
+from src.chat.message_receive.message_processor import process_message_from_dict
 from src.chat.message_receive.storage import MessageStorage
 from src.chat.utils.utils import calculate_typing_time, truncate_message
+from src.common.data_models.database_data_model import DatabaseMessages, DatabaseUserInfo
 from src.common.logger import get_logger
-from src.common.message.api import get_global_api
+from src.config.config import global_config
+
+if TYPE_CHECKING:
+    from src.chat.message_receive.chat_stream import ChatStream
 
 install(extra_lines=3)
 
 logger = get_logger("sender")
 
 
-async def send_message(message: MessageSending, show_log=True) -> bool:
-    """合并后的消息发送函数，包含WS发送和日志记录"""
-    message_preview = truncate_message(message.processed_plain_text, max_length=120)
+async def send_envelope(
+    envelope: MessageEnvelope,
+    chat_stream: ChatStream | None = None,
+    db_message: DatabaseMessages | None = None,
+    show_log: bool = True,
+) -> bool:
+    """发送消息"""
+    message_preview = truncate_message(
+        (db_message.processed_plain_text or "" if db_message else str(envelope.get("message_segment", ""))),
+        max_length=120,
+    )
 
     try:
-        # 直接调用API发送消息
-        await get_global_api().send_message(message)
-        if show_log:
-            logger.info(f"已将消息  '{message_preview}'  发往平台'{message.message_info.platform}'")
+        from src.common.core_sink_manager import get_core_sink_manager
 
-        # 触发 AFTER_SEND 事件
+        manager = get_core_sink_manager()
+        await manager.send_outgoing(envelope)
+
+        if show_log:
+            logger.info(f"已将消息 '{message_preview}' 发送到平台'{envelope.get('platform')}'")
+
         try:
             from src.plugin_system.base.component_types import EventType
             from src.plugin_system.core.event_manager import event_manager
 
-            if message.chat_stream:
-                await event_manager.trigger_event(
+            if chat_stream:
+                event_manager.emit_event(
                     EventType.AFTER_SEND,
                     permission_group="SYSTEM",
-                    stream_id=message.chat_stream.stream_id,
-                    message=message,
+                    stream_id=chat_stream.stream_id,
+                    message=db_message or envelope,
                 )
         except Exception as event_error:
-            logger.error(f"触发 AFTER_SEND 事件时出错: {event_error}", exc_info=True)
+            logger.error(f"触发 AFTER_SEND 事件时出错: {event_error}")
 
         return True
 
     except Exception as e:
-        logger.error(f"发送消息   '{message_preview}'   发往平台'{message.message_info.platform}' 失败: {e!s}")
+        logger.error(f"发送消息 '{message_preview}' 到平台'{envelope.get('platform')}' 失败: {e!s}")
         traceback.print_exc()
-        raise e  # 重新抛出其他异常
+        raise
 
 
 class HeartFCSender:
-    """管理消息的注册、即时处理、发送和存储，并跟踪思考状态。"""
-
-    def __init__(self):
-        self.storage = MessageStorage()
+    """发送消息并负责存储、上下文更新等后续处理."""
 
     async def send_message(
-        self, message: MessageSending, typing=False, set_reply=False, storage_message=True, show_log=True
-    ):
-        """
-        处理、发送并存储一条消息。
-
-        参数：
-            message: MessageSending 对象，待发送的消息。
-            typing: 是否模拟打字等待。
-
-        用法：
-            - typing=True 时，发送前会有打字等待。
-        """
-        if not message.chat_stream:
+        self,
+        envelope: MessageEnvelope,
+        chat_stream: "ChatStream",
+        *,
+        typing: bool = False,
+        storage_message: bool = True,
+        show_log: bool = True,
+        thinking_start_time: float = 0.0,
+        display_message: str | None = None,
+        storage_user_info: "DatabaseUserInfo | None" = None,
+    ) -> bool:
+        if not chat_stream:
             logger.error("消息缺少 chat_stream，无法发送")
             raise ValueError("消息缺少 chat_stream，无法发送")
-        if not message.message_info or not message.message_info.message_id:
-            logger.error("消息缺少 message_info 或 message_id，无法发送")
-            raise ValueError("消息缺少 message_info 或 message_id，无法发送")
-
-        chat_id = message.chat_stream.stream_id
-        message_id = message.message_info.message_id
 
         try:
-            if set_reply:
-                message.build_reply()
-                logger.debug(f"[{chat_id}] 选择回复引用消息: {message.processed_plain_text[:20]}...")
+            db_message = await process_message_from_dict(
+                message_dict=envelope,
+                stream_id=chat_stream.stream_id,
+                platform=chat_stream.platform,
+            )
 
-            await message.process()
+            # 如果提供了用于存储的用户信息，则覆盖
+            if storage_message and storage_user_info:
+                db_message.user_info.user_id = storage_user_info.user_id
+                db_message.user_info.user_nickname = storage_user_info.user_nickname
+                db_message.user_info.user_cardname = storage_user_info.user_cardname
+                db_message.user_info.platform = storage_user_info.platform
 
+            # 使用调用方指定的展示文本
+            if display_message:
+                db_message.display_message = display_message
+            if db_message.processed_plain_text is None:
+                db_message.processed_plain_text = ""
+
+            # 填充基础字段，确保上下文和存储一致
+            db_message.is_read = True
+            db_message.should_reply = False
+            db_message.should_act = False
+            if db_message.interest_value is None:
+                db_message.interest_value = 0.5
+
+            db_message.chat_info.create_time = chat_stream.create_time
+            db_message.chat_info.last_active_time = chat_stream.last_active_time
+
+            # 可选的打字机等待
             if typing:
                 typing_time = calculate_typing_time(
-                    input_string=message.processed_plain_text,
-                    thinking_start_time=message.thinking_start_time,
-                    is_emoji=message.is_emoji,
+                    input_string=db_message.processed_plain_text or "",
+                    thinking_start_time=thinking_start_time,
+                    is_emoji=bool(getattr(db_message, "is_emoji", False)),
                 )
                 await asyncio.sleep(typing_time)
 
-            sent_msg = await send_message(message, show_log=show_log)
-            if not sent_msg:
-                return False
+            await send_envelope(envelope, chat_stream=chat_stream, db_message=db_message, show_log=show_log)
 
             if storage_message:
-                await self.storage.store_message(message, message.chat_stream)
+                await MessageStorage.store_message(db_message, chat_stream)
 
-                # 修复Send API消息不入流上下文的问题
-                # 将Send API发送的消息也添加到流上下文中，确保后续对话可以引用
+                # 将发送的消息写入上下文历史
                 try:
-                    # 将MessageSending转换为DatabaseMessages
-                    db_message = await self._convert_to_database_message(message)
-                    if db_message and message.chat_stream.context_manager:
-                        message.chat_stream.context_manager.context.history_messages.append(db_message)
-                        logger.debug(f"[{chat_id}] Send API消息已添加到流上下文: {message_id}")
+                    if chat_stream and chat_stream.context and global_config and global_config.chat:
+                        context = chat_stream.context
+                        chat_config = global_config.chat
+                        if chat_config:
+                            max_context_size = getattr(chat_config, "max_context_size", 40)
+                        else:
+                            max_context_size = 40
+
+                        if len(context.history_messages) >= max_context_size:
+                            context.history_messages = context.history_messages[1:]
+                            logger.debug(f"[{chat_stream.stream_id}] Send API发送前移除 1 条历史消息以控制上下文大小")
+
+                        context.history_messages.append(db_message)
+                        logger.debug(f"[{chat_stream.stream_id}] Send API消息已写入上下文: {db_message.message_id}")
                 except Exception as context_error:
-                    logger.warning(f"[{chat_id}] 将Send API消息添加到流上下文失败: {context_error}")
+                    logger.warning(f"[{chat_stream.stream_id}] 将消息写入上下文失败: {context_error}")
 
-            return sent_msg
-
-        except Exception as e:
-            logger.error(f"[{chat_id}] 处理或存储消息 {message_id} 时出错: {e}")
-            raise e
-
-    async def _convert_to_database_message(self, message: MessageSending):
-        """将MessageSending对象转换为DatabaseMessages对象
-
-        Args:
-            message: MessageSending对象
-
-        Returns:
-            DatabaseMessages: 转换后的数据库消息对象，如果转换失败则返回None
-        """
-        try:
-            from src.common.data_models.database_data_model import DatabaseMessages
-
-            # 构建用户信息 - Send API发送的消息，bot是发送者
-            # bot_user_info 存储在 message_info.user_info 中，而不是单独的 bot_user_info 属性
-            bot_user_info = message.message_info.user_info
-
-            # 构建聊天信息
-            chat_info = message.message_info
-            chat_stream = message.chat_stream
-
-            # 获取群组信息
-            group_id = None
-            group_name = None
-            if chat_stream and chat_stream.group_info:
-                group_id = chat_stream.group_info.group_id
-                group_name = chat_stream.group_info.group_name
-
-            # 创建DatabaseMessages对象
-            db_message = DatabaseMessages(
-                message_id=message.message_info.message_id,
-                time=chat_info.time or 0.0,
-                user_id=bot_user_info.user_id,
-                user_nickname=bot_user_info.user_nickname,
-                user_cardname=bot_user_info.user_nickname,  # 使用nickname作为cardname
-                user_platform=chat_info.platform or "",
-                chat_info_group_id=group_id,
-                chat_info_group_name=group_name,
-                chat_info_group_platform=chat_info.platform if group_id else None,
-                chat_info_platform=chat_info.platform or "",
-                processed_plain_text=message.processed_plain_text or "",
-                display_message=message.display_message or "",
-                is_read=True,  # 新消息标记为已读
-                interest_value=0.5,  # 默认兴趣值
-                should_reply=False,  # 自己发送的消息不需要回复
-                should_act=False,   # 自己发送的消息不需要执行动作
-                is_mentioned=False,  # 自己发送的消息默认不提及
-            )
-
-            return db_message
+            return True
 
         except Exception as e:
-            logger.error(f"转换MessageSending到DatabaseMessages失败: {e}", exc_info=True)
-            return None
+            logger.error(f"[{chat_stream.stream_id}] 发送或存储消息时出错: {e}")
+            raise

@@ -9,7 +9,7 @@ import random
 import re
 import time
 import traceback
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from PIL import Image
 from rich.traceback import install
@@ -401,6 +401,11 @@ class EmojiManager:
 
         self._scan_task = None
 
+        if model_config is None:
+            raise RuntimeError("Model config is not initialized")
+        if global_config is None:
+            raise RuntimeError("Global config is not initialized")
+
         self.vlm = LLMRequest(model_set=model_config.model_task_config.emoji_vlm, request_type="emoji")
         self.llm_emotion_judge = LLMRequest(
             model_set=model_config.model_task_config.utils, request_type="emoji"
@@ -480,6 +485,8 @@ class EmojiManager:
                 return None
 
             # 2. 根据全局配置决定候选表情包的数量
+            if global_config is None:
+                raise RuntimeError("Global config is not initialized")
             max_candidates = global_config.emoji.max_context_emojis
 
             # 如果配置为0或者大于等于总数，则选择所有表情包
@@ -622,6 +629,8 @@ class EmojiManager:
 
     async def start_periodic_check_register(self) -> None:
         """定期检查表情包完整性和数量"""
+        if global_config is None:
+            raise RuntimeError("Global config is not initialized")
         await self.get_all_emoji_from_db()
         while True:
             # logger.info("[扫描] 开始检查表情包完整性...")
@@ -771,8 +780,9 @@ class EmojiManager:
             try:
                 emoji_record = await self.get_emoji_from_db(emoji_hash)
                 if emoji_record and emoji_record[0].emotion:
-                    logger.info(f"[缓存命中] 从数据库获取表情包描述: {emoji_record.emotion[:50]}...")  # type: ignore # type: ignore
-                    return emoji_record.emotion # type: ignore
+                    emotion_str = ",".join(emoji_record[0].emotion)
+                    logger.info(f"[缓存命中] 从数据库获取表情包描述: {emotion_str[:50]}...")
+                    return emotion_str
             except Exception as e:
                 logger.error(f"从数据库查询表情包描述时出错: {e}")
 
@@ -803,7 +813,7 @@ class EmojiManager:
             try:
                 from src.common.database.api.query import QueryBuilder
 
-                emoji_record = await QueryBuilder(Emoji).filter(emoji_hash=emoji_hash).first()
+                emoji_record = cast(Emoji | None, await QueryBuilder(Emoji).filter(emoji_hash=emoji_hash).first())
                 if emoji_record and emoji_record.description:
                     logger.info(f"[缓存命中] 从数据库获取表情包描述: {emoji_record.description[:50]}...")
                     return emoji_record.description
@@ -880,6 +890,9 @@ class EmojiManager:
             # 将表情包信息转换为可读的字符串
             emoji_info_list = _emoji_objects_to_readable_list(selected_emojis)
 
+            if global_config is None:
+                raise RuntimeError("Global config is not initialized")
+
             # 构建提示词
             prompt = (
                 f"{global_config.bot.nickname}的表情包存储已满({self.emoji_num}/{self.emoji_num_max})，"
@@ -954,6 +967,8 @@ class EmojiManager:
             Tuple[str, List[str]]: 返回一个元组，第一个元素是详细描述，第二个元素是情感关键词列表。
                                    如果处理失败，则返回空的描述和列表。
         """
+        if global_config is None:
+            raise RuntimeError("Global config is not initialized")
         try:
             # 1. 解码图片，计算哈希值，并获取格式
             if isinstance(image_base64, str):
@@ -967,7 +982,7 @@ class EmojiManager:
             try:
                 from src.common.database.api.query import QueryBuilder
 
-                existing_image = await QueryBuilder(Images).filter(emoji_hash=image_hash, type="emoji").first()
+                existing_image = cast(Images | None, await QueryBuilder(Images).filter(emoji_hash=image_hash, type="emoji").first())
                 if existing_image and existing_image.description:
                     existing_description = existing_image.description
                     logger.info(f"[复用描述] 找到已有详细描述: {existing_description[:50]}...")
@@ -1039,9 +1054,9 @@ class EmojiManager:
                                 break
                         logger.warning("[VLM分析] VLM返回的JSON数据不完整或格式错误，准备重试。")
                     except (json.JSONDecodeError, AttributeError) as e:
-                        logger.error(f"VLM JSON解析失败 (第 {i+1}/3 次): {e}", exc_info=True)
+                        logger.error(f"VLM JSON解析失败 (第 {i+1}/3 次): {e}")
                     except Exception as e:
-                        logger.error(f"VLM调用失败 (第 {i+1}/3 次): {e}", exc_info=True)
+                        logger.error(f"VLM调用失败 (第 {i+1}/3 次): {e}")
 
                     description, emotions, refined_description = "", [], ""  # Reset for retry
                     if i < 2:
@@ -1107,7 +1122,10 @@ class EmojiManager:
                 if emoji_base64 is None:  # 再次检查读取
                     logger.error(f"[注册失败] 无法读取图片以生成描述: {filename}")
                     return False
+                
+                # 等待描述生成完成
                 description, emotions = await self.build_emoji_description(emoji_base64)
+
                 if not description:  # 检查描述是否成功生成或审核通过
                     logger.warning(f"[注册失败] 未能生成有效描述或审核未通过: {filename}")
                     # 删除未能生成描述的文件
@@ -1117,6 +1135,7 @@ class EmojiManager:
                     except Exception as e:
                         logger.error(f"[错误] 删除描述生成失败文件时出错: {e!s}")
                     return False
+                
                 new_emoji.description = description
                 new_emoji.emotion = emotions
             except Exception as build_desc_error:

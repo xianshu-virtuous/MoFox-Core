@@ -3,6 +3,11 @@
 本文件只包含纯模型定义，使用SQLAlchemy 2.0的Mapped类型注解风格。
 引擎和会话管理已移至core/engine.py和core/session.py。
 
+支持的数据库类型：
+- SQLite: 使用 Text 类型
+- MySQL: 使用 VARCHAR(max_length) 用于索引字段
+- PostgreSQL: 使用 Text 类型（PostgreSQL 的 Text 类型性能与 VARCHAR 相当）
+
 所有模型使用统一的类型注解风格：
     field_name: Mapped[PyType] = mapped_column(Type, ...)
 
@@ -20,16 +25,35 @@ from sqlalchemy.orm import Mapped, mapped_column
 Base = declarative_base()
 
 
-# MySQL兼容的字段类型辅助函数
+# 数据库兼容的字段类型辅助函数
 def get_string_field(max_length=255, **kwargs):
     """
-    根据数据库类型返回合适的字符串字段
-    MySQL需要指定长度的VARCHAR用于索引，SQLite可以使用Text
+    根据数据库类型返回合适的字符串字段类型
+
+    对于需要索引的字段：
+    - MySQL: 必须使用 VARCHAR(max_length)，因为索引需要指定长度
+    - PostgreSQL: 可以使用 Text，但为了兼容性使用 VARCHAR
+    - SQLite: 可以使用 Text，无长度限制
+
+    Args:
+        max_length: 最大长度（对于 MySQL 是必需的）
+        **kwargs: 传递给 String/Text 的额外参数
+
+    Returns:
+        SQLAlchemy 类型
     """
     from src.config.config import global_config
 
-    if global_config.database.database_type == "mysql":
+    assert global_config is not None
+    db_type = global_config.database.database_type
+
+    # MySQL 索引需要指定长度的 VARCHAR
+    if db_type == "mysql":
         return String(max_length, **kwargs)
+    # PostgreSQL 可以使用 Text，但为了跨数据库迁移兼容性，使用 VARCHAR
+    elif db_type == "postgresql":
+        return String(max_length, **kwargs)
+    # SQLite 使用 Text（无长度限制）
     else:
         return Text(**kwargs)
 
@@ -477,7 +501,7 @@ class BanUser(Base):
     __tablename__ = "ban_users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    platform: Mapped[str] = mapped_column(Text, nullable=False)
+    platform: Mapped[str] = mapped_column(get_string_field(50), nullable=False)  # 使用有限长度，以便创建索引
     user_id: Mapped[str] = mapped_column(get_string_field(50), nullable=False, index=True)
     violation_num: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
@@ -631,7 +655,16 @@ class UserPermissions(Base):
 
 
 class UserRelationships(Base):
-    """用户关系模型 - 存储用户与bot的关系数据"""
+    """用户关系模型 - 存储用户与bot的关系数据
+    
+    核心字段：
+    - relationship_text: 当前印象描述（用于兼容旧系统，逐步迁移到 impression_text）
+    - impression_text: 长期印象（新字段，自然叙事风格）
+    - preference_keywords: 用户偏好关键词
+    - relationship_score: 好感度分数(0-1)
+    - key_facts: 关键信息JSON（生日、职业、理想等）
+    - relationship_stage: 关系阶段（stranger/acquaintance/friend/close_friend/bestie）
+    """
 
     __tablename__ = "user_relationships"
 
@@ -639,9 +672,22 @@ class UserRelationships(Base):
     user_id: Mapped[str] = mapped_column(get_string_field(100), nullable=False, unique=True, index=True)
     user_name: Mapped[str | None] = mapped_column(get_string_field(100), nullable=True)
     user_aliases: Mapped[str | None] = mapped_column(Text, nullable=True)  # 用户别名，逗号分隔
-    relationship_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # 印象相关（新旧兼容）
+    relationship_text: Mapped[str | None] = mapped_column(Text, nullable=True)  # 旧字段，保持兼容
+    impression_text: Mapped[str | None] = mapped_column(Text, nullable=True)  # 新字段：长期印象（自然叙事）
+    
+    # 用户信息
     preference_keywords: Mapped[str | None] = mapped_column(Text, nullable=True)  # 用户偏好关键词，逗号分隔
-    relationship_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.3)  # 关系分数(0-1)
+    key_facts: Mapped[str | None] = mapped_column(Text, nullable=True)  # 关键信息JSON（生日、职业等）
+    
+    # 关系状态
+    relationship_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.3)  # 好感度(0-1)
+    relationship_stage: Mapped[str | None] = mapped_column(get_string_field(50), nullable=True, default="stranger")  # 关系阶段
+    
+    # 时间记录
+    first_met_time: Mapped[float | None] = mapped_column(Float, nullable=True)  # 首次认识时间戳
+    last_impression_update: Mapped[float | None] = mapped_column(Float, nullable=True)  # 上次更新印象时间
     last_updated: Mapped[float] = mapped_column(Float, nullable=False, default=time.time)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
@@ -649,4 +695,5 @@ class UserRelationships(Base):
         Index("idx_user_relationship_id", "user_id"),
         Index("idx_relationship_score", "relationship_score"),
         Index("idx_relationship_updated", "last_updated"),
+        Index("idx_relationship_stage", "relationship_stage"),
     )

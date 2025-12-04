@@ -110,12 +110,15 @@ class BaseAction(ABC):
             **kwargs: 其他参数
         """
         if plugin_config is None:
-            plugin_config: ClassVar = {}
+            plugin_config = {}
         self.action_data = action_data
         self.reasoning = reasoning
         self.cycle_timers = cycle_timers
         self.thinking_id = thinking_id
         self.log_prefix = log_prefix
+
+        if plugin_config is None:
+            plugin_config = getattr(self.__class__, "plugin_config", {})
 
         self.plugin_config = plugin_config or {}
         """对应的插件配置"""
@@ -512,7 +515,7 @@ class BaseAction(ABC):
             return result
 
         except Exception as e:
-            logger.error(f"{log_prefix} 调用时发生错误: {e}", exc_info=True)
+            logger.error(f"{log_prefix} 调用时发生错误: {e}")
             return False, f"调用Action '{action_name}' 时发生错误: {e}"
 
     @classmethod
@@ -556,6 +559,7 @@ class BaseAction(ABC):
             action_require=getattr(cls, "action_require", []).copy(),
             associated_types=getattr(cls, "associated_types", []).copy(),
             chat_type_allow=getattr(cls, "chat_type_allow", ChatType.ALL),
+            chatter_allow=getattr(cls, "chatter_allow", []).copy(),
             # 二步Action相关属性
             is_two_step_action=getattr(cls, "is_two_step_action", False),
             step_one_description=getattr(cls, "step_one_description", ""),
@@ -742,7 +746,7 @@ class BaseAction(ABC):
         if not case_sensitive:
             search_text = search_text.lower()
 
-        matched_keywords: ClassVar = []
+        matched_keywords  = []
         for keyword in keywords:
             check_keyword = keyword if case_sensitive else keyword.lower()
             if check_keyword in search_text:

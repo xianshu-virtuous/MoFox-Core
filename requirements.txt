@@ -1,7 +1,10 @@
-sqlalchemy
 aiosqlite
 aiofiles
 aiomysql
+asyncpg
+psycopg[binary]
+psycopg2-binary
+PyMySQL
 APScheduler
 aiohttp
 aiohttp-cors
@@ -12,9 +15,9 @@ faiss-cpu
 fastapi
 fastmcp
 filetype
+slowapi
 rjieba
 jsonlines
-maim_message
 quick_algo
 matplotlib
 networkx
@@ -26,6 +29,7 @@ peewee
 pyarrow
 pydantic
 pypinyin
+PyYAML
 python-dateutil
 python-dotenv
 python-igraph
@@ -47,6 +51,8 @@ httpx[socks]
 packaging
 rich
 psutil
+objgraph
+Pympler
 cryptography
 json-repair
 reportportal-client
@@ -76,6 +82,7 @@ jinja2
 inkfox
 soundfile
 pedalboard
-
+mofox-wire
+sqlalchemy
 # For local speech-to-text functionality (stt_whisper_plugin)
 openai-whisper

@@ -54,6 +54,7 @@ class ImageManager:
             self._ensure_image_dir()
 
             self._initialized = True
+            assert model_config is not None
             self.vlm = LLMRequest(model_set=model_config.model_task_config.vlm, request_type="image")
 
             # try:
@@ -62,8 +63,6 @@ class ImageManager:
             #     logger.debug("使用SQLAlchemy进行表管理")
             # except Exception as e:
             #     logger.error(f"数据库连接失败: {e}")
-
-            self._initialized = True
 
     def _ensure_image_dir(self):
         """确保图像存储目录存在"""
@@ -158,6 +157,7 @@ class ImageManager:
     async def get_emoji_description(self, image_base64: str) -> str:
         """获取表情包描述，统一使用EmojiManager中的逻辑进行处理和缓存"""
         try:
+            assert global_config is not None
             from src.chat.emoji_system.emoji_manager import get_emoji_manager
 
             emoji_manager = get_emoji_manager()
@@ -168,15 +168,22 @@ class ImageManager:
             image_bytes = base64.b64decode(image_base64)
             image_hash = hashlib.md5(image_bytes).hexdigest()
 
+            # 如果缓存命中，可以提前释放 image_bytes
+            # 但如果需要保存表情包，则需要保留 image_bytes
+
             # 2. 优先查询已注册表情的缓存（Emoji表）
             if full_description := await emoji_manager.get_emoji_description_by_hash(image_hash):
                 logger.info("[缓存命中] 使用已注册表情包(Emoji表)的完整描述")
+                del image_bytes  # 缓存命中，不再需要
+                del image_base64
                 refined_part = full_description.split(" Keywords:")[0]
                 return f"[表情包：{refined_part}]"
 
             # 3. 查询通用图片描述缓存（ImageDescriptions表）
             if cached_description := await self._get_description_from_db(image_hash, "emoji"):
                 logger.info("[缓存命中] 使用通用图片缓存(ImageDescriptions表)中的描述")
+                del image_bytes  # 缓存命中，不再需要
+                del image_base64
                 refined_part = cached_description.split(" Keywords:")[0]
                 return f"[表情包：{refined_part}]"
 
@@ -189,7 +196,7 @@ class ImageManager:
                 return "[表情包(描述生成失败)]"
 
             # 4. (可选) 如果启用了“偷表情包”，则将图片和完整描述存入待注册区
-            if global_config.emoji.steal_emoji:
+            if global_config.emoji and global_config.emoji.steal_emoji:
                 logger.debug(f"偷取表情包功能已开启，保存待注册表情包: {image_hash}")
                 try:
                     image_format = (Image.open(io.BytesIO(image_bytes)).format or "jpeg").lower()
@@ -209,12 +216,16 @@ class ImageManager:
             await self._save_description_to_db(image_hash, full_description, "emoji")
             logger.info(f"新生成的表情包描述已存入通用缓存 (Hash: {image_hash[:8]}...)")
 
-            # 6. 返回新生成的描述中用于显示的“精炼描述”部分
+            # 内存优化：处理完成后主动释放大型二进制数据
+            del image_bytes
+            del image_base64
+
+            # 6. 返回新生成的描述中用于显示的"精炼描述"部分
             refined_part = full_description.split(" Keywords:")[0]
             return f"[表情包：{refined_part}]"
 
         except Exception as e:
-            logger.error(f"获取表情包描述失败: {e!s}", exc_info=True)
+            logger.error(f"获取表情包描述失败: {e!s}")
             return "[表情包(处理失败)]"
 
     async def get_image_description(self, image_base64: str) -> str:
@@ -226,22 +237,46 @@ class ImageManager:
             image_bytes = base64.b64decode(image_base64)
             image_hash = hashlib.md5(image_bytes).hexdigest()
 
+            # 1.5. 如果是GIF，先转换为JPG
+            try:
+                image_format_check = (Image.open(io.BytesIO(image_bytes)).format or "jpeg").lower()
+                if image_format_check == "gif":
+                    logger.info(f"检测到GIF图片 (Hash: {image_hash[:8]}...)，正在转换为JPG...")
+                    if transformed_b64 := self.transform_gif(image_base64):
+                        image_base64 = transformed_b64
+                        image_bytes = base64.b64decode(image_base64)
+                        logger.info("GIF转换成功，将使用转换后的图片进行描述")
+                    else:
+                        logger.error("GIF转换失败，无法生成描述")
+                        return "[图片(GIF转换失败)]"
+            except Exception as e:
+                logger.warning(f"图片格式检测失败: {e!s}，将按原格式处理")
+
+
             # 2. 优先查询 Images 表缓存
             async with get_db_session() as session:
                 result = await session.execute(select(Images).where(Images.emoji_hash == image_hash))
                 existing_image = result.scalar()
                 if existing_image and existing_image.description:
                     logger.debug(f"[缓存命中] 使用Images表中的图片描述: {existing_image.description[:50]}...")
+                    # 缓存命中，释放 base64 和 image_bytes
+                    del image_bytes
+                    del image_base64
                     return f"[图片：{existing_image.description}]"
 
             # 3. 其次查询 ImageDescriptions 表缓存
             if cached_description := await self._get_description_from_db(image_hash, "image"):
                 logger.debug(f"[缓存命中] 使用ImageDescriptions表中的描述: {cached_description[:50]}...")
+                # 缓存命中，释放 base64 和 image_bytes
+                del image_bytes
+                del image_base64
                 return f"[图片：{cached_description}]"
 
             # 4. 如果都未命中，则同步调用VLM生成新描述
             logger.info(f"[新图片识别] 无缓存 (Hash: {image_hash[:8]}...)，调用VLM生成描述")
             description = None
+            assert global_config is not None
+            assert global_config.custom_prompt is not None
             prompt = global_config.custom_prompt.image_prompt
             logger.info(f"[识图VLM调用] Prompt: {prompt}")
             for i in range(3):  # 重试3次
@@ -257,7 +292,7 @@ class ImageManager:
                     if description and description.strip():
                         break  # 成功获取描述则跳出循环
                 except Exception as e:
-                    logger.error(f"VLM调用失败 (第 {i+1}/3 次): {e}", exc_info=True)
+                    logger.error(f"VLM调用失败 (第 {i+1}/3 次): {e}")
 
                 if i < 2: # 如果不是最后一次，则等待1秒
                     logger.warning("识图失败，将在1秒后重试...")
@@ -283,10 +318,14 @@ class ImageManager:
 
             logger.info(f"新生成的图片描述已存入缓存 (Hash: {image_hash[:8]}...)")
 
+            # 内存优化：处理完成后主动释放大型二进制数据
+            del image_bytes
+            del image_base64
+
             return f"[图片：{description}]"
 
         except Exception as e:
-            logger.error(f"获取图片描述时发生严重错误: {e!s}", exc_info=True)
+            logger.error(f"获取图片描述时发生严重错误: {e!s}")
             return "[图片(处理失败)]"
 
     @staticmethod
@@ -326,14 +365,15 @@ class ImageManager:
             # --- 新的帧选择逻辑：均匀抽取4帧 ---
             num_frames = len(all_frames)
             if num_frames <= 4:
-                # 如果总帧数小于等于4，则全部选中
+                # 如果总宽度小于等于4，则全部选中
                 selected_frames = all_frames
+                indices = list(range(num_frames))
             else:
                 # 使用linspace计算4个均匀分布的索引
                 indices = np.linspace(0, num_frames - 1, 4, dtype=int)
                 selected_frames = [all_frames[i] for i in indices]
 
-            logger.debug(f"GIF Frame Analysis: Total frames={num_frames}, Selected indices={indices if num_frames > 4 else list(range(num_frames))}")
+            logger.debug(f"GIF Frame Analysis: Total frames={num_frames}, Selected indices={indices}")
             # --- 帧选择逻辑结束 ---
 
             # 如果选择后连一帧都没有（比如GIF只有一帧且后续处理失败？）或者原始GIF就没帧，也返回None
@@ -388,7 +428,7 @@ class ImageManager:
             logger.error("GIF转换失败: 内存不足，可能是GIF太大或帧数太多")
             return None  # 内存不够啦
         except Exception as e:
-            logger.error(f"GIF转换失败: {e!s}", exc_info=True)  # 记录详细错误信息
+            logger.error(f"GIF转换失败: {e!s}")  # 记录详细错误信息
             return None  # 其他错误也返回None
 
     async def process_image(self, image_base64: str) -> tuple[str, str]:
@@ -459,7 +499,7 @@ class ImageManager:
             return image_id, description
 
         except Exception as e:
-            logger.error(f"处理图片时发生严重错误: {e!s}", exc_info=True)
+            logger.error(f"处理图片时发生严重错误: {e!s}")
             return "", "[图片(处理失败)]"
 
 

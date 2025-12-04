@@ -5,13 +5,13 @@
 
 import asyncio
 import time
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.chat.chatter_manager import ChatterManager
 from src.chat.energy_system import energy_manager
 from src.common.logger import get_logger
 from src.config.config import global_config
-from src.plugin_system.apis.chat_api import get_chat_manager
+from src.chat.message_receive.chat_stream import get_chat_manager
 
 if TYPE_CHECKING:
     from src.common.data_models.message_manager_data_model import StreamContext
@@ -23,6 +23,9 @@ class StreamLoopManager:
     """流循环管理器 - 每个流一个独立的无限循环任务"""
 
     def __init__(self, max_concurrent_streams: int | None = None):
+        if global_config is None:
+            raise RuntimeError("Global config is not initialized")
+
         # 统计信息
         self.stats: dict[str, Any] = {
             "active_streams": 0,
@@ -52,6 +55,11 @@ class StreamLoopManager:
 
         # 流循环启动锁：防止并发启动同一个流的多个循环任务
         self._stream_start_locks: dict[str, asyncio.Lock] = {}
+        
+        # 死锁检测：记录每个流的最后活动时间
+        self._stream_last_activity: dict[str, float] = {}
+        self._deadlock_detector_task: asyncio.Task | None = None
+        self._deadlock_threshold_seconds: float = 120.0  # 2分钟无活动视为可能死锁
 
         logger.info(f"流循环管理器初始化完成 (最大并发流数: {self.max_concurrent_streams})")
 
@@ -62,6 +70,60 @@ class StreamLoopManager:
             return
 
         self.is_running = True
+        
+        # 启动死锁检测器
+        self._deadlock_detector_task = asyncio.create_task(
+            self._deadlock_detector_loop(),
+            name="deadlock_detector"
+        )
+        logger.info("死锁检测器已启动")
+    
+    async def _deadlock_detector_loop(self) -> None:
+        """死锁检测循环 - 定期检查所有流的活动状态"""
+        while self.is_running:
+            try:
+                await asyncio.sleep(30.0)  # 每30秒检查一次
+                
+                current_time = time.time()
+                suspected_deadlocks = []
+                
+                # 检查所有活跃流的最后活动时间
+                for stream_id, last_activity in list(self._stream_last_activity.items()):
+                    inactive_seconds = current_time - last_activity
+                    if inactive_seconds > self._deadlock_threshold_seconds:
+                        suspected_deadlocks.append((stream_id, inactive_seconds))
+                
+                if suspected_deadlocks:
+                    logger.warning(
+                        f"🔴 [死锁检测] 发现 {len(suspected_deadlocks)} 个可能卡住的流:\n" +
+                        "\n".join([
+                            f"  - stream={sid[:8]}, 无活动时间={inactive:.1f}s"
+                            for sid, inactive in suspected_deadlocks
+                        ])
+                    )
+                    
+                    # 打印当前所有 asyncio 任务的状态
+                    all_tasks = asyncio.all_tasks()
+                    stream_loop_tasks = [t for t in all_tasks if t.get_name().startswith("stream_loop_")]
+                    logger.warning(
+                        f"🔴 [死锁检测] 当前流循环任务状态:\n" +
+                        "\n".join([
+                            f"  - {t.get_name()}: done={t.done()}, cancelled={t.cancelled()}"
+                            for t in stream_loop_tasks
+                        ])
+                    )
+                else:
+                    # 每5分钟报告一次正常状态
+                    if int(current_time) % 300 < 30:
+                        active_count = len(self._stream_last_activity)
+                        if active_count > 0:
+                            logger.info(f"🟢 [死锁检测] 所有 {active_count} 个流正常运行中")
+                            
+            except asyncio.CancelledError:
+                logger.info("死锁检测器被取消")
+                break
+            except Exception as e:
+                logger.error(f"死锁检测器出错: {e}")
 
     async def stop(self) -> None:
         """停止流循环管理器"""
@@ -69,6 +131,15 @@ class StreamLoopManager:
             return
 
         self.is_running = False
+        
+        # 停止死锁检测器
+        if self._deadlock_detector_task and not self._deadlock_detector_task.done():
+            self._deadlock_detector_task.cancel()
+            try:
+                await self._deadlock_detector_task
+            except asyncio.CancelledError:
+                pass
+            logger.info("死锁检测器已停止")
 
         # 取消所有流循环
         try:
@@ -81,7 +152,7 @@ class StreamLoopManager:
             # 创建任务列表以便并发取消
             cancel_tasks = []
             for chat_stream in all_streams.values():
-                context = chat_stream.context_manager.context
+                context = chat_stream.context
                 if context.stream_loop_task and not context.stream_loop_task.done():
                     context.stream_loop_task.cancel()
                     cancel_tasks.append((chat_stream.stream_id, context.stream_loop_task))
@@ -115,12 +186,12 @@ class StreamLoopManager:
         if not context:
             logger.warning(f"无法获取流上下文: {stream_id}")
             return False
-        
+
         # 快速路径：如果流已存在且不是强制启动，无需处理
         if not force and context.stream_loop_task and not context.stream_loop_task.done():
             logger.debug(f"🔄 [流循环] stream={stream_id[:8]}, 循环已在运行，跳过启动")
             return True
-        
+
         # 获取或创建该流的启动锁
         if stream_id not in self._stream_start_locks:
             self._stream_start_locks[stream_id] = asyncio.Lock()
@@ -214,11 +285,24 @@ class StreamLoopManager:
         """
         task_id = id(asyncio.current_task())
         logger.info(f"🔄 [流工作器] stream={stream_id[:8]}, 任务ID={task_id}, 启动")
+        
+        # 死锁检测：记录循环次数和上次活动时间
+        loop_count = 0
+        
+        # 注册到活动跟踪
+        self._stream_last_activity[stream_id] = time.time()
 
         try:
             while self.is_running:
+                loop_count += 1
+                loop_start_time = time.time()
+                
+                # 更新活动时间（死锁检测用）
+                self._stream_last_activity[stream_id] = loop_start_time
+                
                 try:
                     # 1. 获取流上下文
+                    logger.debug(f"🔍 [流工作器] stream={stream_id[:8]}, 循环#{loop_count}, 获取上下文...")
                     context = await self._get_stream_context(stream_id)
                     if not context:
                         logger.warning(f"⚠️ [流工作器] stream={stream_id[:8]}, 无法获取流上下文")
@@ -226,6 +310,7 @@ class StreamLoopManager:
                         continue
 
                     # 2. 检查是否有消息需要处理
+                    logger.debug(f"🔍 [流工作器] stream={stream_id[:8]}, 循环#{loop_count}, 刷新缓存消息...")
                     await self._flush_cached_messages_to_unread(stream_id)
                     unread_count = self._get_unread_count(context)
                     force_dispatch = self._needs_force_dispatch_for_context(context, unread_count)
@@ -233,6 +318,18 @@ class StreamLoopManager:
                     has_messages = force_dispatch or await self._has_messages_to_process(context)
 
                     if has_messages:
+                        # 🔒 并发保护：如果 Chatter 正在处理中，跳过本轮
+                        # 这可能发生在：1) 打断后重启循环 2) 处理时间超过轮询间隔
+                        if context.is_chatter_processing:
+                            if self._recover_stale_chatter_state(stream_id, context):
+                                logger.warning(f"🔄 [流工作器] stream={stream_id[:8]}, 处理标志疑似残留，已尝试自动修复")
+                            else:
+                                logger.debug(f"🔒 [流工作器] stream={stream_id[:8]}, Chatter正在处理中，跳过本轮")
+                                # 不打印"开始处理"日志，直接进入下一轮等待
+                                # 使用较短的等待时间，等待当前处理完成
+                                await asyncio.sleep(1.0)
+                                continue
+                        
                         if force_dispatch:
                             logger.info(f"⚡ [流工作器] stream={stream_id[:8]}, 任务ID={task_id}, 未读消息 {unread_count} 条，触发强制分发")
                         else:
@@ -245,11 +342,36 @@ class StreamLoopManager:
                             logger.debug(f"更新流能量失败 {stream_id}: {e}")
 
                         # 4. 激活chatter处理
+                        logger.debug(f"🔍 [流工作器] stream={stream_id[:8]}, 循环#{loop_count}, 开始chatter处理...")
                         try:
-                            success = await asyncio.wait_for(self._process_stream_messages(stream_id, context), global_config.chat.thinking_timeout)
+                            # 在长时间处理期间定期更新活动时间，避免死锁检测误报
+                            async def process_with_activity_update():
+                                process_task = asyncio.create_task(
+                                    self._process_stream_messages(stream_id, context)
+                                )
+                                activity_update_interval = 30.0  # 每30秒更新一次
+                                while not process_task.done():
+                                    try:
+                                        # 等待任务完成或超时
+                                        await asyncio.wait_for(
+                                            asyncio.shield(process_task),
+                                            timeout=activity_update_interval
+                                        )
+                                    except asyncio.TimeoutError:
+                                        # 任务仍在运行，更新活动时间
+                                        self._stream_last_activity[stream_id] = time.time()
+                                        logger.debug(f"🔄 [流工作器] stream={stream_id[:8]}, 处理中，更新活动时间")
+                                return await process_task
+                            
+                            success = await asyncio.wait_for(
+                                process_with_activity_update(),
+                                global_config.chat.thinking_timeout
+                            )
                         except asyncio.TimeoutError:
                             logger.warning(f"⏱️ [流工作器] stream={stream_id[:8]}, 任务ID={task_id}, 处理超时")
                             success = False
+                        logger.debug(f"🔍 [流工作器] stream={stream_id[:8]}, 循环#{loop_count}, chatter处理完成, success={success}")
+                        
                         # 更新统计
                         self.stats["total_process_cycles"] += 1
                         if success:
@@ -260,9 +382,10 @@ class StreamLoopManager:
                             await asyncio.sleep(0.1)
                         else:
                             self.stats["total_failures"] += 1
-                            logger.warning(f"❌ [流工作器] stream={stream_id[:8]}, 任务ID={task_id}, 处理失败")
+                            logger.debug(f"❌ [流工作器] stream={stream_id[:8]}, 任务ID={task_id}, 处理失败")
 
                     # 5. 计算下次检查间隔
+                    logger.debug(f"🔍 [流工作器] stream={stream_id[:8]}, 循环#{loop_count}, 计算间隔...")
                     interval = await self._calculate_interval(stream_id, has_messages)
 
                     # 6. sleep等待下次检查
@@ -271,13 +394,28 @@ class StreamLoopManager:
                     if last_interval is None or abs(interval - last_interval) > 0.01:
                         logger.info(f"流 {stream_id} 等待周期变化: {interval:.2f}s")
                         self._last_intervals[stream_id] = interval
-                    await asyncio.sleep(interval)
+                    
+                    loop_duration = time.time() - loop_start_time
+                    logger.debug(f"🔍 [流工作器] stream={stream_id[:8]}, 循环#{loop_count} 完成, 耗时={loop_duration:.2f}s, 即将sleep {interval:.2f}s")
+                    
+                    # 使用分段sleep，每隔一段时间更新活动时间，避免死锁检测误报
+                    # 当间隔较长时（如等待用户回复），分段更新活动时间
+                    remaining_sleep = interval
+                    activity_update_interval = 30.0  # 每30秒更新一次活动时间
+                    while remaining_sleep > 0:
+                        sleep_chunk = min(remaining_sleep, activity_update_interval)
+                        await asyncio.sleep(sleep_chunk)
+                        remaining_sleep -= sleep_chunk
+                        # 更新活动时间，表明流仍在正常运行（只是在等待）
+                        self._stream_last_activity[stream_id] = time.time()
+                    
+                    logger.debug(f"🔍 [流工作器] stream={stream_id[:8]}, 循环#{loop_count} sleep结束, 开始下一循环")
 
                 except asyncio.CancelledError:
                     logger.info(f"🛑 [流工作器] stream={stream_id[:8]}, 任务ID={task_id}, 被取消")
                     break
                 except Exception as e:
-                    logger.error(f"❌ [流工作器] stream={stream_id[:8]}, 任务ID={task_id}, 出错: {e}", exc_info=True)
+                    logger.error(f"❌ [流工作器] stream={stream_id[:8]}, 任务ID={task_id}, 出错: {e}")
                     self.stats["total_failures"] += 1
                     await asyncio.sleep(5.0)  # 错误时等待5秒再重试
 
@@ -293,6 +431,9 @@ class StreamLoopManager:
 
             # 清理间隔记录
             self._last_intervals.pop(stream_id, None)
+            
+            # 清理活动跟踪
+            self._stream_last_activity.pop(stream_id, None)
 
             logger.info(f"🏁 [流工作器] stream={stream_id[:8]}, 任务ID={task_id}, 循环结束")
 
@@ -309,7 +450,7 @@ class StreamLoopManager:
             chat_manager = get_chat_manager()
             chat_stream = await chat_manager.get_stream(stream_id)
             if chat_stream:
-                return chat_stream.context_manager.context
+                return chat_stream.context
             return None
         except Exception as e:
             logger.error(f"获取流上下文失败 {stream_id}: {e}")
@@ -348,9 +489,10 @@ class StreamLoopManager:
             logger.warning(f"Chatter管理器未设置: {stream_id}")
             return False
 
-        # 🔒 防止并发处理：如果已经在处理中，直接返回
+        # 🔒 二次并发保护（防御性检查）
+        # 正常情况下不应该触发，如果触发说明有竞态条件
         if context.is_chatter_processing:
-            logger.warning(f"🔒 [并发保护] stream={stream_id[:8]}, Chatter 正在处理中，跳过本次处理请求")
+            logger.warning(f"🔒 [并发保护] stream={stream_id[:8]}, Chatter正在处理中（二次检查触发，可能存在竞态）")
             return False
 
         # 设置处理状态为正在处理
@@ -364,6 +506,14 @@ class StreamLoopManager:
             if not unread_messages:
                 logger.debug(f"流 {stream_id} 未读消息为空，跳过 chatter 处理")
                 return True  # 返回 True 表示处理完成（虽然没有实际处理）
+
+            # 🔇 静默群组检查：在静默群组中，只有提到 Bot 名字/别名才响应
+            if await self._should_skip_for_mute_group(stream_id, unread_messages):
+                # 清空未读消息，不触发 chatter
+                from .message_manager import message_manager
+                await message_manager.clear_stream_unread_messages(stream_id)
+                logger.debug(f"🔇 流 {stream_id} 在静默列表中且未提及Bot，跳过处理")
+                return True
 
             logger.debug(f"流 {stream_id} 有 {len(unread_messages)} 条未读消息，开始处理")
 
@@ -382,6 +532,21 @@ class StreamLoopManager:
                 name=f"chatter_process_{stream_id}"
             )
 
+            # 记录任务句柄，便于后续检测/自愈
+            context.processing_task = chatter_task
+
+            def _cleanup_processing_flag(task: asyncio.Task) -> None:
+                try:
+                    context.processing_task = None
+                    if context.is_chatter_processing:
+                        context.is_chatter_processing = False
+                        self._set_stream_processing_status(stream_id, False)
+                        logger.debug(f"🔄 [并发保护] stream={stream_id[:8]}, chatter任务结束自动清理处理标志")
+                except Exception as callback_error:
+                    logger.debug(f"清理chatter处理标志失败: {callback_error}")
+
+            chatter_task.add_done_callback(_cleanup_processing_flag)
+
             # 等待 chatter 任务完成
             results = await chatter_task
             success = results.get("success", False)
@@ -398,15 +563,80 @@ class StreamLoopManager:
                 chatter_task.cancel()
             raise
         except Exception as e:
-            logger.error(f"流处理异常: {stream_id} - {e}", exc_info=True)
+            logger.error(f"流处理异常: {stream_id} - {e}")
             return False
         finally:
             # 清除 Chatter 处理标志
             context.is_chatter_processing = False
+            context.processing_task = None
             logger.debug(f"清除 Chatter 处理标志: {stream_id}")
 
             # 无论成功或失败，都要设置处理状态为未处理
             self._set_stream_processing_status(stream_id, False)
+
+    async def _should_skip_for_mute_group(self, stream_id: str, unread_messages: list) -> bool:
+        """检查是否应该因静默群组而跳过处理
+        
+        在静默群组中，只有当消息提及 Bot（@、回复、包含名字/别名）时才响应。
+        
+        Args:
+            stream_id: 流ID
+            unread_messages: 未读消息列表
+            
+        Returns:
+            bool: True 表示应该跳过，False 表示正常处理
+        """
+        if global_config is None:
+            return False
+            
+        # 获取静默群组列表
+        mute_group_list = getattr(global_config.message_receive, "mute_group_list", [])
+        if not mute_group_list:
+            return False
+            
+        try:
+            # 获取 chat_stream 来检查群组信息
+            chat_manager = get_chat_manager()
+            chat_stream = await chat_manager.get_stream(stream_id)
+            
+            if not chat_stream or not chat_stream.group_info:
+                # 不是群聊，不适用静默规则
+                return False
+                
+            group_id = str(chat_stream.group_info.group_id)
+            if group_id not in mute_group_list:
+                # 不在静默列表中
+                return False
+                
+            # 在静默列表中，检查是否有消息提及 Bot
+            bot_name = getattr(global_config.bot, "nickname", "")
+            bot_aliases = getattr(global_config.bot, "alias_names", [])
+            bot_qq = str(getattr(global_config.bot, "qq_account", ""))
+            
+            # 构建需要检测的关键词列表
+            mention_keywords = [bot_name] + list(bot_aliases) if bot_name else list(bot_aliases)
+            mention_keywords = [k for k in mention_keywords if k]  # 过滤空字符串
+            
+            for msg in unread_messages:
+                # 检查是否被 @ 或回复
+                if getattr(msg, "is_at", False) or getattr(msg, "is_mentioned", False):
+                    logger.debug(f"🔇 静默群组 {group_id}: 消息被@或回复，允许响应")
+                    return False
+                    
+                # 检查消息内容是否包含 Bot 名字或别名
+                content = getattr(msg, "processed_plain_text", "") or getattr(msg, "display_message", "") or ""
+                for keyword in mention_keywords:
+                    if keyword and keyword in content:
+                        logger.debug(f"🔇 静默群组 {group_id}: 消息包含关键词 '{keyword}'，允许响应")
+                        return False
+            
+            # 没有任何消息提及 Bot
+            logger.debug(f"🔇 静默群组 {group_id}: {len(unread_messages)} 条消息均未提及Bot，跳过")
+            return True
+            
+        except Exception as e:
+            logger.warning(f"检查静默群组时出错: {stream_id}, error={e}")
+            return False
 
     def _set_stream_processing_status(self, stream_id: str, is_processing: bool) -> None:
         """设置流的处理状态"""
@@ -444,7 +674,6 @@ class StreamLoopManager:
         except Exception as e:
             logger.warning(f"刷新StreamContext缓存失败: stream={stream_id}, error={e}")
             return []
-
     async def _update_stream_energy(self, stream_id: str, context: Any) -> None:
         """更新流的能量值
 
@@ -452,6 +681,9 @@ class StreamLoopManager:
             stream_id: 流ID
             context: 流上下文 (StreamContext)
         """
+        if global_config is None:
+            raise RuntimeError("Global config is not initialized")
+
         try:
             from src.chat.message_receive.chat_stream import get_chat_manager
 
@@ -463,7 +695,7 @@ class StreamLoopManager:
                 logger.debug(f"无法找到聊天流 {stream_id}，跳过能量更新")
                 return
 
-            # 从 context_manager 获取消息（包括未读和历史消息）
+            # 从 context 获取消息（包括未读和历史消息）
             # 合并未读消息和历史消息
             all_messages = []
 
@@ -509,6 +741,21 @@ class StreamLoopManager:
         Returns:
             float: 间隔时间（秒）
         """
+        if global_config is None:
+            raise RuntimeError("Global config is not initialized")
+
+        # 私聊使用最小间隔，快速响应
+        try:
+            chat_manager = get_chat_manager()
+            chat_stream = await chat_manager.get_stream(stream_id)
+            if chat_stream and not chat_stream.group_info:
+                # 私聊：有消息时快速响应，空转时稍微等待
+                min_interval = 0.5 if has_messages else 5.0
+                logger.debug(f"流 {stream_id} 私聊模式，使用最小间隔: {min_interval:.2f}s")
+                return min_interval
+        except Exception as e:
+            logger.debug(f"检查流 {stream_id} 是否为私聊失败: {e}")
+
         # 基础间隔
         base_interval = getattr(global_config.chat, "distribution_interval", 5.0)
 
@@ -530,6 +777,35 @@ class StreamLoopManager:
         except Exception as e:
             logger.debug(f"流 {stream_id} 使用默认间隔: {base_interval:.2f}s ({e})")
             return base_interval
+
+    def _recover_stale_chatter_state(self, stream_id: str, context: "StreamContext") -> bool:
+        """
+        检测并修复 Chatter 处理标志的假死状态。
+
+        返回 True 表示已发现并修复了异常状态；False 表示未发现异常。
+        """
+        try:
+            processing_task = getattr(context, "processing_task", None)
+
+            # 标志为 True 但没有任务句柄，直接修复
+            if processing_task is None:
+                context.is_chatter_processing = False
+                self._set_stream_processing_status(stream_id, False)
+                logger.warning(f"🛠️ [自愈] stream={stream_id[:8]}, 发现无任务但标志为真，已重置")
+                return True
+
+            # 标志为 True 但任务已经结束/被取消
+            if processing_task.done():
+                context.is_chatter_processing = False
+                context.processing_task = None
+                self._set_stream_processing_status(stream_id, False)
+                logger.warning(f"🛠️ [自愈] stream={stream_id[:8]}, 任务已结束但标志未清，已重置")
+                return True
+
+            return False
+        except Exception as e:
+            logger.debug(f"检测 Chatter 状态异常失败: stream={stream_id}, error={e}")
+            return False
 
     def get_queue_status(self) -> dict[str, Any]:
         """获取队列状态
@@ -573,7 +849,7 @@ class StreamLoopManager:
             if not chat_stream:
                 return False
 
-            unread = getattr(chat_stream.context_manager.context, "unread_messages", [])
+            unread = getattr(chat_stream.context, "unread_messages", [])
             return len(unread) > self.force_dispatch_unread_threshold
         except Exception as e:
             logger.debug(f"检查流 {stream_id} 是否需要强制分发失败: {e}")
@@ -628,7 +904,7 @@ class StreamLoopManager:
                 logger.debug(f"刷新能量时未找到聊天流: {stream_id}")
                 return
 
-            await chat_stream.context_manager.refresh_focus_energy_from_history()
+            await chat_stream.context.refresh_focus_energy_from_history()
             logger.debug(f"已刷新聊天流 {stream_id} 的聚焦能量")
         except Exception as e:
             logger.warning(f"刷新聊天流 {stream_id} 能量失败: {e}")
@@ -699,7 +975,7 @@ class StreamLoopManager:
                 logger.warning(f"创建强制分发流循环失败: {stream_id}")
 
         except Exception as e:
-            logger.error(f"强制分发流处理失败 {stream_id}: {e}", exc_info=True)
+            logger.error(f"强制分发流处理失败 {stream_id}: {e}")
 
 
 # 全局流循环管理器实例

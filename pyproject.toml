@@ -1,9 +1,10 @@
 [project]
 name = "MoFox-Bot"
-version = "0.12.0"
+version = "0.13.0"
 description = "MoFox-Bot 是一个基于大语言模型的可交互智能体"
 requires-python = ">=3.11,<=3.13"
 dependencies = [
+    "slowapi>=0.1.8",
     "aiohttp>=3.12.14",
     "aiohttp-cors>=0.8.1",
     "aiofiles>=23.1.0",
@@ -29,7 +30,6 @@ dependencies = [
     "langfuse==3.7.0",
     "lunar-python>=1.4.4",
     "lxml>=6.0.0",
-    "maim-message>=0.3.8",
     "matplotlib>=3.10.3",
     "networkx>=3.4.2",
     "orjson>=3.10",
@@ -48,6 +48,7 @@ dependencies = [
     "pymongo>=4.13.2",
     "pymysql>=1.1.1",
     "pypinyin>=0.54.0",
+    "PyYAML>=6.0",
     "python-dateutil>=2.9.0.post0",
     "python-dotenv>=1.1.1",
     "python-igraph>=0.11.9",
@@ -78,6 +79,10 @@ dependencies = [
     "inkfox>=0.1.1",
     "rjieba>=0.1.13",
     "fastmcp>=2.13.0",
+    "mofox-wire",
+    "jinja2>=3.1.0",
+    "psycopg2-binary",
+    "PyMySQL"
 ]
 
 [[tool.uv.index]]

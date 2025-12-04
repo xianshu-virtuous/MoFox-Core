@@ -17,16 +17,15 @@ from src.plugin_system.core.stream_tool_history import ToolCallRecord, get_strea
 logger = get_logger("tool_use")
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolExecutionConfig:
     """工具执行配置"""
-    enable_parallel: bool = True  # 是否启用并行执行
     max_concurrent_tools: int = 5  # 最大并发工具数量
     tool_timeout: float = 60.0  # 单个工具超时时间（秒）
     enable_dependency_check: bool = True  # 是否启用依赖检查
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolExecutionResult:
     """工具执行结果"""
     tool_call: ToolCall
@@ -65,6 +64,12 @@ def init_tool_executor_prompt():
 - 每个工具都有详细的description说明其用途和参数
 - 避免重复调用历史记录中已执行的工具（除非参数不同）
 - 优先考虑使用已有的缓存结果，避免重复调用
+
+**🎭 重要：保持人设一致性**
+你在填写任何工具参数时，都要以"{bot_name}"的身份和视角来写：
+- 涉及"印象"、"感受"、"评价"类的参数，要用符合你人设的语气和表达方式
+- 不要用客观冷漠的AI口吻，要像一个真实的人在记录对朋友的感受
+- 你的人格特质会影响你对他人的看法，请体现出来
 
 **历史记录说明：**
 - 上方显示的是**之前**的工具调用记录
@@ -108,6 +113,8 @@ class ToolExecutor:
         """
         self.chat_id = chat_id
         self.execution_config = execution_config or ToolExecutionConfig()
+        if execution_config is None:
+            self._apply_config_defaults()
 
         # chat_stream 和 log_prefix 将在异步方法中初始化
         self.chat_stream = None  # type: ignore
@@ -115,15 +122,26 @@ class ToolExecutor:
 
         self.llm_model = LLMRequest(model_set=model_config.model_task_config.tool_use, request_type="tool_executor")
 
-        # 二步工具调用状态管理
+        # 工具调用状态缓存
         self._pending_step_two_tools: dict[str, dict[str, Any]] = {}
-        """待处理的第二步工具调用，格式为 {tool_name: step_two_definition}"""
+        """存储待执行的二阶段工具调用，格式为 {tool_name: step_two_definition}"""
         self._log_prefix_initialized = False
 
-        # 流式工具历史记录管理器
-        self.history_manager = get_stream_tool_history_manager(chat_id)
+        # 标准化工具历史记录管理器
+        self.history_manager = get_stream_tool_history_manager(self.chat_id)
 
-        # logger.info(f"{self.log_prefix}工具执行器初始化完成")  # 移到异步初始化中
+        # logger.info(f"{self.log_prefix}工具执行器初始化完成")  # 挪到异步初始化阶段
+
+    def _apply_config_defaults(self) -> None:
+        tool_cfg = getattr(global_config, "tool", None)
+        if not tool_cfg:
+            return
+        max_invocations = getattr(tool_cfg, "max_parallel_invocations", None)
+        if max_invocations:
+            self.execution_config.max_concurrent_tools = max(1, max_invocations)
+        timeout = getattr(tool_cfg, "tool_timeout", None)
+        if timeout:
+            self.execution_config.tool_timeout = max(1.0, float(timeout))
 
     async def _initialize_log_prefix(self):
         """异步初始化log_prefix和chat_stream"""
@@ -205,12 +223,12 @@ class ToolExecutor:
             return tool_results, [], ""
 
     def _get_tool_definitions(self) -> list[dict[str, Any]]:
-        all_tools = get_llm_available_tool_definitions()
-        user_disabled_tools = global_announcement_manager.get_disabled_chat_tools(self.chat_id)
+        all_tools = get_llm_available_tool_definitions(self.chat_id)
 
         # 获取基础工具定义（包括二步工具的第一步）
+        # 工具定义格式为 {"name": ..., "description": ..., "parameters": ...}
         tool_definitions = [
-            definition for definition in all_tools if definition.get("function", {}).get("name") not in user_disabled_tools
+            definition for definition in all_tools if definition.get("name")
         ]
 
         # 检查是否有待处理的二步工具第二步调用
@@ -218,6 +236,10 @@ class ToolExecutor:
         if pending_step_two:
             # 添加第二步工具定义
             tool_definitions.extend(list(pending_step_two.values()))
+
+        # 打印可用的工具名称，方便调试
+        tool_names = [d.get("name") for d in tool_definitions]
+        logger.debug(f"{self.log_prefix}当前可用工具 ({len(tool_names)}个): {tool_names}")
 
         return tool_definitions
 
@@ -255,15 +277,10 @@ class ToolExecutor:
             return [], []
 
         if func_names:
-            logger.info(f"{self.log_prefix}开始执行工具调用: {func_names} (模式: {'并发' if self.execution_config.enable_parallel else '串行'})")
+            logger.info(f"{self.log_prefix}开始执行工具调用: {func_names} (并发执行)")
 
-        # 选择执行模式
-        if self.execution_config.enable_parallel and len(valid_tool_calls) > 1:
-            # 并发执行模式
-            execution_results = await self._execute_tools_concurrently(valid_tool_calls)
-        else:
-            # 串行执行模式（保持原有逻辑）
-            execution_results = await self._execute_tools_sequentially(valid_tool_calls)
+        # 并行执行所有工具
+        execution_results = await self._execute_tools_concurrently(valid_tool_calls)
 
         # 处理执行结果，保持原始顺序
         execution_results.sort(key=lambda x: x.original_index)
@@ -395,24 +412,7 @@ class ToolExecutor:
                 for i, tool_call in enumerate(tool_calls)
             ]
 
-    async def _execute_tools_sequentially(self, tool_calls: list[ToolCall]) -> list[ToolExecutionResult]:
-        """串行执行多个工具调用（保持原有逻辑）
-
-        Args:
-            tool_calls: 工具调用列表
-
-        Returns:
-            List[ToolExecutionResult]: 执行结果列表
-        """
-        logger.info(f"{self.log_prefix}启动串行执行，工具数量: {len(tool_calls)}")
-
-        results = []
-        for i, tool_call in enumerate(tool_calls):
-            result = await self._execute_single_tool_with_timeout(tool_call, i)
-            results.append(result)
-
-        return results
-
+  
     async def _execute_single_tool_with_timeout(self, tool_call: ToolCall, index: int) -> ToolExecutionResult:
         """执行单个工具调用，支持超时控制
 
@@ -716,24 +716,7 @@ class ToolExecutor:
             config: 新的执行配置
         """
         self.execution_config = config
-        logger.info(f"{self.log_prefix}工具执行配置已更新: 并发={config.enable_parallel}, 最大并发数={config.max_concurrent_tools}, 超时={config.tool_timeout}s")
-
-    def enable_parallel_execution(self, max_concurrent_tools: int = 5, timeout: float = 60.0) -> None:
-        """启用并发执行
-
-        Args:
-            max_concurrent_tools: 最大并发工具数量
-            timeout: 单个工具超时时间（秒）
-        """
-        self.execution_config.enable_parallel = True
-        self.execution_config.max_concurrent_tools = max_concurrent_tools
-        self.execution_config.tool_timeout = timeout
-        logger.info(f"{self.log_prefix}已启用并发执行: 最大并发数={max_concurrent_tools}, 超时={timeout}s")
-
-    def disable_parallel_execution(self) -> None:
-        """禁用并发执行，使用串行模式"""
-        self.execution_config.enable_parallel = False
-        logger.info(f"{self.log_prefix}已禁用并发执行，使用串行模式")
+        logger.info(f"{self.log_prefix}工具执行配置已更新: 最大并发数={config.max_concurrent_tools}, 超时={config.tool_timeout}s")
 
     @classmethod
     def create_with_parallel_config(
@@ -755,7 +738,6 @@ class ToolExecutor:
             配置好并发执行的ToolExecutor实例
         """
         config = ToolExecutionConfig(
-            enable_parallel=True,
             max_concurrent_tools=max_concurrent_tools,
             tool_timeout=tool_timeout,
             enable_dependency_check=enable_dependency_check
@@ -780,9 +762,6 @@ parallel_executor = ToolExecutor.create_with_parallel_config(
     max_concurrent_tools=3,  # 最大3个工具并发
     tool_timeout=30.0  # 单个工具30秒超时
 )
-
-# 或者动态配置并发执行
-executor.enable_parallel_execution(max_concurrent_tools=5, timeout=60.0)
 
 # 3. 并发执行多个工具 - 当LLM返回多个工具调用时自动并发执行
 results, used_tools, _ = await parallel_executor.execute_from_chat_message(
@@ -822,7 +801,6 @@ await executor.execute_from_chat_message(
 
 # 7. 配置管理
 config = ToolExecutionConfig(
-    enable_parallel=True,
     max_concurrent_tools=10,
     tool_timeout=120.0,
     enable_dependency_check=True
@@ -833,9 +811,6 @@ executor.set_execution_config(config)
 history = executor.get_tool_history()  # 获取历史记录
 stats = executor.get_tool_stats()  # 获取执行统计信息
 executor.clear_tool_history()  # 清除历史记录
-
-# 9. 禁用并发执行（如需要串行执行）
-executor.disable_parallel_execution()
 
 并发执行优势：
 - 🚀 性能提升：多个工具同时执行，减少总体等待时间
