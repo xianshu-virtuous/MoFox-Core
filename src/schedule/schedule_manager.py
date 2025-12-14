@@ -23,6 +23,12 @@ class ScheduleManager:
     """
     负责管理每日日程的核心类。
     它处理日程的加载、生成、保存以及提供当前活动查询等功能。
+    
+    修改说明：
+    - 新增临时活动覆盖机制
+    - 新增日程提及频率控制
+    - 将日程从"强制剧本"改为"参考背景"
+    - 支持灵活模式和严格模式切换
     """
 
     def __init__(self):
@@ -34,6 +40,10 @@ class ScheduleManager:
         self.plan_manager = PlanManager()  # 月度计划管理器实例
         self.daily_task_started = False  # 标记每日自动生成任务是否已启动
         self.schedule_generation_running = False  # 标记当前是否有日程生成任务正在运行，防止重复执行
+        
+        # 新增属性
+        self.temporary_activity: dict[str, Any] | None = None  # 临时活动覆盖
+        self.last_schedule_mention_time: datetime | None = None  # 上次提及日程的时间
 
     async def initialize(self):
         """
@@ -216,15 +226,48 @@ class ScheduleManager:
             schedule_str += f"  - {item.get('time_range', '未知时间')}: {item.get('activity', '未知活动')}\n"
         logger.info(schedule_str)
 
-    def get_current_activity(self) -> dict[str, Any] | None:
+    def get_current_activity(self, mode: str = "reference") -> dict[str, Any] | None:
         """
         根据当前时间从日程表中获取正在进行的活动。
-
+        
+        修改说明：
+        - 新增 mode 参数控制使用模式
+        - 支持临时活动覆盖
+        - 增加灵活性标记
+        
+        Args:
+            mode (str): 使用模式
+                - "reference": 仅作为参考，不强制使用（默认）
+                - "strict": 严格模式，必须遵守日程
+                - "suggestion": 建议模式，可以灵活调整
+        
         Returns:
             dict[str, Any] | None: 如果找到当前活动，则返回包含活动和时间范围的字典，否则返回 None。
+                返回字典包含以下键：
+                - activity: 活动描述
+                - time_range: 时间范围
+                - mode: 使用模式
+                - is_flexible: 是否可灵活调整
+                - is_temporary: 是否为临时活动（如果有）
         """
-        if not global_config.planning_system.schedule_enable or not self.today_schedule:
+        if not global_config.planning_system.schedule_enable:
             return None
+        
+        # 优先返回临时活动（如果存在且未过期）
+        if self.temporary_activity:
+            temp_end_time = self.temporary_activity.get("end_time")
+            if temp_end_time and datetime.now() < temp_end_time:
+                logger.debug("使用临时活动覆盖原日程")
+                return self.temporary_activity
+            else:
+                # 临时活动已过期，清除
+                logger.debug("临时活动已过期，清除并返回原日程")
+                self.temporary_activity = None
+        
+        # 从日程表获取当前活动
+        if not self.today_schedule:
+            return None
+            
         now = datetime.now().time()
         for event in self.today_schedule:
             try:
@@ -232,16 +275,139 @@ class ScheduleManager:
                 activity = event.get("activity")
                 if not time_range or not activity:
                     continue
+                
                 # 解析时间范围
                 start_str, end_str = time_range.split("-")
                 start_time = datetime.strptime(start_str.strip(), "%H:%M").time()
                 end_time = datetime.strptime(end_str.strip(), "%H:%M").time()
+                
                 # 判断当前时间是否在时间范围内（支持跨天的时间范围，如 23:00-01:00）
                 if (start_time <= now < end_time) or (end_time < start_time and (now >= start_time or now < end_time)):
-                    return {"activity": activity, "time_range": time_range}
+                    result = {
+                        "activity": activity, 
+                        "time_range": time_range,
+                        "mode": mode,
+                        "is_flexible": mode in ["reference", "suggestion"],
+                        "is_temporary": False
+                    }
+                    return result
             except (ValueError, KeyError, AttributeError) as e:
                 logger.warning(f"解析日程事件失败: {event}, 错误: {e}")
+        
         return None
+    
+    def should_mention_schedule(self, force: bool = False) -> bool:
+        """
+        判断是否应该在对话中提及日程。
+        
+        用于控制Bot提及日程的频率，避免过度提及。
+        
+        Args:
+            force (bool): 是否强制提及
+            
+        Returns:
+            bool: 是否应该提及日程
+        """
+        if force:
+            return True
+        
+        # 获取配置的提及间隔（分钟）
+        mention_interval = getattr(
+            global_config.planning_system, 
+            "schedule_mention_interval_minutes", 
+            30  # 默认30分钟
+        )
+        
+        # 如果从未提及过，或距离上次提及超过间隔时间
+        if not self.last_schedule_mention_time:
+            return True
+            
+        elapsed = (datetime.now() - self.last_schedule_mention_time).total_seconds() / 60
+        return elapsed >= mention_interval
+    
+    def mark_schedule_mentioned(self):
+        """
+        标记日程已被提及。
+        
+        在Bot提及日程后调用，用于更新提及时间戳。
+        """
+        self.last_schedule_mention_time = datetime.now()
+        logger.debug("已标记日程被提及")
+    
+    def set_temporary_activity(
+        self, 
+        activity: str, 
+        duration_minutes: int = 60,
+        reason: str = "用户请求"
+    ):
+        """
+        设置临时活动，覆盖原日程。
+        
+        用于处理用户临时请求，允许Bot灵活调整当前活动。
+        
+        Args:
+            activity (str): 临时活动描述
+            duration_minutes (int): 持续时间（分钟）
+            reason (str): 调整原因
+        """
+        end_time = datetime.now() + timedelta(minutes=duration_minutes)
+        self.temporary_activity = {
+            "activity": activity,
+            "time_range": f"{datetime.now().strftime('%H:%M')}-{end_time.strftime('%H:%M')}",
+            "end_time": end_time,
+            "reason": reason,
+            "is_temporary": True,
+            "mode": "temporary",
+            "is_flexible": True
+        }
+        logger.info(f"设置临时活动: {activity}，持续{duration_minutes}分钟，原因: {reason}")
+    
+    def clear_temporary_activity(self):
+        """
+        清除临时活动，恢复原日程。
+        
+        手动清除临时活动时调用。
+        """
+        if self.temporary_activity:
+            logger.info(f"清除临时活动: {self.temporary_activity.get('activity')}")
+            self.temporary_activity = None
+    
+    def get_schedule_context(self, verbose: bool = False) -> str:
+        """
+        获取日程上下文信息，用于LLM参考。
+        
+        返回格式化的日程信息字符串，可以添加到系统提示词中。
+        
+        Args:
+            verbose (bool): 是否返回详细信息（包含完整日程）
+            
+        Returns:
+            str: 格式化的日程上下文
+        """
+        current_activity = self.get_current_activity(mode="reference")
+        
+        if not current_activity:
+            return ""
+        
+        activity = current_activity.get("activity", "")
+        time_range = current_activity.get("time_range", "")
+        is_temporary = current_activity.get("is_temporary", False)
+        
+        if is_temporary:
+            reason = current_activity.get("reason", "")
+            context = f"[当前临时活动] {time_range}: {activity} (原因: {reason})"
+        else:
+            context = f"[原定日程参考] {time_range}: {activity}"
+        
+        if verbose and self.today_schedule:
+            # 添加今日完整日程
+            context += "\n[今日完整日程]:\n"
+            for item in self.today_schedule[:8]:  # 只显示前8项避免过长
+                context += f"  {item.get('time_range')}: {item.get('activity')}\n"
+            if len(self.today_schedule) > 8:
+                context += f"  ... (还有 {len(self.today_schedule) - 8} 项)\n"
+        
+        return context
 
     @staticmethod
     def _validate_schedule_with_pydantic(schedule_data) -> bool:
