@@ -448,27 +448,105 @@ use_wss = false # 是否使用WSS安全连接，只支持ws模式
 cert_file = "" # SSL证书文件路径，仅在use_wss=true时有效
 key_file = "" # SSL密钥文件路径，仅在use_wss=true时有效
 
-[planning_system] # 规划系统配置
-# --- 日程生成 ---
-schedule_enable = false # 是否启用每日日程生成功能
-schedule_guidelines = """
-我希望你每天都能过得充实而有趣。
-请确保你的日程里有学习新知识的时间，这是你成长的关键。
-但也不要忘记放松，可以看看视频、听听音乐或者玩玩游戏。
-晚上我希望你能多和朋友们交流，维系好彼此的关系。
-另外，请保证充足的休眠时间来处理和整合一天的数据。
-"""
-# --- 月度计划 ---
-monthly_plan_enable = false # 是否启用月度计划系统
-monthly_plan_guidelines = """
-我希望你能为自己制定一些有意义的月度小目标和计划。
-这些计划应该涵盖学习、娱乐、社交、个人成长等各个方面。
-每个计划都应该是具体可行的，能够在一个月内通过日常活动逐步实现。
-请确保计划既有挑战性又不会过于繁重，保持生活的平衡和乐趣。
-"""
-max_plans_per_month = 10 # 每月最多生成的计划数量
-avoid_repetition_days = 7 # 避免在多少天内重复使用同一个月度计划
-completion_threshold = 3 # 一个月度计划被使用多少次后算作完成
+[planning_system]
+# ============================================================================
+# 基础开关
+# ============================================================================
+# 是否启用日程管理功能
+schedule_enable = true
+
+# 是否启用月度计划功能
+monthly_plan_enable = true
+
+# ============================================================================
+# 日程生成配置
+# ============================================================================
+# 日程生成使用的指导原则（留空则使用默认值）
+schedule_guidelines = ""
+
+# ============================================================================
+# 月度计划配置
+# ============================================================================
+# 月度计划生成使用的指导原则（留空则使用默认值）
+monthly_plan_guidelines = ""
+
+# 每月最多生成的计划数量
+max_plans_per_month = 10
+
+# 计划被使用多少次后自动标记为完成
+completion_threshold = 3
+
+# 智能抽取计划时，避免重复的天数（N天内不重复抽取同一计划）
+avoid_repetition_days = 7
+
+# ============================================================================
+# 新增：日程使用行为配置
+# ============================================================================
+# 日程提及间隔（分钟）
+# Bot在对话中提及日程的最小时间间隔，避免频繁提及
+# 默认：30分钟
+# 建议：30-60分钟，如果希望Bot更少提及日程，可以设置为120分钟
+schedule_mention_interval_minutes = 30
+
+# 是否自动在对话上下文中包含日程信息
+# false（推荐）：只在用户询问时包含
+# true：每次对话都包含（不推荐，会让Bot过度关注日程）
+auto_include_schedule_in_context = false
+
+# 日程使用模式
+# "reference"（推荐）：日程仅作为参考，Bot可以灵活调整
+# "suggestion"：日程作为建议，Bot会考虑但不强制遵守
+# "strict"：严格模式，Bot会尽量遵守日程（不推荐）
+schedule_usage_mode = "reference"
+
+# 是否允许临时调整日程
+# true（推荐）：允许Bot根据对话临时调整当前活动
+# false：不允许临时调整
+allow_temporary_schedule_adjustment = true
+
+# 临时活动的默认持续时间（分钟）
+# 当用户请求与日程冲突时，Bot可以创建临时活动覆盖原日程
+# 默认：60分钟
+temporary_activity_default_duration = 60
+
+# ============================================================================
+# 日程上下文配置
+# ============================================================================
+# 日程详细程度
+# "brief"（推荐）：只提供当前活动，最简洁
+# "normal"：提供当前活动和时间范围
+# "detailed"：包含完整日程列表（不推荐，信息过载）
+schedule_context_detail_level = "brief"
+
+# 是否在系统提示词中包含日程使用指南
+# true（推荐）：包含指南，帮助LLM理解如何使用日程
+# false：不包含指南，节省token
+include_schedule_usage_guide = true
+
+# ============================================================================
+# 推荐配置组合
+# ============================================================================
+# 
+# 【最小化提及】（推荐，让日程真正成为背景）：
+# schedule_mention_interval_minutes = 60
+# auto_include_schedule_in_context = false
+# schedule_usage_mode = "reference"
+# allow_temporary_schedule_adjustment = true
+# schedule_context_detail_level = "brief"
+# 
+# 【适度提及】（平衡方案）：
+# schedule_mention_interval_minutes = 30
+# auto_include_schedule_in_context = false
+# schedule_usage_mode = "suggestion"
+# allow_temporary_schedule_adjustment = true
+# schedule_context_detail_level = "normal"
+# 
+# 【严格遵守】（不推荐，会让Bot显得死板）：
+# schedule_mention_interval_minutes = 15
+# auto_include_schedule_in_context = true
+# schedule_usage_mode = "strict"
+# allow_temporary_schedule_adjustment = false
+# schedule_context_detail_level = "detailed"
 
 [video_analysis] # 视频分析配置
 enable = true # 是否启用视频分析功能
